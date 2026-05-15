@@ -1,12 +1,12 @@
 [package]
-name = "ai-image-manager"
+name = "sanmediabox"
 version = "0.1.0"
-description = "AI Image Manager - Manage AI-generated images"
+description = "sanMediaBox - Manage AI-generated images"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "ai_image_manager_lib"
+name = "sanmediabox_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

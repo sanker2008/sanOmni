@@ -16,7 +16,7 @@ pub fn run() {
                 .or_else(|_| std::env::var("HOME"))
                 .unwrap_or_else(|_| ".".to_string());
             let data_dir = std::path::PathBuf::from(home)
-                .join(".ai-image-manager");
+                .join(".sanmediabox");
             std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data dir: {}", e))?;
             

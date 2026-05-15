@@ -4,9 +4,17 @@ import { imageApi, classifyApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Upload, Image as ImageIcon, FolderOpen, Loader2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { readFile, metadata } from "@tauri-apps/plugin-fs";
 
 interface DropZoneProps {
   onImportComplete?: () => void;
+}
+
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
+
+function isImageFile(fileName: string): boolean {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  return IMAGE_EXTENSIONS.includes(ext);
 }
 
 export default function DropZone({ onImportComplete }: DropZoneProps) {
@@ -46,20 +54,68 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
         filters: [
           {
             name: "Images",
-            extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
+            extensions: IMAGE_EXTENSIONS,
           },
         ],
       });
 
       if (selected) {
         const files = Array.isArray(selected) ? selected : [selected];
-        // Convert paths to File objects for processing
-        // In Tauri, we get paths, so we need to handle them differently
         await importPaths(files as string[]);
       }
     } catch (error) {
       console.error("Failed to select files:", error);
     }
+  };
+
+  const handleSelectFolder = async () => {
+    try {
+      const selectedFolder = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (!selectedFolder || typeof selectedFolder !== "string") {
+        return;
+      }
+
+      // Read all files in the selected folder
+      const entries = await readDirRecursive(selectedFolder);
+      const imagePaths = entries.filter(isImageFile);
+
+      if (imagePaths.length === 0) {
+        console.warn("No image files found in the selected folder");
+        return;
+      }
+
+      await importPaths(imagePaths);
+    } catch (error) {
+      console.error("Failed to select folder:", error);
+    }
+  };
+
+  // Helper function to recursively read directory
+  const readDirRecursive = async (dirPath: string): Promise<string[]> => {
+    const { readDir } = await import("@tauri-apps/plugin-fs");
+    const results: string[] = [];
+
+    try {
+      const entries = await readDir(dirPath);
+
+      for (const entry of entries) {
+        const fullPath = `${dirPath}/${entry.name}`;
+        if (entry.isDirectory) {
+          const subEntries = await readDirRecursive(fullPath);
+          results.push(...subEntries);
+        } else {
+          results.push(fullPath);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to read directory ${dirPath}:`, error);
+    }
+
+    return results;
   };
 
   const importFiles = async (files: File[]) => {
@@ -77,12 +133,13 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
               modelIds = [classification.model_id];
             }
           }
-        } catch {
+        } catch (error) {
+          console.error("Classification failed:", error);
           // 分类失败时静默忽略，继续导入
         }
 
         const result = await imageApi.import({
-          file_path: file.name, // This would be the actual path in Tauri
+          file_path: file.name,
           file_name: file.name,
           file_size: file.size,
           vendor_id: vendorId,
@@ -105,6 +162,16 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
       for (const path of paths) {
         const fileName = path.split(/[/\\]/).pop() || "unknown";
 
+        // Get file metadata using Tauri's fs API
+        let fileSize = 0;
+        try {
+          const fileMeta = await metadata(path);
+          fileSize = fileMeta.size;
+        } catch (error) {
+          console.error(`Failed to get metadata for ${path}:`, error);
+          // Continue with size 0 if metadata fails
+        }
+
         // 自动分类：根据文件名推断 vendor/model
         let vendorId: string | undefined;
         let modelIds: string[] = [];
@@ -116,14 +183,15 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
               modelIds = [classification.model_id];
             }
           }
-        } catch {
+        } catch (error) {
+          console.error("Classification failed:", error);
           // 分类失败时静默忽略，继续导入
         }
 
         const result = await imageApi.import({
           file_path: path,
           file_name: fileName,
-          file_size: 0, // We'd get this from fs metadata
+          file_size: fileSize,
           vendor_id: vendorId,
           model_ids: modelIds,
           tags: [],
@@ -188,7 +256,7 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
                 <Upload className="w-4 h-4" />
                 选择图片
               </Button>
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" className="gap-2" onClick={handleSelectFolder}>
                 <FolderOpen className="w-4 h-4" />
                 选择文件夹
               </Button>
