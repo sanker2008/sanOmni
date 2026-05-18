@@ -1,0 +1,3 @@
+[build]
+# Limit parallel jobs to reduce peak memory usage during compilation
+jobs = 2

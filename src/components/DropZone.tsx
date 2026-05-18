@@ -4,7 +4,7 @@ import { imageApi, classifyApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Upload, Image as ImageIcon, FolderOpen, Loader2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readFile, metadata } from "@tauri-apps/plugin-fs";
+import { stat } from "@tauri-apps/plugin-fs";
 
 interface DropZoneProps {
   onImportComplete?: () => void;
@@ -165,7 +165,7 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
         // Get file metadata using Tauri's fs API
         let fileSize = 0;
         try {
-          const fileMeta = await metadata(path);
+          const fileMeta = await stat(path);
           fileSize = fileMeta.size;
         } catch (error) {
           console.error(`Failed to get metadata for ${path}:`, error);
