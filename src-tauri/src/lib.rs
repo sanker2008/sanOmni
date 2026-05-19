@@ -11,20 +11,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            // Use user's home directory for data storage
-            let home = std::env::var("USERPROFILE")
-                .or_else(|_| std::env::var("HOME"))
-                .unwrap_or_else(|_| ".".to_string());
-            let data_dir = std::path::PathBuf::from(home)
-                .join(".sanmediabox");
+            // Use Tauri's app data directory
+            let app_data_dir = app.path().app_data_dir()
+                .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+            
+            let data_dir = app_data_dir.join("data");
             std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data dir: {}", e))?;
             
             let db_path = data_dir.join("database.sqlite");
             database::init_database(&db_path)
                 .map_err(|e| format!("Failed to init database: {}", e))?;
-            
-            app.manage(DbPath(db_path));
             
             Ok(())
         })
@@ -50,10 +47,8 @@ pub fn run() {
             commands::classifier::classify_image,
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::reset_database,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-#[derive(Clone)]
-struct DbPath(std::path::PathBuf);

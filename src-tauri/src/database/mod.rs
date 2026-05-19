@@ -13,6 +13,17 @@ pub fn init_database(db_path: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn reset_database(db_path: &Path) -> Result<()> {
+    // Delete the database file if it exists
+    if db_path.exists() {
+        std::fs::remove_file(db_path)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+    }
+    
+    // Reinitialize
+    init_database(db_path)
+}
+
 const SCHEMA: &str = r#"
 -- Vendors table
 CREATE TABLE IF NOT EXISTS vendors (
@@ -144,6 +155,19 @@ fn insert_defaults(conn: &Connection) -> Result<()> {
         return Ok(());
     }
     
+    // Insert Unknown vendor and model as fallback
+    conn.execute(
+        "INSERT INTO vendors (id, name, path, sort_order, is_active, created_at, updated_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("unknown", "Unknown", "unknown", 0, 1, &now, &now),
+    )?;
+    
+    conn.execute(
+        "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("unknown", "unknown", "Unknown Model", "unknown", "1", "Fallback for unclassified images", 0, 1, &now, &now),
+    )?;
+    
     // Insert OpenAI
     conn.execute(
         "INSERT INTO vendors (id, name, path, sort_order, is_active, created_at, updated_at) 
@@ -171,20 +195,20 @@ fn insert_defaults(conn: &Connection) -> Result<()> {
     )?;
     
     conn.execute(
-        "INSERT INTO models (id, vendor_id, name, path, description, sort_order, is_active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        ("nano-banana", "google", "Nano Banana", "nano-banana", "Gemini 2.5 Flash Image", 1, 1, &now, &now),
-    )?;
-    
-    conn.execute(
-        "INSERT INTO models (id, vendor_id, name, path, description, sort_order, is_active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        ("nano-banana-pro", "google", "Nano Banana Pro", "nano-banana-pro", "Gemini 3 Flash Image", 2, 1, &now, &now),
+        "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("nano-banana", "google", "Nano Banana", "nano-banana", "2.5", "Gemini 2.5 Flash Image", 1, 1, &now, &now),
     )?;
     
     conn.execute(
         "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("nano-banana-pro", "google", "Nano Banana Pro", "nano-banana-pro", "3", "Gemini 3 Flash Image", 2, 1, &now, &now),
+    )?;
+    
+    conn.execute(
+        "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ("imagen-3", "google", "Imagen 3", "imagen-3", "3", "Professional API model", 3, 1, &now, &now),
     )?;
     
@@ -212,9 +236,9 @@ fn insert_defaults(conn: &Connection) -> Result<()> {
     
     for (id, name, parent, color) in default_tags {
         conn.execute(
-            "INSERT OR IGNORE INTO tags (id, name, name_en, color, is_builtin, created_at, updated_at)
-             VALUES (?, ?, ?, ?, 1, ?, ?)",
-            (id, name, parent, color, &now, &now),
+            "INSERT OR IGNORE INTO tags (id, name, name_en, color, is_builtin, created_at)
+             VALUES (?, ?, ?, ?, 1, ?)",
+            (id, name, parent, color, &now),
         )?;
     }
     

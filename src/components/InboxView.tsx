@@ -40,6 +40,7 @@ export default function InboxView() {
   const [archiveResult, setArchiveResult] = useState<string | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionProgress, setDetectionProgress] = useState<string | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   useEffect(() => {
     loadInboxImages();
@@ -105,6 +106,11 @@ export default function InboxView() {
     } finally {
       setIsArchiving(false);
     }
+  };
+
+  // Handle import button click
+  const handleImportClick = () => {
+    setShowImportDialog(true);
   };
 
   // Batch watermark detection
@@ -200,7 +206,7 @@ export default function InboxView() {
             />
           </div>
 
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleImportClick}>
             <Upload className="w-4 h-4" />
             导入
           </Button>
@@ -317,6 +323,22 @@ export default function InboxView() {
           </ScrollArea>
         )}
       </div>
+
+      {/* Import Dialog */}
+      {showImportDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowImportDialog(false)} />
+          <div className="relative z-10 bg-background rounded-lg border shadow-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">导入图片</h3>
+            <div className="space-y-3">
+              <DropZone onImportComplete={() => {
+                loadInboxImages();
+                setShowImportDialog(false);
+              }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

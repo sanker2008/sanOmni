@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useUIStore, type ImageWithRelations } from "@/stores";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -90,7 +91,12 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
       // Generate output path (same directory, with "_cleaned" suffix)
       const ext = image.filename.split('.').pop() || 'png';
       const baseName = image.filename.replace(/\.[^/.]+$/, '');
-      const outputDir = image.absolute_path.substring(0, image.absolute_path.lastIndexOf('\\') + 1);
+      // Use cross-platform path separator detection
+      const lastSeparator = Math.max(
+        image.absolute_path.lastIndexOf('/'),
+        image.absolute_path.lastIndexOf('\\')
+      );
+      const outputDir = image.absolute_path.substring(0, lastSeparator + 1);
       const outputPath = `${outputDir}${baseName}_cleaned.${ext}`;
 
       const result = await watermarkApi.remove(
@@ -199,7 +205,7 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
           </div>
         ) : (
           <img
-            src={`asset://localhost/${image.absolute_path}`}
+            src={convertFileSrc(image.absolute_path)}
             alt={image.filename}
             className={`w-full h-full object-cover transition-opacity ${
               imageLoaded ? "opacity-100" : "opacity-0"

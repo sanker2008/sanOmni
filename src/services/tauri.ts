@@ -41,9 +41,18 @@ interface CommandResult<T> {
 
 // Helper to get database path
 async function getDbPath(): Promise<string> {
-  const { appDataDir } = await import("@tauri-apps/api/path");
+  const { appDataDir, join } = await import("@tauri-apps/api/path");
+  const { exists, mkdir } = await import("@tauri-apps/plugin-fs");
+  
   const appDir = await appDataDir();
-  return `${appDir}data/database.sqlite`;
+  const dataDir = await join(appDir, "data");
+  
+  // Ensure data directory exists
+  if (!(await exists(dataDir))) {
+    await mkdir(dataDir, { recursive: true });
+  }
+  
+  return await join(dataDir, "database.sqlite");
 }
 
 // ==================== Image API ====================
@@ -304,6 +313,13 @@ export const settingsApi = {
       settings,
     });
     if (!result.success) throw new Error(result.error || "Failed to save settings");
+    return result.data || false;
+  },
+
+  async resetDatabase(): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("reset_database", { dbPath });
+    if (!result.success) throw new Error(result.error || "Failed to reset database");
     return result.data || false;
   },
 };

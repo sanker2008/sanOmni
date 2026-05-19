@@ -41,10 +41,28 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
     );
 
     if (files.length === 0) {
+      console.warn("No image files in drop");
       return;
     }
 
-    await importFiles(files);
+    // In Tauri, dropped files have a 'path' property with the full path
+    const paths = files.map(file => {
+      // @ts-ignore - Tauri adds path property to File objects
+      const filePath = file.path;
+      if (!filePath) {
+        console.error("File has no path property:", file.name);
+        return null;
+      }
+      return filePath;
+    }).filter((p): p is string => p !== null);
+
+    if (paths.length === 0) {
+      console.error("No valid file paths found");
+      return;
+    }
+
+    console.log("Importing dropped files:", paths);
+    await importPaths(paths);
   }, []);
 
   const handleSelectFiles = async () => {
@@ -118,55 +136,34 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
     return results;
   };
 
-  const importFiles = async (files: File[]) => {
-    setIsImporting(true);
-    try {
-      for (const file of files) {
-        // 自动分类：根据文件名推断 vendor/model
-        let vendorId: string | undefined;
-        let modelIds: string[] = [];
-        try {
-          const classification = await classifyApi.classify(file.name);
-          if (classification.confidence > 0.5) {
-            vendorId = classification.vendor_id;
-            if (classification.model_id) {
-              modelIds = [classification.model_id];
-            }
-          }
-        } catch (error) {
-          console.error("Classification failed:", error);
-          // 分类失败时静默忽略，继续导入
-        }
-
-        const result = await imageApi.import({
-          file_path: file.name,
-          file_name: file.name,
-          file_size: file.size,
-          vendor_id: vendorId,
-          model_ids: modelIds,
-          tags: [],
-        });
-        addImage(result);
-      }
-      onImportComplete?.();
-    } catch (error) {
-      console.error("Failed to import files:", error);
-    } finally {
-      setIsImporting(false);
-    }
-  };
+  // This function is no longer needed, removed in favor of importPaths
 
   const importPaths = async (paths: string[]) => {
+    console.log("importPaths called with:", paths);
     setIsImporting(true);
     try {
+      const { appDataDir, join } = await import("@tauri-apps/api/path");
+      const { copyFile, exists, mkdir } = await import("@tauri-apps/plugin-fs");
+      
+      const appDir = await appDataDir();
+      const inboxDir = await join(appDir, "inbox");
+      
+      // Ensure inbox directory exists
+      if (!(await exists(inboxDir))) {
+        await mkdir(inboxDir, { recursive: true });
+      }
+
       for (const path of paths) {
+        console.log("Processing path:", path);
         const fileName = path.split(/[/\\]/).pop() || "unknown";
+        console.log("Extracted filename:", fileName);
 
         // Get file metadata using Tauri's fs API
         let fileSize = 0;
         try {
           const fileMeta = await stat(path);
           fileSize = fileMeta.size;
+          console.log("File size:", fileSize);
         } catch (error) {
           console.error(`Failed to get metadata for ${path}:`, error);
           // Continue with size 0 if metadata fails
@@ -177,6 +174,7 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
         let modelIds: string[] = [];
         try {
           const classification = await classifyApi.classify(fileName);
+          console.log("Classification result:", classification);
           if (classification.confidence > 0.5) {
             vendorId = classification.vendor_id;
             if (classification.model_id) {
@@ -188,19 +186,50 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
           // 分类失败时静默忽略，继续导入
         }
 
-        const result = await imageApi.import({
-          file_path: path,
+        // Copy file to inbox directory with unique name to avoid conflicts
+        const timestamp = Date.now();
+        const uniqueFileName = `${timestamp}_${fileName}`;
+        const targetPath = await join(inboxDir, uniqueFileName);
+        console.log("Copying file from:", path);
+        console.log("Copying file to:", targetPath);
+        
+        try {
+          await copyFile(path, targetPath);
+          console.log("File copied successfully");
+        } catch (error) {
+          console.error("Failed to copy file:", error);
+          alert(`复制文件失败: ${fileName}\n${error}`);
+          continue; // Skip this file and continue with next
+        }
+
+        console.log("Calling imageApi.import with:", {
+          file_path: targetPath,
           file_name: fileName,
           file_size: fileSize,
           vendor_id: vendorId,
           model_ids: modelIds,
-          tags: [],
         });
-        addImage(result);
+
+        try {
+          const result = await imageApi.import({
+            file_path: targetPath,
+            file_name: fileName,
+            file_size: fileSize,
+            vendor_id: vendorId,
+            model_ids: modelIds,
+            tags: [],
+          });
+          console.log("Import result:", result);
+          addImage(result);
+        } catch (error) {
+          console.error("Failed to import image:", error);
+          alert(`导入图片失败: ${fileName}\n${error}`);
+        }
       }
       onImportComplete?.();
     } catch (error) {
       console.error("Failed to import files:", error);
+      alert(`导入失败: ${error}`);
     } finally {
       setIsImporting(false);
     }

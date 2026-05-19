@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use rusqlite::Connection;
 use super::CommandResult;
 
@@ -71,5 +72,15 @@ pub fn save_settings(
     match conn.execute_batch("COMMIT") {
         Ok(_) => CommandResult::ok(true),
         Err(e) => CommandResult::err(format!("Failed to commit transaction: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub fn reset_database(db_path: String) -> CommandResult<bool> {
+    let path = PathBuf::from(&db_path);
+    
+    match crate::database::reset_database(&path) {
+        Ok(_) => CommandResult::ok(true),
+        Err(e) => CommandResult::err(format!("Failed to reset database: {}", e)),
     }
 }

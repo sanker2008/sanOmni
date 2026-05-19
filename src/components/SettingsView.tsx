@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useUIStore } from "@/stores";
+import { settingsApi } from "@/services/tauri";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, FolderOpen } from "lucide-react";
+import { X, Plus, FolderOpen, AlertTriangle } from "lucide-react";
 
 // 默认设置
 const DEFAULT_SETTINGS: Record<string, any> = {
@@ -90,6 +91,24 @@ function SettingsView() {
       setNewWatchFolder("");
     }
   }, [newWatchFolder, localSettings.watchFolders, handleLocalUpdate]);
+
+  // 通过对话框选择文件夹
+  const handleSelectWatchFolder = useCallback(async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selectedFolder = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (selectedFolder && typeof selectedFolder === "string") {
+        const folders = [...(localSettings.watchFolders || []), selectedFolder];
+        handleLocalUpdate("watchFolders", folders);
+      }
+    } catch (error) {
+      console.error("Failed to select folder:", error);
+    }
+  }, [localSettings.watchFolders, handleLocalUpdate]);
 
   // 移除监控文件夹
   const handleRemoveWatchFolder = useCallback(
@@ -197,6 +216,37 @@ function SettingsView() {
                       <FolderOpen className="w-4 h-4" />
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="w-4 h-4" />
+                    重置数据库
+                  </CardTitle>
+                  <CardDescription>
+                    删除所有数据并重新初始化数据库。此操作不可恢复！
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={async () => {
+                      if (confirm("确定要重置数据库吗？这将删除所有图片记录、标签和设置！\n\n注意：图片文件本身不会被删除。")) {
+                        try {
+                          await settingsApi.resetDatabase();
+                          alert("数据库已重置，请重启应用。");
+                          window.location.reload();
+                        } catch (error) {
+                          alert(`重置失败: ${error}`);
+                        }
+                      }
+                    }}
+                  >
+                    重置数据库
+                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -317,7 +367,16 @@ function SettingsView() {
                       <Button
                         variant="outline"
                         size="icon"
+                        onClick={handleSelectWatchFolder}
+                        title="浏览文件夹"
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
                         onClick={handleAddWatchFolder}
+                        title="添加"
                       >
                         <Plus className="w-4 h-4" />
                       </Button>

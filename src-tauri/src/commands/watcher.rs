@@ -14,6 +14,7 @@ pub struct WatcherConfig {
 }
 
 /// File event from watcher
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileWatchEvent {
     pub event_type: String,
@@ -34,7 +35,7 @@ pub struct WatcherInfo {
 /// Start watching a folder for new images
 #[tauri::command]
 pub async fn start_folder_watcher(
-    app: AppHandle<impl Runtime>,
+    _app: AppHandle<impl Runtime>,
     config: WatcherConfig,
 ) -> Result<WatcherInfo, String> {
     let watch_path = PathBuf::from(&config.path);
@@ -128,6 +129,7 @@ pub async fn get_active_watchers() -> Result<Vec<WatcherInfo>, String> {
 }
 
 /// Check if a file is an image based on extension
+#[allow(dead_code)]
 fn is_image_file(path: &PathBuf, extensions: &[String]) -> bool {
     if let Some(ext) = path.extension() {
         let ext_str = ext.to_string_lossy().to_lowercase();

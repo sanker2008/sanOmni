@@ -7,7 +7,7 @@ edition = "2021"
 
 [lib]
 name = "sanmediabox_lib"
-crate-type = ["lib", "cdylib", "staticlib"]
+crate-type = ["lib", "cdylib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -29,3 +29,14 @@ notify = "7"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 thiserror = "1"
+
+# Reduce memory usage during compilation
+[profile.dev]
+opt-level = 0
+incremental = true
+codegen-units = 512
+debug = 0
+
+[profile.dev.package."*"]
+opt-level = 0
+debug = 0

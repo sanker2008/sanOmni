@@ -59,6 +59,11 @@ pub async fn import_image(
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
 
+    // Ensure "unknown" vendor and model exist
+    if let Err(e) = ensure_unknown_vendor_model(&conn) {
+        return CommandResult::err(format!("Failed to ensure default vendor/model: {}", e));
+    }
+
     let uuid_str = Uuid::new_v4().to_string().replace("-", "");
     let image_id = format!("img_{}", &uuid_str[..12]);
     let now = chrono::Utc::now().to_rfc3339();
@@ -67,13 +72,38 @@ pub async fn import_image(
         .or_else(|| request.model_ids.first().cloned())
         .unwrap_or_else(|| "unknown".to_string());
 
+    // Verify the model exists, if not use "unknown"
+    let model_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM models WHERE id = ?",
+        [&primary_model_id],
+        |row| {
+            let count: i64 = row.get(0)?;
+            Ok(count > 0)
+        },
+    ).unwrap_or(false);
+
+    let primary_model_id = if model_exists {
+        primary_model_id
+    } else {
+        eprintln!("Model '{}' not found, using 'unknown'", primary_model_id);
+        "unknown".to_string()
+    };
+
     let vendor_id: String = conn.query_row(
         "SELECT vendor_id FROM models WHERE id = ?",
         [&primary_model_id],
         |row| row.get(0),
-    ).unwrap_or_else(|_| "unknown".to_string());
+    ).unwrap_or_else(|e| {
+        eprintln!("Failed to get vendor_id for model '{}': {}", primary_model_id, e);
+        "unknown".to_string()
+    });
 
-    let relative_path = format!("inbox/{}/{}", vendor_id, request.file_name);
+    // Build relative path using Path for cross-platform compatibility
+    let relative_path = std::path::Path::new("inbox")
+        .join(&vendor_id)
+        .join(&request.file_name)
+        .to_string_lossy()
+        .to_string();
 
     let image = Image {
         id: image_id.clone(),
@@ -101,19 +131,22 @@ pub async fn import_image(
         archived_at: None,
     };
 
+    eprintln!("Inserting image with vendor_id='{}', storage_model_id='{}', primary_model_id='{}'", 
+        &image.storage_vendor_id, &image.storage_model_id, &image.primary_model_id);
+
     // Insert required fields first (within 16-param limit)
     if let Err(e) = conn.execute(
         "INSERT INTO images (
             id, filename, original_filename, storage_vendor_id, storage_model_id,
             relative_path, absolute_path, primary_model_id, status, prompt,
-            negative_prompt, file_size, width, height, file_hash, format
+            negative_prompt, file_size, width, height, created_at, imported_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rusqlite::params![
             &image.id, &image.filename, &image.original_filename,
             &image.storage_vendor_id, &image.storage_model_id,
             &image.relative_path, &image.absolute_path, &image.primary_model_id,
             &image.status, &image.prompt, &image.negative_prompt,
-            image.file_size, image.width, image.height, &image.file_hash, &image.format,
+            image.file_size, image.width, image.height, &image.created_at, &image.imported_at,
         ],
     ) {
         return CommandResult::err(format!("Failed to insert image: {}", e));
@@ -124,12 +157,12 @@ pub async fn import_image(
         "UPDATE images SET
             has_watermark = ?, watermark_platform = ?,
             watermark_detected = ?, watermark_removed = ?,
-            created_at = ?, imported_at = ?, archived_at = ?
+            file_hash = ?, format = ?, archived_at = ?
         WHERE id = ?",
         rusqlite::params![
             image.has_watermark as i32, &image.watermark_platform,
             image.watermark_detected as i32, image.watermark_removed as i32,
-            &image.created_at, &image.imported_at, &image.archived_at,
+            &image.file_hash, &image.format, &image.archived_at,
             &image.id,
         ],
     ) {
@@ -141,6 +174,14 @@ pub async fn import_image(
         let _ = conn.execute(
             "INSERT INTO image_model_relations (image_id, model_id, is_primary) VALUES (?, ?, ?)",
             (&image_id, model_id, is_primary as i32),
+        );
+    }
+    
+    // If no model_ids provided, insert at least the primary model relation
+    if request.model_ids.is_empty() {
+        let _ = conn.execute(
+            "INSERT INTO image_model_relations (image_id, model_id, is_primary) VALUES (?, ?, ?)",
+            (&image_id, &primary_model_id, 1),
         );
     }
 
@@ -394,7 +435,12 @@ pub async fn archive_images(
         }
 
         // Update database
-        let new_relative = format!("archived/{}/{}{}", vendor_path, model_path, new_filename);
+        // Build relative path using Path for cross-platform compatibility
+        let relative_path = std::path::Path::new("archived")
+            .join(&vendor_path)
+            .join(&model_path)
+            .join(&new_filename);
+        let new_relative = relative_path.to_string_lossy().to_string();
         let new_absolute = target_path.to_string_lossy().to_string();
 
         if let Err(e) = conn.execute(
@@ -443,6 +489,48 @@ pub async fn delete_image(db_path: String, image_id: String) -> CommandResult<bo
 }
 
 // ==================== Helpers ====================
+
+fn ensure_unknown_vendor_model(conn: &Connection) -> Result<()> {
+    let now = chrono::Utc::now().to_rfc3339();
+    
+    // Check if unknown vendor exists
+    let vendor_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM vendors WHERE id = 'unknown'",
+        [],
+        |row| {
+            let count: i64 = row.get(0)?;
+            Ok(count > 0)
+        },
+    )?;
+    
+    if !vendor_exists {
+        conn.execute(
+            "INSERT INTO vendors (id, name, path, sort_order, is_active, created_at, updated_at) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("unknown", "Unknown", "unknown", 0, 1, &now, &now),
+        )?;
+    }
+    
+    // Check if unknown model exists
+    let model_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM models WHERE id = 'unknown'",
+        [],
+        |row| {
+            let count: i64 = row.get(0)?;
+            Ok(count > 0)
+        },
+    )?;
+    
+    if !model_exists {
+        conn.execute(
+            "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("unknown", "unknown", "Unknown Model", "unknown", "1", "Fallback for unclassified images", 0, 1, &now, &now),
+        )?;
+    }
+    
+    Ok(())
+}
 
 fn fetch_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<ImageResponse> {
     let placeholders: Vec<&str> = statuses.iter().map(|_| "?").collect();

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
 import { imageApi } from "@/services/tauri";
 import {

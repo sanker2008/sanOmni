@@ -66,14 +66,6 @@ pub struct Tag {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImageWithRelations {
-    #[serde(flatten)]
-    pub image: Image,
-    pub models: Vec<ModelInfo>,
-    pub tags: Vec<Tag>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub id: String,
     pub name: String,

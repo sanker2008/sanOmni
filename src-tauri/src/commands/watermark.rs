@@ -22,6 +22,7 @@ pub struct WatermarkRegion {
 }
 
 /// Supported watermark platforms
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WatermarkPlatform {
     #[serde(rename = "gemini")]
