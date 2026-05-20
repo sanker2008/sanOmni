@@ -10,6 +10,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(commands::watcher::WatcherState::new())
         .setup(|app| {
             // Use Tauri's app data directory
             let app_data_dir = app.path().app_data_dir()
@@ -32,9 +33,15 @@ pub fn run() {
             commands::images::update_image,
             commands::images::delete_image,
             commands::images::archive_images,
+            commands::images::unarchive_images,
+            commands::images::update_missing_formats,
             commands::vendors::get_vendors,
             commands::vendors::add_vendor,
+            commands::vendors::update_vendor,
+            commands::vendors::delete_vendor,
             commands::vendors::add_model,
+            commands::vendors::update_model,
+            commands::vendors::delete_model,
             commands::tags::get_tags,
             commands::tags::add_tag,
             commands::watermark::detect_watermark,

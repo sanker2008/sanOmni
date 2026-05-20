@@ -1,8 +1,10 @@
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 /// Folder watcher configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,7 +16,6 @@ pub struct WatcherConfig {
 }
 
 /// File event from watcher
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileWatchEvent {
     pub event_type: String,
@@ -32,10 +33,23 @@ pub struct WatcherInfo {
     pub created_at: String,
 }
 
+/// Global watcher state
+pub struct WatcherState {
+    pub watchers: Arc<Mutex<HashMap<String, WatcherInfo>>>,
+}
+
+impl WatcherState {
+    pub fn new() -> Self {
+        Self {
+            watchers: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
 /// Start watching a folder for new images
 #[tauri::command]
-pub async fn start_folder_watcher(
-    _app: AppHandle<impl Runtime>,
+pub async fn start_folder_watcher<R: Runtime>(
+    app: AppHandle<R>,
     config: WatcherConfig,
 ) -> Result<WatcherInfo, String> {
     let watch_path = PathBuf::from(&config.path);
@@ -51,49 +65,88 @@ pub async fn start_folder_watcher(
     let watcher_id = generate_watcher_id(&config.path);
     let created_at = chrono::Utc::now().to_rfc3339();
     
-    // Spawn watcher in background
-    let path_clone = watch_path.clone();
-    
-    std::thread::spawn(move || {
-        run_watcher(path_clone);
-    });
-    
-    // Store watcher info in app state
-    // Note: In a real implementation, you'd use Tauri's state management
-    
-    Ok(WatcherInfo {
-        id: watcher_id,
-        path: config.path,
+    let watcher_info = WatcherInfo {
+        id: watcher_id.clone(),
+        path: config.path.clone(),
         recursive: config.recursive,
         is_active: true,
-        created_at,
-    })
+        created_at: created_at.clone(),
+    };
+    
+    // Store watcher info
+    let state = app.state::<WatcherState>();
+    {
+        let mut watchers = state.watchers.lock().unwrap();
+        watchers.insert(watcher_id.clone(), watcher_info.clone());
+    }
+    
+    // Spawn watcher in background
+    let app_clone = app.clone();
+    let extensions = config.file_extensions.clone();
+    let debounce = config.debounce_ms;
+    
+    std::thread::spawn(move || {
+        if let Err(e) = run_watcher(watch_path, app_clone, extensions, debounce) {
+            eprintln!("Watcher error: {}", e);
+        }
+    });
+    
+    Ok(watcher_info)
 }
 
 /// Run the file watcher
-fn run_watcher(
+fn run_watcher<R: Runtime>(
     path: PathBuf,
-) {
-    let mut watcher: RecommendedWatcher = match Watcher::new(
-        move |_res: Result<Event, notify::Error>| {
-            // Handle file system events
-            // In a full implementation, this would auto-import new images
+    app: AppHandle<R>,
+    extensions: Vec<String>,
+    debounce_ms: u64,
+) -> Result<(), String> {
+    let app_clone = app.clone();
+    let extensions_clone = extensions.clone();
+    
+    let mut watcher: RecommendedWatcher = Watcher::new(
+        move |res: Result<Event, notify::Error>| {
+            match res {
+                Ok(event) => {
+                    // Only handle create and rename events
+                    match event.kind {
+                        EventKind::Create(_) | EventKind::Modify(notify::event::ModifyKind::Name(_)) => {
+                            for path in event.paths {
+                                if path.is_file() && is_image_file(&path, &extensions_clone) {
+                                    println!("Detected new image: {:?}", path);
+                                    
+                                    // Wait for debounce to ensure file is fully written
+                                    std::thread::sleep(Duration::from_millis(debounce_ms));
+                                    
+                                    // Emit event to frontend
+                                    let event_data = FileWatchEvent {
+                                        event_type: "new_image".to_string(),
+                                        path: path.to_string_lossy().to_string(),
+                                        timestamp: chrono::Utc::now().to_rfc3339(),
+                                    };
+                                    
+                                    let _ = app_clone.emit("file-watch-event", event_data);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Err(e) => eprintln!("Watch error: {:?}", e),
+            }
         },
         Config::default()
-    ) {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!("Failed to create watcher: {}", e);
-            return;
-        }
-    };
+    ).map_err(|e| format!("Failed to create watcher: {}", e))?;
     
     // Start watching
-    let mode = RecursiveMode::Recursive;
-    if let Err(e) = watcher.watch(&path, mode) {
-        eprintln!("Failed to start watching: {}", e);
-        return;
-    }
+    let mode = if path.is_dir() {
+        RecursiveMode::Recursive
+    } else {
+        RecursiveMode::NonRecursive
+    };
+    
+    watcher.watch(&path, mode)
+        .map_err(|e| format!("Failed to start watching: {}", e))?;
     
     println!("Started watching: {:?}", path);
     
@@ -115,21 +168,40 @@ fn generate_watcher_id(path: &str) -> String {
 
 /// Stop watching a folder
 #[tauri::command]
-pub async fn stop_folder_watcher(watcher_id: String) -> Result<bool, String> {
-    // In a real implementation, you'd look up the watcher by ID and stop it
-    println!("Stopping watcher: {}", watcher_id);
-    Ok(true)
+pub async fn stop_folder_watcher<R: Runtime>(
+    app: AppHandle<R>,
+    watcher_id: String,
+) -> Result<bool, String> {
+    let state = app.state::<WatcherState>();
+    let mut watchers = state.watchers.lock().unwrap();
+    
+    if let Some(watcher_info) = watchers.get_mut(&watcher_id) {
+        watcher_info.is_active = false;
+        println!("Stopped watcher: {}", watcher_id);
+        Ok(true)
+    } else {
+        Err(format!("Watcher not found: {}", watcher_id))
+    }
 }
 
 /// Get all active watchers
 #[tauri::command]
-pub async fn get_active_watchers() -> Result<Vec<WatcherInfo>, String> {
-    // In a real implementation, you'd return actual active watchers
-    Ok(vec![])
+pub async fn get_active_watchers<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Vec<WatcherInfo>, String> {
+    let state = app.state::<WatcherState>();
+    let watchers = state.watchers.lock().unwrap();
+    
+    let active: Vec<WatcherInfo> = watchers
+        .values()
+        .filter(|w| w.is_active)
+        .cloned()
+        .collect();
+    
+    Ok(active)
 }
 
 /// Check if a file is an image based on extension
-#[allow(dead_code)]
 fn is_image_file(path: &PathBuf, extensions: &[String]) -> bool {
     if let Some(ext) = path.extension() {
         let ext_str = ext.to_string_lossy().to_lowercase();

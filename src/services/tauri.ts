@@ -116,6 +116,26 @@ export const imageApi = {
     }
     return result.data;
   },
+
+  async unarchive(imageIds: string[], inboxPath: string): Promise<ArchiveResult> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<ArchiveResult>>("unarchive_images", {
+      dbPath,
+      inboxPath,
+      imageIds,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "Failed to unarchive images");
+    }
+    return result.data;
+  },
+
+  async updateMissingFormats(): Promise<number> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<number>>("update_missing_formats", { dbPath });
+    if (!result.success) throw new Error(result.error || "Failed to update formats");
+    return result.data || 0;
+  },
 };
 
 // ==================== Vendor API ====================
@@ -145,6 +165,20 @@ export const vendorApi = {
     return result.data;
   },
 
+  async update(vendorId: string, name: string, path: string): Promise<Vendor> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<Vendor>>("update_vendor", { dbPath, vendorId, name, path });
+    if (!result.success || !result.data) throw new Error(result.error || "Failed to update vendor");
+    return result.data;
+  },
+
+  async delete(vendorId: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("delete_vendor", { dbPath, vendorId });
+    if (!result.success) throw new Error(result.error || "Failed to delete vendor");
+    return result.data || false;
+  },
+
   async addModel(vendorId: string, name: string, path: string, description?: string): Promise<Model> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<Model>>("add_model", {
@@ -152,6 +186,22 @@ export const vendorApi = {
     });
     if (!result.success || !result.data) throw new Error(result.error || "Failed to add model");
     return result.data;
+  },
+
+  async updateModel(modelId: string, name: string, path: string, description?: string): Promise<Model> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<Model>>("update_model", {
+      dbPath, modelId, name, path, description,
+    });
+    if (!result.success || !result.data) throw new Error(result.error || "Failed to update model");
+    return result.data;
+  },
+
+  async deleteModel(modelId: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("delete_model", { dbPath, modelId });
+    if (!result.success) throw new Error(result.error || "Failed to delete model");
+    return result.data || false;
   },
 };
 

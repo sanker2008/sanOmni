@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useImageStore } from "@/stores";
+import { useImageStore, useUIStore } from "@/stores";
 import { imageApi, classifyApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Upload, Image as ImageIcon, FolderOpen, Loader2 } from "lucide-react";
@@ -21,6 +21,7 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const { addImage } = useImageStore();
+  const { settings } = useUIStore();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -145,8 +146,16 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
       const { appDataDir, join } = await import("@tauri-apps/api/path");
       const { copyFile, exists, mkdir } = await import("@tauri-apps/plugin-fs");
       
-      const appDir = await appDataDir();
-      const inboxDir = await join(appDir, "inbox");
+      // 使用自定义路径或默认路径
+      let inboxDir: string;
+      if (settings.customInboxPath) {
+        inboxDir = settings.customInboxPath;
+        console.log("Using custom inbox path:", inboxDir);
+      } else {
+        const appDir = await appDataDir();
+        inboxDir = await join(appDir, "inbox");
+        console.log("Using default inbox path:", inboxDir);
+      }
       
       // Ensure inbox directory exists
       if (!(await exists(inboxDir))) {

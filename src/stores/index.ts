@@ -166,8 +166,10 @@ export const useTagStore = create<TagStore>((set) => ({
 // UI Store
 const SETTINGS_STORAGE_KEY = "ai-image-manager-settings";
 const THEME_STORAGE_KEY = "ai-image-manager-theme";
+const VIEW_MODE_STORAGE_KEY = "ai-image-manager-view-mode";
 
 export type Theme = "light" | "dark" | "system";
+export type ViewMode = "grid" | "list";
 
 // 从 localStorage 读取设置
 function loadSettings(): Record<string, any> {
@@ -200,6 +202,15 @@ function loadTheme(): Theme {
   return "system";
 }
 
+// 读取保存的视图模式
+function loadViewMode(): ViewMode {
+  try {
+    const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    if (stored === "grid" || stored === "list") return stored;
+  } catch {}
+  return "grid"; // 默认为 grid
+}
+
 // 应用主题到 DOM
 function applyTheme(theme: Theme) {
   const isDark =
@@ -219,10 +230,13 @@ interface UIStore {
   selectedTagFilter: string | null;
   isQuickEditOpen: boolean;
   editingImageId: string | null;
+  isImageViewerOpen: boolean;
+  viewingImageId: string | null;
   settingsOpen: boolean;
   settingsTab: string;
   settings: Record<string, any>;
   theme: Theme;
+  viewMode: ViewMode;
 
   setActiveTab: (tab: "inbox" | "archived") => void;
   setSearchQuery: (query: string) => void;
@@ -231,11 +245,15 @@ interface UIStore {
   setTagFilter: (tagId: string | null) => void;
   openQuickEdit: (imageId: string) => void;
   closeQuickEdit: () => void;
+  openImageViewer: (imageId: string) => void;
+  closeImageViewer: () => void;
+  setViewingImageId: (imageId: string) => void;
   openSettings: () => void;
   closeSettings: () => void;
   setSettingsTab: (tab: string) => void;
   updateSetting: (key: string, value: any) => void;
   setTheme: (theme: Theme) => void;
+  setViewMode: (mode: ViewMode) => void;
 }
 
 export const useUIStore = create<UIStore>((set, get) => ({
@@ -246,10 +264,13 @@ export const useUIStore = create<UIStore>((set, get) => ({
   selectedTagFilter: null,
   isQuickEditOpen: false,
   editingImageId: null,
+  isImageViewerOpen: false,
+  viewingImageId: null,
   settingsOpen: false,
   settingsTab: "general",
   settings: loadSettings(),
   theme: loadTheme(),
+  viewMode: loadViewMode(),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSearchQuery: (query) => set({ searchQuery: query }),
@@ -258,6 +279,9 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setTagFilter: (tagId) => set({ selectedTagFilter: tagId }),
   openQuickEdit: (imageId) => set({ isQuickEditOpen: true, editingImageId: imageId }),
   closeQuickEdit: () => set({ isQuickEditOpen: false, editingImageId: null }),
+  openImageViewer: (imageId) => set({ isImageViewerOpen: true, viewingImageId: imageId }),
+  closeImageViewer: () => set({ isImageViewerOpen: false, viewingImageId: null }),
+  setViewingImageId: (imageId) => set({ viewingImageId: imageId }),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
   setSettingsTab: (tab) => set({ settingsTab: tab }),
@@ -280,5 +304,11 @@ export const useUIStore = create<UIStore>((set, get) => ({
       // 清理旧的监听器（简单处理）
       return () => mq.removeEventListener("change", handler);
     }
+  },
+  setViewMode: (mode) => {
+    set({ viewMode: mode });
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    } catch {}
   },
 }));

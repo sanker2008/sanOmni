@@ -1,8 +1,10 @@
 import { useUIStore } from "@/stores";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useFolderWatcher } from "@/hooks/useFolderWatcher";
 import InboxView from "@/components/InboxView";
 import ArchivedView from "@/components/ArchivedView";
 import QuickEditModal from "@/components/QuickEditModal";
+import ImageViewer from "@/components/ImageViewer";
 import SettingsView from "@/components/SettingsView";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +31,9 @@ function App() {
   // Register keyboard shortcuts
   useKeyboardShortcuts();
 
+  // Start folder watchers
+  useFolderWatcher();
+
   const cycleTheme = () => {
     const idx = THEME_CYCLE.indexOf(theme);
     const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
@@ -43,7 +48,10 @@ function App() {
         {/* Header */}
         <header className="border-b px-4 py-3 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex items-center gap-6">
-            <h1 className="text-xl font-semibold">AI Image Manager</h1>
+            <h1 className="text-xl font-semibold">
+              sanMediaBox
+              <span className="ml-2 text-sm font-normal text-muted-foreground">AI Image Manager</span>
+            </h1>
 
             <nav className="flex items-center gap-1">
               <Button
@@ -110,6 +118,9 @@ function App() {
 
         {/* Quick Edit Modal */}
         <QuickEditModal />
+
+        {/* Image Viewer */}
+        <ImageViewer />
 
         {/* Settings View */}
         <SettingsView />

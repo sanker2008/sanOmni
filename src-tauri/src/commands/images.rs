@@ -105,6 +105,12 @@ pub async fn import_image(
         .to_string_lossy()
         .to_string();
 
+    // Extract format from filename
+    let format = std::path::Path::new(&request.file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_uppercase());
+
     let image = Image {
         id: image_id.clone(),
         filename: request.file_name.clone(),
@@ -121,7 +127,7 @@ pub async fn import_image(
         width: None,
         height: None,
         file_hash: None,
-        format: None,
+        format,
         has_watermark: false,
         watermark_platform: None,
         watermark_detected: false,
@@ -249,6 +255,12 @@ pub async fn update_image(
     let now = chrono::Utc::now().to_rfc3339();
     let image_id = &request.image_id;
 
+    // Fetch current image info
+    let current_image = match fetch_image_by_id(&conn, image_id) {
+        Some(img) => img,
+        None => return CommandResult::err("Image not found".to_string()),
+    };
+
     // Update prompt
     if let Some(ref prompt) = request.prompt {
         let _ = conn.execute(
@@ -266,6 +278,9 @@ pub async fn update_image(
     }
 
     // Update model relations
+    let mut new_primary_model_id = current_image.primary_model_id.clone();
+    let mut new_vendor_id = current_image.storage_vendor_id.clone();
+    
     if !request.model_ids.is_empty() {
         // Delete old relations
         let _ = conn.execute(
@@ -286,16 +301,19 @@ pub async fn update_image(
             );
         }
 
-        // Update primary model and storage info
-        let vendor_id: String = conn.query_row(
+        // Get vendor_id for the new primary model
+        new_vendor_id = conn.query_row(
             "SELECT vendor_id FROM models WHERE id = ?",
             [&primary],
             |row| row.get(0),
         ).unwrap_or_else(|_| "unknown".to_string());
 
+        new_primary_model_id = primary.clone();
+
+        // Update primary model and storage info
         let _ = conn.execute(
             "UPDATE images SET primary_model_id = ?, storage_vendor_id = ?, storage_model_id = ? WHERE id = ?",
-            (&primary, &vendor_id, &primary, image_id),
+            (&primary, &new_vendor_id, &primary, image_id),
         );
     }
 
@@ -317,6 +335,144 @@ pub async fn update_image(
             let _ = conn.execute(
                 "INSERT INTO image_tag_relations (image_id, tag_id) VALUES (?, ?)",
                 (image_id, &tag_id),
+            );
+        }
+    }
+
+    // Rename file if vendor or model changed
+    if new_vendor_id != current_image.storage_vendor_id || 
+       new_primary_model_id != current_image.primary_model_id {
+        
+        let old_path = std::path::Path::new(&current_image.absolute_path);
+        if old_path.exists() {
+            // Get file extension
+            let ext = old_path.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("png");
+            
+            let timestamp = chrono::Utc::now().timestamp();
+            
+            // Generate new filename and path based on status
+            let (new_filename, new_path) = if current_image.status == "archived" {
+                // For archived images, move to new vendor/model directory
+                
+                // Get vendor and model paths
+                let vendor_path: String = conn.query_row(
+                    "SELECT path FROM vendors WHERE id = ?",
+                    [&new_vendor_id],
+                    |row| row.get(0),
+                ).unwrap_or_else(|_| new_vendor_id.clone());
+                
+                let model_path: String = conn.query_row(
+                    "SELECT path FROM models WHERE id = ?",
+                    [&new_primary_model_id],
+                    |row| row.get(0),
+                ).unwrap_or_else(|_| new_primary_model_id.clone());
+                
+                // Get library path from old path (go up to archived directory)
+                let library_path = if let Some(old_parent) = old_path.parent() {
+                    if let Some(model_dir) = old_parent.parent() {
+                        if let Some(vendor_dir) = model_dir.parent() {
+                            if let Some(archived_dir) = vendor_dir.parent() {
+                                archived_dir.to_path_buf()
+                            } else {
+                                std::path::PathBuf::from(".")
+                            }
+                        } else {
+                            std::path::PathBuf::from(".")
+                        }
+                    } else {
+                        std::path::PathBuf::from(".")
+                    }
+                } else {
+                    std::path::PathBuf::from(".")
+                };
+                
+                // Build new directory structure
+                let target_dir = library_path
+                    .join("archived")
+                    .join(&vendor_path)
+                    .join(&model_path);
+                
+                // Create directory if it doesn't exist
+                if let Err(e) = std::fs::create_dir_all(&target_dir) {
+                    eprintln!("Failed to create directory: {}", e);
+                    return CommandResult::err(format!("Failed to create directory: {}", e));
+                }
+                
+                // Use template: {vendor}-{model}-{date}-{timestamp}
+                let date = &current_image.created_at[..10]; // YYYY-MM-DD
+                let filename = format!("{}-{}-{}-{}.{}", vendor_path, model_path, date, timestamp, ext);
+                let path = target_dir.join(&filename);
+                
+                (filename, path)
+            } else {
+                // For inbox images, stay in same directory with new prefix
+                if let Some(parent_dir) = old_path.parent() {
+                    let filename = format!("{}_{}_{}_{}.{}", 
+                        new_vendor_id, 
+                        new_primary_model_id, 
+                        timestamp,
+                        current_image.original_filename.replace(&format!(".{}", ext), ""),
+                        ext
+                    );
+                    let path = parent_dir.join(&filename);
+                    (filename, path)
+                } else {
+                    eprintln!("Failed to get parent directory");
+                    return CommandResult::err("Failed to get parent directory".to_string());
+                }
+            };
+            
+            // Move/rename the file
+            if let Err(e) = std::fs::rename(old_path, &new_path) {
+                eprintln!("Failed to move/rename file: {}", e);
+                return CommandResult::err(format!("Failed to move/rename file: {}", e));
+            }
+            
+            // Update database with new filename and path
+            let new_relative = if current_image.status == "archived" {
+                // For archived, use new vendor/model structure
+                let vendor_path: String = conn.query_row(
+                    "SELECT path FROM vendors WHERE id = ?",
+                    [&new_vendor_id],
+                    |row| row.get(0),
+                ).unwrap_or_else(|_| new_vendor_id.clone());
+                
+                let model_path: String = conn.query_row(
+                    "SELECT path FROM models WHERE id = ?",
+                    [&new_primary_model_id],
+                    |row| row.get(0),
+                ).unwrap_or_else(|_| new_primary_model_id.clone());
+                
+                std::path::Path::new("archived")
+                    .join(&vendor_path)
+                    .join(&model_path)
+                    .join(&new_filename)
+                    .to_string_lossy()
+                    .to_string()
+            } else {
+                // For inbox
+                std::path::Path::new("inbox")
+                    .join(&new_filename)
+                    .to_string_lossy()
+                    .to_string()
+            };
+            
+            let new_absolute = new_path.to_string_lossy().to_string();
+            
+            if let Err(e) = conn.execute(
+                "UPDATE images SET filename = ?, relative_path = ?, absolute_path = ? WHERE id = ?",
+                (&new_filename, &new_relative, &new_absolute, image_id),
+            ) {
+                eprintln!("Failed to update database: {}", e);
+                return CommandResult::err(format!("Failed to update database: {}", e));
+            }
+            
+            // Log the move operation
+            let _ = conn.execute(
+                "INSERT INTO processing_history (image_id, action, status, details, created_at) VALUES (?, ?, ?, ?, ?)",
+                (image_id, "move", "success", &format!("Moved to {}", new_relative), &now),
             );
         }
     }
@@ -486,6 +642,140 @@ pub async fn delete_image(db_path: String, image_id: String) -> CommandResult<bo
         Ok(_) => CommandResult::ok(true),
         Err(e) => CommandResult::err(format!("Failed to delete image: {}", e)),
     }
+}
+
+// ==================== Update Missing Formats ====================
+
+#[tauri::command]
+pub async fn update_missing_formats(db_path: String) -> CommandResult<usize> {
+    let conn = match Connection::open(&db_path) {
+        Ok(conn) => conn,
+        Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
+    };
+
+    // Get all images without format
+    let mut stmt = match conn.prepare("SELECT id, filename FROM images WHERE format IS NULL OR format = ''") {
+        Ok(stmt) => stmt,
+        Err(e) => return CommandResult::err(format!("Failed to prepare query: {}", e)),
+    };
+
+    let images: Vec<(String, String)> = match stmt.query_map([], |row| {
+        Ok((row.get(0)?, row.get(1)?))
+    }) {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Err(e) => return CommandResult::err(format!("Failed to query images: {}", e)),
+    };
+
+    let mut updated_count = 0;
+
+    for (id, filename) in images {
+        if let Some(ext) = std::path::Path::new(&filename)
+            .extension()
+            .and_then(|e| e.to_str())
+        {
+            let format = ext.to_uppercase();
+            if let Ok(_) = conn.execute(
+                "UPDATE images SET format = ? WHERE id = ?",
+                (&format, &id),
+            ) {
+                updated_count += 1;
+            }
+        }
+    }
+
+    CommandResult::ok(updated_count)
+}
+
+// ==================== Unarchive ====================
+
+#[tauri::command]
+pub async fn unarchive_images(
+    db_path: String,
+    inbox_path: String,
+    image_ids: Vec<String>,
+) -> CommandResult<ArchiveResult> {
+    let conn = match Connection::open(&db_path) {
+        Ok(conn) => conn,
+        Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
+    };
+
+    let mut result = ArchiveResult {
+        success_count: 0,
+        skipped_count: 0,
+        failed_count: 0,
+        errors: Vec::new(),
+    };
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    for image_id in &image_ids {
+        // Fetch image
+        let image = match fetch_image_by_id(&conn, image_id) {
+            Some(img) => img,
+            None => {
+                result.skipped_count += 1;
+                continue;
+            }
+        };
+
+        // Skip if not archived
+        if image.status != "archived" {
+            result.skipped_count += 1;
+            continue;
+        }
+
+        // Build target path in inbox
+        let inbox_dir = std::path::Path::new(&inbox_path).join("inbox");
+        
+        // Ensure inbox directory exists
+        if let Err(e) = std::fs::create_dir_all(&inbox_dir) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: Failed to create inbox directory: {}", image_id, e));
+            continue;
+        }
+
+        // Generate unique filename with timestamp
+        let timestamp = chrono::Utc::now().timestamp();
+        let new_filename = format!("{}_{}", timestamp, image.original_filename);
+        let target_path = inbox_dir.join(&new_filename);
+
+        // Move file back to inbox
+        let source = std::path::Path::new(&image.absolute_path);
+        if source.exists() {
+            if let Err(e) = std::fs::rename(source, &target_path) {
+                result.failed_count += 1;
+                result.errors.push(format!("{}: Failed to move file: {}", image_id, e));
+                continue;
+            }
+        }
+
+        // Update database
+        let new_relative = std::path::Path::new("inbox").join(&new_filename);
+        let new_relative_str = new_relative.to_string_lossy().to_string();
+        let new_absolute = target_path.to_string_lossy().to_string();
+
+        if let Err(e) = conn.execute(
+            "UPDATE images SET 
+                filename = ?, relative_path = ?, absolute_path = ?,
+                status = 'tagged', archived_at = NULL
+            WHERE id = ?",
+            (&new_filename, &new_relative_str, &new_absolute, image_id),
+        ) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: Failed to update database: {}", image_id, e));
+            continue;
+        }
+
+        // Log history
+        let _ = conn.execute(
+            "INSERT INTO processing_history (image_id, action, status, details, created_at) VALUES (?, ?, ?, ?, ?)",
+            (image_id, "unarchive", "success", "Moved back to inbox", &now),
+        );
+
+        result.success_count += 1;
+    }
+
+    CommandResult::ok(result)
 }
 
 // ==================== Helpers ====================

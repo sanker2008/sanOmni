@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useUIStore } from "@/stores";
+import { useUIStore, useVendorStore } from "@/stores";
 import { settingsApi } from "@/services/tauri";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,13 +8,14 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, FolderOpen, AlertTriangle } from "lucide-react";
+import { X, Plus, FolderOpen, AlertTriangle, Edit2, Trash2, ChevronDown, ChevronRight, Save } from "lucide-react";
 
 // 默认设置
 const DEFAULT_SETTINGS: Record<string, any> = {
   // 通用设置
   namingTemplate: "{vendor}-{model}-{date}-{index}",
-  defaultArchivePath: "",
+  customInboxPath: "",  // 自定义 inbox 路径（留空使用默认）
+  customArchivedPath: "",  // 自定义 archived 路径（留空使用默认）
 
   // 水印设置
   watermarkAutoDetect: true,
@@ -40,29 +41,54 @@ const SHORTCUTS = [
   { key: "Ctrl + ,", description: "打开设置" },
 ];
 
-type SettingsTab = "general" | "watermark" | "monitor" | "shortcuts";
+type SettingsTab = "general" | "watermark" | "monitor" | "vendors" | "shortcuts";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "通用设置" },
   { key: "watermark", label: "水印设置" },
   { key: "monitor", label: "监控设置" },
+  { key: "vendors", label: "厂商管理" },
   { key: "shortcuts", label: "快捷键" },
 ];
 
 function SettingsView() {
   const { settingsOpen, closeSettings, settings, updateSetting } = useUIStore();
+  const { vendors, setVendors } = useVendorStore();
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("general");
   const [localSettings, setLocalSettings] = useState<Record<string, any>>({});
   const [newWatchFolder, setNewWatchFolder] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
+  const [activeWatchers, setActiveWatchers] = useState<any[]>([]);
+  
+  // Vendor management state
+  const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
+  const [editingVendor, setEditingVendor] = useState<string | null>(null);
+  const [editingModel, setEditingModel] = useState<string | null>(null);
+  const [vendorForm, setVendorForm] = useState({ name: "", path: "" });
+  const [modelForm, setModelForm] = useState({ name: "", path: "", description: "" });
+  const [addingModelForVendor, setAddingModelForVendor] = useState<string | null>(null);
 
   // 初始化本地设置
   useEffect(() => {
     if (settingsOpen) {
       setLocalSettings({ ...DEFAULT_SETTINGS, ...settings });
       setHasChanges(false);
+      
+      // 加载活跃的监控器
+      loadActiveWatchers();
     }
   }, [settingsOpen, settings]);
+
+  // 加载活跃的监控器
+  const loadActiveWatchers = async () => {
+    try {
+      const { watcherApi } = await import("@/services/tauri");
+      const watchers = await watcherApi.getActive();
+      setActiveWatchers(watchers);
+    } catch (error) {
+      console.error("Failed to load active watchers:", error);
+    }
+  };
 
   // 检测变更
   useEffect(() => {
@@ -109,6 +135,23 @@ function SettingsView() {
       console.error("Failed to select folder:", error);
     }
   }, [localSettings.watchFolders, handleLocalUpdate]);
+
+  // 选择自定义路径
+  const handleSelectCustomPath = useCallback(async (settingKey: string) => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selectedFolder = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (selectedFolder && typeof selectedFolder === "string") {
+        handleLocalUpdate(settingKey, selectedFolder);
+      }
+    } catch (error) {
+      console.error("Failed to select folder:", error);
+    }
+  }, [handleLocalUpdate]);
 
   // 移除监控文件夹
   const handleRemoveWatchFolder = useCallback(
@@ -199,23 +242,67 @@ function SettingsView() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">默认归档路径</CardTitle>
-                  <CardDescription>图片归档时的默认保存目录</CardDescription>
+                  <CardTitle className="text-base">自定义 Inbox 路径</CardTitle>
+                  <CardDescription>
+                    导入图片时的临时存储位置。留空则使用默认位置（AppData）
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-2">
                     <Input
-                      value={localSettings.defaultArchivePath || ""}
+                      value={localSettings.customInboxPath || ""}
                       onChange={(e) =>
-                        handleLocalUpdate("defaultArchivePath", e.target.value)
+                        handleLocalUpdate("customInboxPath", e.target.value)
                       }
-                      placeholder="留空则每次手动选择"
+                      placeholder="留空使用默认位置"
                       className="flex-1"
                     />
-                    <Button variant="outline" size="icon">
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => handleSelectCustomPath("customInboxPath")}
+                    >
                       <FolderOpen className="w-4 h-4" />
                     </Button>
                   </div>
+                  {!localSettings.customInboxPath && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      默认：%APPDATA%\com.sanmediabox.app\inbox
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">自定义归档路径</CardTitle>
+                  <CardDescription>
+                    图片归档时的保存目录。留空则使用默认位置（AppData）
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Input
+                      value={localSettings.customArchivedPath || ""}
+                      onChange={(e) =>
+                        handleLocalUpdate("customArchivedPath", e.target.value)
+                      }
+                      placeholder="留空使用默认位置"
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => handleSelectCustomPath("customArchivedPath")}
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {!localSettings.customArchivedPath && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      默认：%APPDATA%\com.sanmediabox.app\archived
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 
@@ -320,11 +407,38 @@ function SettingsView() {
           {/* 监控设置 */}
           {activeSettingsTab === "monitor" && (
             <div className="space-y-6">
+              {/* 活跃的监控器 */}
+              {activeWatchers.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">活跃的监控器</CardTitle>
+                    <CardDescription>
+                      当前正在运行的文件夹监控
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {activeWatchers.map((watcher: any) => (
+                        <div
+                          key={watcher.id}
+                          className="flex items-center gap-2 p-2 rounded-md border bg-green-50 dark:bg-green-950"
+                        >
+                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                          <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm flex-1 truncate">{watcher.path}</span>
+                          <Badge variant="outline" className="text-xs">运行中</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">监控文件夹</CardTitle>
                   <CardDescription>
-                    添加需要自动监控的文件夹路径
+                    添加需要自动监控的文件夹路径，新图片会自动导入到收件箱
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -439,6 +553,367 @@ function SettingsView() {
                       </Badge>
                       <span className="text-muted-foreground">5000ms</span>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* 厂商管理 */}
+          {activeSettingsTab === "vendors" && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">厂商和模型管理</CardTitle>
+                  <CardDescription>
+                    管理所有 AI 图片生成厂商和对应的模型
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {vendors.map((vendor) => {
+                      const isExpanded = expandedVendors.has(vendor.id);
+                      const isEditing = editingVendor === vendor.id;
+
+                      return (
+                        <div key={vendor.id} className="border rounded-lg p-3">
+                          {/* Vendor Header */}
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                const next = new Set(expandedVendors);
+                                if (next.has(vendor.id)) {
+                                  next.delete(vendor.id);
+                                } else {
+                                  next.add(vendor.id);
+                                }
+                                setExpandedVendors(next);
+                              }}
+                              className="p-1 hover:bg-muted rounded"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
+                            </button>
+
+                            {isEditing ? (
+                              <div className="flex-1 flex items-center gap-2">
+                                <Input
+                                  value={vendorForm.name}
+                                  onChange={(e) =>
+                                    setVendorForm({ ...vendorForm, name: e.target.value })
+                                  }
+                                  placeholder="厂商名称"
+                                  className="flex-1"
+                                />
+                                <Input
+                                  value={vendorForm.path}
+                                  onChange={(e) =>
+                                    setVendorForm({ ...vendorForm, path: e.target.value })
+                                  }
+                                  placeholder="路径标识"
+                                  className="flex-1"
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={async () => {
+                                    try {
+                                      const { vendorApi } = await import("@/services/tauri");
+                                      await vendorApi.update(vendor.id, vendorForm.name, vendorForm.path);
+                                      // Reload vendors
+                                      const updatedVendors = await vendorApi.getAll();
+                                      setVendors(updatedVendors);
+                                      setEditingVendor(null);
+                                    } catch (error) {
+                                      alert(`更新失败: ${error}`);
+                                    }
+                                  }}
+                                >
+                                  <Save className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingVendor(null)}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="font-medium flex-1">{vendor.name}</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {vendor.models.length} 个模型
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setEditingVendor(vendor.id);
+                                    setVendorForm({ name: vendor.name, path: vendor.path });
+                                  }}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={async () => {
+                                    if (confirm(`确定要删除厂商 "${vendor.name}" 吗？`)) {
+                                      try {
+                                        const { vendorApi } = await import("@/services/tauri");
+                                        await vendorApi.delete(vendor.id);
+                                        const updatedVendors = await vendorApi.getAll();
+                                        setVendors(updatedVendors);
+                                      } catch (error) {
+                                        alert(`删除失败: ${error}`);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Models List */}
+                          {isExpanded && (
+                            <div className="ml-8 mt-3 space-y-2">
+                              {vendor.models.map((model) => {
+                                const isEditingModel = editingModel === model.id;
+
+                                return (
+                                  <div
+                                    key={model.id}
+                                    className="flex items-center gap-2 p-2 rounded-md border bg-muted/30"
+                                  >
+                                    {isEditingModel ? (
+                                      <>
+                                        <Input
+                                          value={modelForm.name}
+                                          onChange={(e) =>
+                                            setModelForm({ ...modelForm, name: e.target.value })
+                                          }
+                                          placeholder="模型名称"
+                                          className="flex-1"
+                                        />
+                                        <Input
+                                          value={modelForm.path}
+                                          onChange={(e) =>
+                                            setModelForm({ ...modelForm, path: e.target.value })
+                                          }
+                                          placeholder="路径标识"
+                                          className="flex-1"
+                                        />
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={async () => {
+                                            try {
+                                              const { vendorApi } = await import("@/services/tauri");
+                                              await vendorApi.updateModel(
+                                                model.id,
+                                                modelForm.name,
+                                                modelForm.path,
+                                                modelForm.description
+                                              );
+                                              const updatedVendors = await vendorApi.getAll();
+                                              setVendors(updatedVendors);
+                                              setEditingModel(null);
+                                            } catch (error) {
+                                              alert(`更新失败: ${error}`);
+                                            }
+                                          }}
+                                        >
+                                          <Save className="w-4 h-4" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => setEditingModel(null)}
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-sm flex-1">{model.name}</span>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => {
+                                            setEditingModel(model.id);
+                                            setModelForm({
+                                              name: model.name,
+                                              path: model.path,
+                                              description: model.description || "",
+                                            });
+                                          }}
+                                        >
+                                          <Edit2 className="w-3 h-3" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={async () => {
+                                            if (confirm(`确定要删除模型 "${model.name}" 吗？`)) {
+                                              try {
+                                                const { vendorApi } = await import("@/services/tauri");
+                                                await vendorApi.deleteModel(model.id);
+                                                const updatedVendors = await vendorApi.getAll();
+                                                setVendors(updatedVendors);
+                                              } catch (error) {
+                                                alert(`删除失败: ${error}`);
+                                              }
+                                            }
+                                          }}
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })}
+
+                              {/* Add Model Form */}
+                              {addingModelForVendor === vendor.id ? (
+                                <div className="flex items-center gap-2 p-2 rounded-md border bg-blue-50 dark:bg-blue-950">
+                                  <Input
+                                    value={modelForm.name}
+                                    onChange={(e) =>
+                                      setModelForm({ ...modelForm, name: e.target.value })
+                                    }
+                                    placeholder="模型名称"
+                                    className="flex-1"
+                                  />
+                                  <Input
+                                    value={modelForm.path}
+                                    onChange={(e) =>
+                                      setModelForm({ ...modelForm, path: e.target.value })
+                                    }
+                                    placeholder="路径标识"
+                                    className="flex-1"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={async () => {
+                                      try {
+                                        const { vendorApi } = await import("@/services/tauri");
+                                        await vendorApi.addModel(
+                                          vendor.id,
+                                          modelForm.name,
+                                          modelForm.path,
+                                          modelForm.description
+                                        );
+                                        const updatedVendors = await vendorApi.getAll();
+                                        setVendors(updatedVendors);
+                                        setAddingModelForVendor(null);
+                                        setModelForm({ name: "", path: "", description: "" });
+                                      } catch (error) {
+                                        alert(`添加失败: ${error}`);
+                                      }
+                                    }}
+                                  >
+                                    <Save className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setAddingModelForVendor(null);
+                                      setModelForm({ name: "", path: "", description: "" });
+                                    }}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full"
+                                  onClick={() => {
+                                    setAddingModelForVendor(vendor.id);
+                                    setModelForm({ name: "", path: "", description: "" });
+                                  }}
+                                >
+                                  <Plus className="w-3.5 h-3.5 mr-1" />
+                                  添加模型
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Add Vendor Button */}
+                    <Separator />
+                    {editingVendor === "new" ? (
+                      <div className="flex items-center gap-2 p-3 rounded-lg border bg-blue-50 dark:bg-blue-950">
+                        <Input
+                          value={vendorForm.name}
+                          onChange={(e) =>
+                            setVendorForm({ ...vendorForm, name: e.target.value })
+                          }
+                          placeholder="厂商名称（如：OpenAI）"
+                          className="flex-1"
+                        />
+                        <Input
+                          value={vendorForm.path}
+                          onChange={(e) =>
+                            setVendorForm({ ...vendorForm, path: e.target.value })
+                          }
+                          placeholder="路径标识（如：openai）"
+                          className="flex-1"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const { vendorApi } = await import("@/services/tauri");
+                              await vendorApi.add(vendorForm.name, vendorForm.path);
+                              const updatedVendors = await vendorApi.getAll();
+                              setVendors(updatedVendors);
+                              setEditingVendor(null);
+                              setVendorForm({ name: "", path: "" });
+                            } catch (error) {
+                              alert(`添加失败: ${error}`);
+                            }
+                          }}
+                        >
+                          <Save className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingVendor(null);
+                            setVendorForm({ name: "", path: "" });
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          setEditingVendor("new");
+                          setVendorForm({ name: "", path: "" });
+                        }}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        添加新厂商
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

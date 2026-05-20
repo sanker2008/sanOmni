@@ -13,13 +13,16 @@ import {
   Search, 
   CheckSquare, 
   Square,
-  Tag,
-  FolderOpen,
+  Edit,
   Loader2,
   Scan,
+  Trash2,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import DropZone from "./DropZone";
+import BatchEditModal from "./BatchEditModal";
 
 export default function InboxView() {
   const { 
@@ -31,9 +34,10 @@ export default function InboxView() {
     selectAll,
     clearSelection,
     removeImage,
+    deselectImage,
   } = useImageStore();
 
-  const { searchQuery, setSearchQuery } = useUIStore();
+  const { searchQuery, setSearchQuery, viewMode, setViewMode } = useUIStore();
   const { setVendors } = useVendorStore();
 
   const [isArchiving, setIsArchiving] = useState(false);
@@ -41,6 +45,7 @@ export default function InboxView() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionProgress, setDetectionProgress] = useState<string | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showBatchEdit, setShowBatchEdit] = useState(false);
 
   useEffect(() => {
     loadInboxImages();
@@ -75,10 +80,18 @@ export default function InboxView() {
     setArchiveResult(null);
 
     try {
-      // Get library path from app data dir
-      const { appDataDir } = await import("@tauri-apps/api/path");
-      const appDir = await appDataDir();
-      const libraryPath = appDir;
+      // 使用自定义归档路径或默认路径
+      let libraryPath: string;
+      const customPath = useUIStore.getState().settings.customArchivedPath;
+      
+      if (customPath) {
+        libraryPath = customPath;
+        console.log("Using custom archived path:", libraryPath);
+      } else {
+        const { appDataDir } = await import("@tauri-apps/api/path");
+        libraryPath = await appDataDir();
+        console.log("Using default archived path:", libraryPath);
+      }
 
       const result = await imageApi.archive(selectedImages, libraryPath);
 
@@ -148,15 +161,111 @@ export default function InboxView() {
     }
   };
 
+  const handleDeleteImage = async (imageId: string) => {
+    try {
+      const success = await imageApi.delete(imageId);
+      if (success) {
+        removeImage(imageId);
+        // If the image was selected, deselect it
+        if (selectedImages.includes(imageId)) {
+          deselectImage(imageId);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to delete image:", error);
+      alert("删除图片失败");
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedImages.length === 0) return;
+
+    if (!confirm(`确定要删除选中的 ${selectedImages.length} 张图片吗？此操作不可恢复。`)) {
+      return;
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const imageId of selectedImages) {
+      try {
+        const success = await imageApi.delete(imageId);
+        if (success) {
+          removeImage(imageId);
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to delete image ${imageId}:`, error);
+        failCount++;
+      }
+    }
+
+    clearSelection();
+
+    if (failCount > 0) {
+      alert(`删除完成：成功 ${successCount} 张，失败 ${failCount} 张`);
+    }
+  };
+
+  const handleArchiveSingle = async (imageId: string) => {
+    setIsArchiving(true);
+    setArchiveResult(null);
+
+    try {
+      // 使用自定义归档路径或默认路径
+      let libraryPath: string;
+      const customPath = useUIStore.getState().settings.customArchivedPath;
+      
+      if (customPath) {
+        libraryPath = customPath;
+      } else {
+        const { appDataDir } = await import("@tauri-apps/api/path");
+        libraryPath = await appDataDir();
+      }
+
+      const result = await imageApi.archive([imageId], libraryPath);
+
+      if (result.success_count > 0) {
+        removeImage(imageId);
+        deselectImage(imageId);
+        setArchiveResult(`成功归档 1 张图片`);
+      } else if (result.skipped_count > 0) {
+        setArchiveResult(`图片已归档或缺少信息（厂商/模型）`);
+      } else {
+        setArchiveResult(`归档失败：${result.errors.join(', ')}`);
+      }
+
+      // Clear message after 3 seconds
+      setTimeout(() => setArchiveResult(null), 3000);
+    } catch (error) {
+      console.error("Archive failed:", error);
+      setArchiveResult("归档失败，请检查图片是否已标记厂商和模型");
+      setTimeout(() => setArchiveResult(null), 3000);
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
   // Filter images by search query
   const filteredImages = inboxImages.filter((image) => {
     if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      image.filename.toLowerCase().includes(query) ||
-      image.prompt?.toLowerCase().includes(query) ||
-      image.tags.some((tag) => tag.name.toLowerCase().includes(query))
-    );
+    
+    const query = searchQuery.toLowerCase().trim();
+    const keywords = query.split(/\s+/).filter(k => k.length > 0);
+    
+    // 每个关键词都要匹配（AND 逻辑）
+    return keywords.every(keyword => {
+      return (
+        image.filename.toLowerCase().includes(keyword) ||
+        image.prompt?.toLowerCase().includes(keyword) ||
+        image.format?.toLowerCase().includes(keyword) ||
+        image.watermark_platform?.toLowerCase().includes(keyword) ||
+        image.models.some((m) => m.name.toLowerCase().includes(keyword)) ||
+        image.tags.some((tag) => tag.name.toLowerCase().includes(keyword))
+      );
+    });
   });
 
   const isAllSelected = filteredImages.length > 0 && 
@@ -199,11 +308,29 @@ export default function InboxView() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="搜索图片..."
+              placeholder="搜索图片（文件名/模型/标签/格式...）"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 w-64"
             />
+          </div>
+
+          {/* 视图切换 */}
+          <div className="flex items-center border rounded-md overflow-hidden">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`p-1.5 transition-colors ${viewMode === "grid" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              title="网格视图"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              title="列表视图"
+            >
+              <List className="w-4 h-4" />
+            </button>
           </div>
 
           <Button variant="outline" size="sm" className="gap-2" onClick={handleImportClick}>
@@ -242,62 +369,62 @@ export default function InboxView() {
         </div>
       )}
 
-      {/* Toolbar */}
-      {filteredImages.length > 0 && (
-        <div className="border-b px-4 py-2 flex items-center gap-4 bg-muted/30">
-          <button
-            onClick={handleSelectAll}
-            className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
-          >
-            {isAllSelected ? (
-              <CheckSquare className="w-4 h-4" />
-            ) : (
-              <Square className="w-4 h-4" />
-            )}
-            {isAllSelected ? "取消全选" : "全选"}
-          </button>
+      {/* Toolbar - Always reserve space */}
+      <div className="border-b px-4 py-2 bg-muted/30 min-h-[44px] flex items-center">
+        {filteredImages.length > 0 ? (
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleSelectAll}
+              className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
+            >
+              {isAllSelected ? (
+                <CheckSquare className="w-4 h-4" />
+              ) : (
+                <Square className="w-4 h-4" />
+              )}
+              {isAllSelected ? "取消全选" : "全选"}
+            </button>
 
-          {selectedImages.length > 0 && (
-            <>
-              <span className="text-sm text-muted-foreground">
-                已选择 {selectedImages.length} 张
-              </span>
-              <Button variant="ghost" size="sm" className="gap-1 h-7">
-                <Tag className="w-3 h-3" />
-                批量打标签
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1 h-7"
-                onClick={handleBatchDetect}
-                disabled={isDetecting}
-              >
-                {isDetecting ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Scan className="w-3 h-3" />
-                )}
-                批量检测水印
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1 h-7"
-                onClick={handleArchive}
-                disabled={isArchiving}
-              >
-                {isArchiving ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <FolderOpen className="w-3 h-3" />
-                )}
-                批量归档
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+            {selectedImages.length > 0 && (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  已选择 {selectedImages.length} 张
+                </span>
+                <Button variant="ghost" size="sm" className="gap-1 h-7"
+                  onClick={() => setShowBatchEdit(true)}>
+                  <Edit className="w-3 h-3" />
+                  批量编辑
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 h-7"
+                  onClick={handleBatchDetect}
+                  disabled={isDetecting}
+                >
+                  {isDetecting ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Scan className="w-3 h-3" />
+                  )}
+                  批量检测水印
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 h-7"
+                  onClick={handleBatchDelete}
+                >
+                  <Trash2 className="w-3 h-3" />
+                  批量删除
+                </Button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="h-[28px]" /> // Empty placeholder to maintain height
+        )}
+      </div>
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
@@ -315,11 +442,30 @@ export default function InboxView() {
           <DropZone onImportComplete={loadInboxImages} />
         ) : (
           <ScrollArea className="h-full">
-            <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {filteredImages.map((image) => (
-                <ImageCard key={image.id} image={image} />
-              ))}
-            </div>
+            {viewMode === "grid" ? (
+              <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {filteredImages.map((image) => (
+                  <ImageCard 
+                    key={image.id} 
+                    image={image}
+                    onDelete={handleDeleteImage}
+                    onArchive={handleArchiveSingle}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 space-y-2">
+                {filteredImages.map((image) => (
+                  <ImageCard
+                    key={image.id}
+                    image={image}
+                    onDelete={handleDeleteImage}
+                    onArchive={handleArchiveSingle}
+                    listMode
+                  />
+                ))}
+              </div>
+            )}
           </ScrollArea>
         )}
       </div>
@@ -339,6 +485,9 @@ export default function InboxView() {
           </div>
         </div>
       )}
+
+      {/* Batch Edit Modal */}
+      <BatchEditModal open={showBatchEdit} onClose={() => setShowBatchEdit(false)} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
 import { imageApi } from "@/services/tauri";
+import { appDataDir } from "@tauri-apps/api/path";
 import {
   Dialog,
   DialogContent,
@@ -22,11 +23,12 @@ import {
   Star,
   Loader2,
   Sparkles,
+  Archive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function QuickEditModal() {
-  const { inboxImages, updateImage } = useImageStore();
+  const { inboxImages, archivedImages, updateImage, removeImage } = useImageStore();
   const { isQuickEditOpen, editingImageId, closeQuickEdit } = useUIStore();
   const { vendors } = useVendorStore();
 
@@ -36,9 +38,11 @@ export default function QuickEditModal() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingAndArchiving, setIsSavingAndArchiving] = useState(false);
 
-  // Find the editing image
-  const image = inboxImages.find((img) => img.id === editingImageId);
+  // Find the editing image from both inbox and archived images
+  const image = inboxImages.find((img) => img.id === editingImageId) || 
+                archivedImages.find((img) => img.id === editingImageId);
 
   // Initialize form when image changes
   useEffect(() => {
@@ -68,6 +72,37 @@ export default function QuickEditModal() {
       console.error("Failed to save:", error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveAndArchive = async () => {
+    if (!image) return;
+
+    setIsSavingAndArchiving(true);
+    try {
+      // 先保存
+      const updated = await imageApi.update({
+        image_id: image.id,
+        prompt: prompt || undefined,
+        model_ids: selectedModels,
+        primary_model_id: primaryModel || undefined,
+        tags,
+      });
+      updateImage(image.id, updated);
+
+      // 再归档
+      const customPath = useUIStore.getState().settings.customArchivedPath;
+      const libraryPath = customPath || (await appDataDir());
+      const result = await imageApi.archive([image.id], libraryPath);
+
+      if (result.success_count > 0) {
+        removeImage(image.id);
+      }
+      closeQuickEdit();
+    } catch (error) {
+      console.error("Failed to save and archive:", error);
+    } finally {
+      setIsSavingAndArchiving(false);
     }
   };
 
@@ -106,7 +141,7 @@ export default function QuickEditModal() {
 
   return (
     <Dialog open={isQuickEditOpen} onOpenChange={(open) => !open && closeQuickEdit()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>编辑图片信息</DialogTitle>
         </DialogHeader>
@@ -116,15 +151,16 @@ export default function QuickEditModal() {
           <div className="w-1/3 flex-shrink-0">
             <div className="aspect-square bg-muted rounded-lg overflow-hidden flex items-center justify-center">
               <img
-                src={`asset://localhost/${image.absolute_path}`}
+                src={convertFileSrc(image.absolute_path)}
                 alt={image.filename}
                 className="w-full h-full object-cover"
                 onError={(e) => {
+                  console.error("Failed to load image:", image.absolute_path);
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
             </div>
-            <p className="text-sm text-muted-foreground mt-2 truncate" title={image.filename}>
+            <p className="text-sm text-muted-foreground mt-2 break-words" title={image.filename}>
               {image.filename}
             </p>
           </div>
@@ -276,7 +312,24 @@ export default function QuickEditModal() {
           <Button variant="outline" onClick={closeQuickEdit}>
             取消
           </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
+          <Button
+            variant="outline"
+            onClick={handleSaveAndArchive}
+            disabled={isSaving || isSavingAndArchiving}
+          >
+            {isSavingAndArchiving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                处理中...
+              </>
+            ) : (
+              <>
+                <Archive className="w-4 h-4 mr-2" />
+                保存并归档
+              </>
+            )}
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving || isSavingAndArchiving}>
             {isSaving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
