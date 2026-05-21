@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.sanmediabox.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node ./scripts/ensure-vite-for-tauri.mjs",
     "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"

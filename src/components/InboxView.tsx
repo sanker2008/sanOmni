@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { 
   Inbox, 
   Archive, 
@@ -21,7 +20,6 @@ import {
   LayoutGrid,
   List,
   Filter,
-  X,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import DropZone from "./DropZone";
@@ -55,6 +53,9 @@ export default function InboxView() {
   const [filterHasPrompt, setFilterHasPrompt] = useState<boolean | null>(null); // null = 不筛选
   const [filterHasTags, setFilterHasTags] = useState<boolean | null>(null);
   const [filterHasWatermark, setFilterHasWatermark] = useState<boolean | null>(null);
+  const activeFilterCount = [filterHasPrompt, filterHasTags, filterHasWatermark].filter(
+    (filter) => filter !== null
+  ).length;
 
   useEffect(() => {
     loadInboxImages();
@@ -267,11 +268,11 @@ export default function InboxView() {
       const matchesSearch = keywords.every(keyword => {
         return (
           image.filename.toLowerCase().includes(keyword) ||
-          image.prompt?.toLowerCase().includes(keyword) ||
           image.format?.toLowerCase().includes(keyword) ||
           image.watermark_platform?.toLowerCase().includes(keyword) ||
           image.models.some((m) => m.name.toLowerCase().includes(keyword)) ||
-          image.tags.some((tag) => tag.name.toLowerCase().includes(keyword))
+          image.tags.some((tag) => tag.name.toLowerCase().includes(keyword)) ||
+          image.prompt_groups.some((group) => group.prompt.toLowerCase().includes(keyword))
         );
       });
       
@@ -280,7 +281,7 @@ export default function InboxView() {
     
     // Prompt 筛选
     if (filterHasPrompt !== null) {
-      const hasPrompt = !!image.prompt && image.prompt.trim().length > 0;
+      const hasPrompt = image.prompt_groups.length > 0;
       if (hasPrompt !== filterHasPrompt) return false;
     }
     
@@ -305,7 +306,7 @@ export default function InboxView() {
     if (isAllSelected) {
       clearSelection();
     } else {
-      selectAll();
+      selectAll(filteredImages.map((img) => img.id));
     }
   };
 
@@ -344,6 +345,21 @@ export default function InboxView() {
               className="pl-9 w-64"
             />
           </div>
+
+          <Button
+            variant={showFilters ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className="gap-2"
+          >
+            <Filter className="w-4 h-4" />
+            筛选
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
 
           {/* 视图切换 */}
           <div className="flex items-center border rounded-md overflow-hidden">
@@ -405,9 +421,9 @@ export default function InboxView() {
           </div>
           
           <div className="grid grid-cols-3 gap-4">
-            {/* Prompt 筛选 */}
+            {/* Prompt 关联筛选 */}
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Prompt</label>
+              <label className="text-xs font-medium text-muted-foreground">Prompt 关联</label>
               <div className="flex items-center gap-2">
                 <Button
                   variant={filterHasPrompt === true ? "default" : "outline"}
@@ -415,7 +431,7 @@ export default function InboxView() {
                   onClick={() => setFilterHasPrompt(filterHasPrompt === true ? null : true)}
                   className="flex-1 h-8 text-xs"
                 >
-                  已填写
+                  已关联
                 </Button>
                 <Button
                   variant={filterHasPrompt === false ? "default" : "outline"}
@@ -423,7 +439,7 @@ export default function InboxView() {
                   onClick={() => setFilterHasPrompt(filterHasPrompt === false ? null : false)}
                   className="flex-1 h-8 text-xs"
                 >
-                  未填写
+                  未关联
                 </Button>
               </div>
             </div>

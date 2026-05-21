@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ImageWithRelations, Vendor, Model, Tag } from "@/stores";
+import type { ImageWithRelations, Vendor, Model, Tag, PromptGroup } from "@/stores";
 
 // Types for API requests
 interface ImportImageRequest {
@@ -9,16 +9,16 @@ interface ImportImageRequest {
   vendor_id?: string;
   model_ids: string[];
   primary_model_id?: string;
-  prompt?: string;
   tags: string[];
 }
 
 interface UpdateImageRequest {
   image_id: string;
-  prompt?: string;
   model_ids: string[];
   primary_model_id?: string;
   tags: string[];
+  prompt?: string;
+  negative_prompt?: string;
 }
 
 interface ArchiveRequest {
@@ -40,7 +40,7 @@ interface CommandResult<T> {
 }
 
 // Helper to get database path
-async function getDbPath(): Promise<string> {
+export async function getDbPath(): Promise<string> {
   const { appDataDir, join } = await import("@tauri-apps/api/path");
   const { exists, mkdir } = await import("@tauri-apps/plugin-fs");
   
@@ -225,6 +225,90 @@ export const tagApi = {
   },
 };
 
+// ==================== Prompt API ====================
+
+interface PromptGroupWithImages {
+  group: PromptGroup;
+  images: Array<{
+    id: string;
+    filename: string;
+    absolute_path: string;
+    primary_model_id: string;
+    model_name: string;
+    vendor_name: string;
+    width?: number;
+    height?: number;
+    created_at: string;
+  }>;
+}
+
+export const promptApi = {
+  async getAll(): Promise<PromptGroup[]> {
+    const dbPath = await getDbPath();
+    return invoke<PromptGroup[]>("get_prompt_groups", { dbPath });
+  },
+
+  async getOne(groupId: string): Promise<PromptGroupWithImages> {
+    const dbPath = await getDbPath();
+    return invoke<PromptGroupWithImages>("get_prompt_group_with_images", { dbPath, groupId });
+  },
+
+  async create(payload: {
+    prompt: string;
+    negativePrompt?: string;
+    description?: string;
+    imageIds: string[];
+  }): Promise<PromptGroup> {
+    const dbPath = await getDbPath();
+    return invoke<PromptGroup>("create_prompt_group", { 
+      dbPath, 
+      prompt: payload.prompt,
+      negativePrompt: payload.negativePrompt,
+      description: payload.description,
+      imageIds: payload.imageIds,
+    });
+  },
+
+  async update(
+    groupId: string,
+    payload: { prompt?: string; negativePrompt?: string; description?: string }
+  ): Promise<void> {
+    const dbPath = await getDbPath();
+    return invoke("update_prompt_group", { 
+      dbPath, 
+      groupId, 
+      prompt: payload.prompt,
+      negativePrompt: payload.negativePrompt,
+      description: payload.description,
+    });
+  },
+
+  async delete(groupId: string): Promise<void> {
+    const dbPath = await getDbPath();
+    return invoke("delete_prompt_group", { dbPath, groupId });
+  },
+
+  async addImages(groupId: string, imageIds: string[]): Promise<void> {
+    const dbPath = await getDbPath();
+    return invoke("add_images_to_prompt_group", { dbPath, groupId, imageIds });
+  },
+
+  async removeImages(groupId: string, imageIds: string[]): Promise<void> {
+    const dbPath = await getDbPath();
+    return invoke("remove_images_from_prompt_group", { dbPath, groupId, imageIds });
+  },
+
+  async getForImage(imageId: string): Promise<PromptGroup[]> {
+    const dbPath = await getDbPath();
+    return invoke<PromptGroup[]>("get_prompt_groups_for_image", { dbPath, imageId });
+  },
+
+  async setForImage(imageId: string, groupIds: string[]): Promise<void> {
+    const dbPath = await getDbPath();
+    return invoke("set_prompt_groups_for_image", { dbPath, imageId, groupIds });
+  },
+};
+
 // ==================== Watermark API ====================
 
 export interface WatermarkRegion {
@@ -357,6 +441,14 @@ export interface ScanResult {
   errors: string[];
 }
 
+export interface InboxCleanupResult {
+  scanned_count: number;
+  kept_count: number;
+  removed_count: number;
+  failed_count: number;
+  errors: string[];
+}
+
 export const scannerApi = {
   async scanArchived(libraryPath: string, namingTemplate?: string): Promise<ScanResult> {
     const dbPath = await getDbPath();
@@ -364,6 +456,18 @@ export const scannerApi = {
       dbPath,
       libraryPath,
       namingTemplate,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "扫描失败");
+    }
+    return result.data;
+  },
+
+  async cleanupInbox(inboxPath: string): Promise<InboxCleanupResult> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<InboxCleanupResult>>("cleanup_inbox_directory", {
+      dbPath,
+      inboxPath,
     });
     if (!result.success || !result.data) {
       throw new Error(result.error || "扫描失败");

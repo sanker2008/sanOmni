@@ -13,6 +13,15 @@ pub struct ScanResult {
     pub errors: Vec<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InboxCleanupResult {
+    pub scanned_count: usize,
+    pub kept_count: usize,
+    pub removed_count: usize,
+    pub failed_count: usize,
+    pub errors: Vec<String>,
+}
+
 /// 扫描 archived 目录，将未入库的图片重命名后写入数据库（状态直接为 archived）
 #[tauri::command]
 pub async fn scan_archived_directory(
@@ -296,6 +305,98 @@ pub async fn scan_archived_directory(
                 }
             }
         }
+    }
+
+    CommandResult::ok(result)
+}
+
+/// 扫描 inbox 目录，清理数据库中已不存在的待整理记录
+#[tauri::command]
+pub async fn cleanup_inbox_directory(
+    db_path: String,
+    inbox_path: String,
+) -> CommandResult<InboxCleanupResult> {
+    let mut conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
+    };
+
+    let inbox_root = std::path::Path::new(&inbox_path);
+    if !inbox_root.exists() {
+        return CommandResult::err(format!(
+            "待整理目录不存在: {}",
+            inbox_root.display()
+        ));
+    }
+
+    let mut result = InboxCleanupResult {
+        scanned_count: 0,
+        kept_count: 0,
+        removed_count: 0,
+        failed_count: 0,
+        errors: Vec::new(),
+    };
+
+    let records: Vec<(String, String)> = {
+        let mut stmt = match conn.prepare(
+            "SELECT id, absolute_path FROM images WHERE status IN ('inbox', 'tagged')"
+        ) {
+            Ok(stmt) => stmt,
+            Err(e) => return CommandResult::err(format!("查询待整理数据失败: {}", e)),
+        };
+
+        let rows = match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?))) {
+            Ok(rows) => rows,
+            Err(e) => return CommandResult::err(format!("读取待整理数据失败: {}", e)),
+        };
+
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    let tx = match conn.transaction() {
+        Ok(tx) => tx,
+        Err(e) => return CommandResult::err(format!("无法开启事务: {}", e)),
+    };
+
+    for (image_id, absolute_path) in records {
+        result.scanned_count += 1;
+
+        if std::path::Path::new(&absolute_path).exists() {
+            result.kept_count += 1;
+            continue;
+        }
+
+        if let Err(e) = tx.execute("DELETE FROM image_model_relations WHERE image_id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除模型关联失败: {}", image_id, e));
+            continue;
+        }
+        if let Err(e) = tx.execute("DELETE FROM image_tag_relations WHERE image_id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除标签关联失败: {}", image_id, e));
+            continue;
+        }
+        if let Err(e) = tx.execute("DELETE FROM image_prompt_group_relations WHERE image_id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除提示词组关联失败: {}", image_id, e));
+            continue;
+        }
+        if let Err(e) = tx.execute("DELETE FROM processing_history WHERE image_id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除处理历史失败: {}", image_id, e));
+            continue;
+        }
+        if let Err(e) = tx.execute("DELETE FROM images WHERE id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除图片记录失败: {}", image_id, e));
+            continue;
+        }
+
+        result.removed_count += 1;
+    }
+
+    if let Err(e) = tx.commit() {
+        return CommandResult::err(format!("提交清理结果失败: {}", e));
     }
 
     CommandResult::ok(result)

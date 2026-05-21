@@ -132,13 +132,34 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at  TEXT NOT NULL
 );
 
+-- Prompt Groups (for comparing same prompt across different models)
+CREATE TABLE IF NOT EXISTS prompt_groups (
+    id                  TEXT PRIMARY KEY,
+    prompt              TEXT NOT NULL,
+    negative_prompt     TEXT,
+    description         TEXT,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL
+);
+
+-- Image-PromptGroup relations
+CREATE TABLE IF NOT EXISTS image_prompt_group_relations (
+    image_id            TEXT NOT NULL,
+    prompt_group_id     TEXT NOT NULL,
+    PRIMARY KEY (image_id, prompt_group_id),
+    FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
+    FOREIGN KEY (prompt_group_id) REFERENCES prompt_groups(id) ON DELETE CASCADE
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_images_status ON images(status);
 CREATE INDEX IF NOT EXISTS idx_images_storage ON images(storage_vendor_id, storage_model_id);
 CREATE INDEX IF NOT EXISTS idx_images_primary_model ON images(primary_model_id);
 CREATE INDEX IF NOT EXISTS idx_images_imported ON images(imported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_images_prompt ON images(prompt);
 CREATE INDEX IF NOT EXISTS idx_imr_model ON image_model_relations(model_id);
 CREATE INDEX IF NOT EXISTS idx_itr_tag ON image_tag_relations(tag_id);
+CREATE INDEX IF NOT EXISTS idx_ipgr_group ON image_prompt_group_relations(prompt_group_id);
 "#;
 
 fn insert_defaults(conn: &Connection) -> Result<()> {

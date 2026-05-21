@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useUIStore, type ImageWithRelations } from "@/stores";
 import {
@@ -15,6 +15,8 @@ import {
   Edit,
   Download,
   ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 
 export default function ImageViewer() {
@@ -31,6 +33,8 @@ export default function ImageViewer() {
   const currentImages = activeTab === "inbox" ? inboxImages : archivedImages;
   const currentIndex = currentImages.findIndex((img) => img.id === viewingImageId);
   const image = currentImages[currentIndex];
+  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
+  const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Navigate to previous/next image
   const goToPrevious = () => {
@@ -115,7 +119,29 @@ export default function ImageViewer() {
     }
   };
 
+  const handleCopyPrompt = async (groupId: string, prompt: string, negativePrompt?: string) => {
+    try {
+      const text = negativePrompt
+        ? `${prompt}\n\n负面提示词:\n${negativePrompt}`
+        : prompt;
+      await navigator.clipboard.writeText(text);
+      setCopiedPromptId(groupId);
+      window.setTimeout(() => {
+        setCopiedPromptId((current) => (current === groupId ? null : current));
+      }, 1500);
+    } catch (error) {
+      console.error("Failed to copy prompt:", error);
+    }
+  };
+
+  useEffect(() => {
+    setLoadedDimensions(null);
+  }, [image?.id]);
+
   if (!image) return null;
+
+  const displayWidth = image.width || loadedDimensions?.width;
+  const displayHeight = image.height || loadedDimensions?.height;
 
   return (
     <Dialog open={isImageViewerOpen} onOpenChange={(open) => !open && closeImageViewer()}>
@@ -130,9 +156,9 @@ export default function ImageViewer() {
               <span className="text-sm text-muted-foreground">
                 {currentIndex + 1} / {currentImages.length}
               </span>
-              {image.width && image.height && (
+              {displayWidth && displayHeight && (
                 <span className="text-sm text-muted-foreground">
-                  {image.width} × {image.height}
+                  {displayWidth} × {displayHeight}
                 </span>
               )}
               {image.file_size && (
@@ -192,6 +218,13 @@ export default function ImageViewer() {
               alt={image.filename}
               className="max-w-full max-h-full object-contain cursor-zoom-in"
               style={{ maxHeight: "calc(95vh - 120px)" }}
+              onLoad={(e) => {
+                const target = e.currentTarget;
+                setLoadedDimensions({
+                  width: target.naturalWidth,
+                  height: target.naturalHeight,
+                });
+              }}
               onDoubleClick={handleEdit}
             />
           </div>
@@ -229,23 +262,39 @@ export default function ImageViewer() {
                   </div>
                 )}
 
-                {/* Prompt */}
-                {image.prompt && (
+                {/* Prompt Groups */}
+                {image.prompt_groups.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-medium mb-2">Prompt</h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                      {image.prompt}
-                    </p>
-                  </div>
-                )}
-
-                {/* Negative Prompt */}
-                {image.negative_prompt && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-2">Negative Prompt</h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                      {image.negative_prompt}
-                    </p>
+                    <h3 className="text-sm font-medium mb-2">关联 Prompt</h3>
+                    <div className="space-y-3">
+                      {image.prompt_groups.map((group) => (
+                        <div key={group.id} className="rounded-md border p-3">
+                          <div className="flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm whitespace-pre-wrap break-words">{group.prompt}</p>
+                              {group.negative_prompt && (
+                                <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                                  负面提示词：{group.negative_prompt}
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 flex-shrink-0"
+                              onClick={() => void handleCopyPrompt(group.id, group.prompt, group.negative_prompt)}
+                              title={copiedPromptId === group.id ? "已复制" : "复制 Prompt"}
+                            >
+                              {copiedPromptId === group.id ? (
+                                <Check className="h-4 w-4" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -267,10 +316,10 @@ export default function ImageViewer() {
                       <span>格式:</span>
                       <span className="font-mono uppercase">{image.format || "未知"}</span>
                     </div>
-                    {image.width && image.height && (
+                    {displayWidth && displayHeight && (
                       <div className="flex justify-between">
                         <span>尺寸:</span>
-                        <span>{image.width} × {image.height}</span>
+                        <span>{displayWidth} × {displayHeight}</span>
                       </div>
                     )}
                     {image.file_size && (

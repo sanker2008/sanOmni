@@ -8,6 +8,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import {
   CheckCircle2,
   Circle,
+  Eye,
   Edit,
   Archive,
   Image as ImageIcon,
@@ -101,7 +102,12 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
       return;
     }
 
-    // 双击打开查看器
+    // 双击直接编辑
+    openQuickEdit(image.id);
+  };
+
+  const handleView = (e: React.MouseEvent) => {
+    e.stopPropagation();
     openImageViewer(image.id);
   };
 
@@ -333,6 +339,15 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
 
           {/* Action buttons */}
           <div className="flex-shrink-0 flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleView}>
+                  <Eye className="w-3 h-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>查看</TooltipContent>
+            </Tooltip>
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-7 w-7"
@@ -567,11 +582,25 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
 
       {/* Hover menu */}
       <div
-        className={`absolute bottom-3 right-3 transition-opacity ${
+        className={`absolute bottom-3 left-3 right-3 transition-opacity ${
           showMenu ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
       >
-        <div className="flex items-center gap-1 bg-background/95 dark:bg-background/95 rounded-md shadow-lg border p-1 backdrop-blur-sm">
+        <div className="ml-auto flex w-fit max-w-full flex-wrap justify-end gap-1 bg-background/95 dark:bg-background/95 rounded-md shadow-lg border p-1 backdrop-blur-sm">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleView}
+              >
+                <Eye className="w-3 h-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>查看</TooltipContent>
+          </Tooltip>
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

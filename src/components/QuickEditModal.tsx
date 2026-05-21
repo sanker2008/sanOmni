@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useImageStore, useUIStore, useVendorStore } from "@/stores";
-import { imageApi } from "@/services/tauri";
+import { useImageStore, useUIStore, useVendorStore, type PromptGroup } from "@/stores";
+import { imageApi, promptApi } from "@/services/tauri";
 import { appDataDir } from "@tauri-apps/api/path";
 import {
   Dialog,
@@ -24,6 +24,8 @@ import {
   Loader2,
   Sparkles,
   Archive,
+  Copy,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,42 +34,105 @@ export default function QuickEditModal() {
   const { isQuickEditOpen, editingImageId, closeQuickEdit } = useUIStore();
   const { vendors } = useVendorStore();
 
-  const [prompt, setPrompt] = useState("");
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [primaryModel, setPrimaryModel] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [availablePromptGroups, setAvailablePromptGroups] = useState<PromptGroup[]>([]);
+  const [selectedPromptGroupIds, setSelectedPromptGroupIds] = useState<string[]>([]);
+  const [newPromptText, setNewPromptText] = useState("");
+  const [newNegativePrompt, setNewNegativePrompt] = useState("");
+  const [newPromptDescription, setNewPromptDescription] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingAndArchiving, setIsSavingAndArchiving] = useState(false);
+  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
+  const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
 
-  // Find the editing image from both inbox and archived images
-  const image = inboxImages.find((img) => img.id === editingImageId) || 
-                archivedImages.find((img) => img.id === editingImageId);
+  const image =
+    inboxImages.find((img) => img.id === editingImageId) ||
+    archivedImages.find((img) => img.id === editingImageId);
 
-  // Initialize form when image changes
   useEffect(() => {
-    if (image) {
-      setPrompt(image.prompt || "");
-      setSelectedModels(image.models.map((m) => m.id));
-      setPrimaryModel(image.models.find((m) => m.is_primary)?.id || null);
-      setTags(image.tags.map((t) => t.name));
+    if (!image) {
+      return;
     }
+
+    setSelectedModels(image.models.map((model) => model.id));
+    setPrimaryModel(image.models.find((model) => model.is_primary)?.id || null);
+    setTags(image.tags.map((tag) => tag.name));
+    setNewPromptText("");
+    setNewNegativePrompt("");
+    setNewPromptDescription("");
+    setLoadedDimensions(null);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [groups, linkedGroups] = await Promise.all([
+          promptApi.getAll(),
+          promptApi.getForImage(image.id),
+        ]);
+
+        if (!cancelled) {
+          setAvailablePromptGroups(groups);
+          setSelectedPromptGroupIds(linkedGroups.map((group) => group.id));
+        }
+      } catch (error) {
+        console.error("加载 Prompt 关联失败:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [image]);
+
+  const persistChanges = async (archiveAfterSave: boolean) => {
+    if (!image) return;
+
+    const createdPrompt = newPromptText.trim()
+      ? await promptApi.create({
+          prompt: newPromptText.trim(),
+          negativePrompt: newNegativePrompt.trim() || undefined,
+          description: newPromptDescription.trim() || undefined,
+          imageIds: [image.id],
+        })
+      : null;
+
+    const nextPromptGroupIds = createdPrompt
+      ? Array.from(new Set([...selectedPromptGroupIds, createdPrompt.id]))
+      : selectedPromptGroupIds;
+
+    const updated = await imageApi.update({
+      image_id: image.id,
+      model_ids: selectedModels,
+      primary_model_id: primaryModel || undefined,
+      tags,
+    });
+
+    await promptApi.setForImage(image.id, nextPromptGroupIds);
+
+    updateImage(image.id, updated);
+
+    if (archiveAfterSave) {
+      const customPath = useUIStore.getState().settings.customArchivedPath;
+      const libraryPath = customPath || (await appDataDir());
+      const result = await imageApi.archive([image.id], libraryPath);
+
+      if (result.success_count > 0) {
+        removeImage(image.id);
+      }
+    }
+
+    closeQuickEdit();
+  };
 
   const handleSave = async () => {
     if (!image) return;
 
     setIsSaving(true);
     try {
-      const updated = await imageApi.update({
-        image_id: image.id,
-        prompt: prompt || undefined,
-        model_ids: selectedModels,
-        primary_model_id: primaryModel || undefined,
-        tags,
-      });
-      updateImage(image.id, updated);
-      closeQuickEdit();
+      await persistChanges(false);
     } catch (error) {
       console.error("Failed to save:", error);
     } finally {
@@ -80,25 +145,7 @@ export default function QuickEditModal() {
 
     setIsSavingAndArchiving(true);
     try {
-      // 先保存
-      const updated = await imageApi.update({
-        image_id: image.id,
-        prompt: prompt || undefined,
-        model_ids: selectedModels,
-        primary_model_id: primaryModel || undefined,
-        tags,
-      });
-      updateImage(image.id, updated);
-
-      // 再归档
-      const customPath = useUIStore.getState().settings.customArchivedPath;
-      const libraryPath = customPath || (await appDataDir());
-      const result = await imageApi.archive([image.id], libraryPath);
-
-      if (result.success_count > 0) {
-        removeImage(image.id);
-      }
-      closeQuickEdit();
+      await persistChanges(true);
     } catch (error) {
       console.error("Failed to save and archive:", error);
     } finally {
@@ -137,38 +184,71 @@ export default function QuickEditModal() {
     }
   };
 
+  const togglePromptGroup = (groupId: string) => {
+    setSelectedPromptGroupIds((current) =>
+      current.includes(groupId) ? current.filter((id) => id !== groupId) : [...current, groupId]
+    );
+  };
+
+  const handleCopyPrompt = async (groupId: string, prompt: string, negativePrompt?: string) => {
+    try {
+      const text = negativePrompt
+        ? `${prompt}\n\n负面提示词:\n${negativePrompt}`
+        : prompt;
+      await navigator.clipboard.writeText(text);
+      setCopiedPromptId(groupId);
+      window.setTimeout(() => {
+        setCopiedPromptId((current) => (current === groupId ? null : current));
+      }, 1500);
+    } catch (error) {
+      console.error("复制 Prompt 失败:", error);
+    }
+  };
+
   if (!image) return null;
+
+  const displayWidth = image.width || loadedDimensions?.width;
+  const displayHeight = image.height || loadedDimensions?.height;
 
   return (
     <Dialog open={isQuickEditOpen} onOpenChange={(open) => !open && closeQuickEdit()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>编辑图片信息</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex gap-4">
-          {/* Image Preview */}
+        <div className="flex flex-1 gap-4 overflow-hidden">
           <div className="w-1/3 flex-shrink-0">
             <div className="aspect-square bg-muted rounded-lg overflow-hidden flex items-center justify-center">
               <img
                 src={convertFileSrc(image.absolute_path)}
                 alt={image.filename}
                 className="w-full h-full object-cover"
+                onLoad={(e) => {
+                  const target = e.currentTarget;
+                  setLoadedDimensions({
+                    width: target.naturalWidth,
+                    height: target.naturalHeight,
+                  });
+                }}
                 onError={(e) => {
                   console.error("Failed to load image:", image.absolute_path);
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
             </div>
-            <p className="text-sm text-muted-foreground mt-2 break-words" title={image.filename}>
+            <p className="mt-2 break-words text-sm text-muted-foreground" title={image.filename}>
               {image.filename}
             </p>
+            {displayWidth && displayHeight && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {displayWidth} × {displayHeight}
+              </p>
+            )}
           </div>
 
-          {/* Form */}
           <ScrollArea className="flex-1 pr-4">
             <div className="space-y-6">
-              {/* Vendor & Model Selection */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">模型选择</label>
                 <div className="space-y-3">
@@ -210,9 +290,7 @@ export default function QuickEditModal() {
                                   )}
                                   title={isPrimary ? "主模型" : "设为主模型"}
                                 >
-                                  <Star
-                                    className={cn("w-3 h-3", isPrimary && "fill-current")}
-                                  />
+                                  <Star className={cn("w-3 h-3", isPrimary && "fill-current")} />
                                 </button>
                               )}
                             </button>
@@ -226,33 +304,99 @@ export default function QuickEditModal() {
 
               <Separator />
 
-              {/* Prompt */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    关联已有 Prompt
+                  </label>
+                  <span className="text-xs text-muted-foreground">
+                    已选 {selectedPromptGroupIds.length} 个
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {availablePromptGroups.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">还没有可关联的 Prompt</p>
+                  ) : (
+                    availablePromptGroups.map((group) => {
+                      const selected = selectedPromptGroupIds.includes(group.id);
+                      return (
+                        <div
+                          key={group.id}
+                          className={cn(
+                            "rounded-md border p-3 transition-colors",
+                            selected ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted"
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <button
+                              type="button"
+                              onClick={() => togglePromptGroup(group.id)}
+                              className="flex-1 text-left"
+                              title={group.prompt}
+                            >
+                              <div className="whitespace-pre-wrap break-words text-sm">{group.prompt}</div>
+                              {group.negative_prompt && (
+                                <div className="mt-2 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                                  负面提示词：{group.negative_prompt}
+                                </div>
+                              )}
+                              <div className="mt-2 text-xs text-muted-foreground">{group.image_count} 张图片</div>
+                            </button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 flex-shrink-0"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleCopyPrompt(group.id, group.prompt, group.negative_prompt);
+                              }}
+                              title={copiedPromptId === group.id ? "已复制" : "复制 Prompt"}
+                            >
+                              {copiedPromptId === group.id ? (
+                                <Check className="h-4 w-4" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
-                  Prompt
-                </label>
+                <label className="text-sm font-medium">新增并关联 Prompt</label>
                 <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="输入生成提示词..."
-                  className="w-full min-h-[100px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={newPromptText}
+                  onChange={(e) => setNewPromptText(e.target.value)}
+                  placeholder="如果需要，可在保存时顺手创建一个新的 Prompt"
+                  className="w-full min-h-[90px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Input
+                  value={newNegativePrompt}
+                  onChange={(e) => setNewNegativePrompt(e.target.value)}
+                  placeholder="负面提示词，可选"
+                />
+                <Input
+                  value={newPromptDescription}
+                  onChange={(e) => setNewPromptDescription(e.target.value)}
+                  placeholder="说明，可选"
                 />
               </div>
 
               <Separator />
 
-              {/* Tags */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">标签</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {tags.map((tag) => (
                     <Badge key={tag} variant="secondary" className="gap-1">
                       {tag}
-                      <button
-                        onClick={() => handleRemoveTag(tag)}
-                        className="ml-1 hover:text-destructive"
-                      >
+                      <button onClick={() => handleRemoveTag(tag)} className="ml-1 hover:text-destructive">
                         <X className="w-3 h-3" />
                       </button>
                     </Badge>
@@ -278,28 +422,15 @@ export default function QuickEditModal() {
 
               <Separator />
 
-              {/* Watermark */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">水印</label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="watermark"
-                      checked={!image.has_watermark}
-                      readOnly
-                      className="w-4 h-4"
-                    />
+                    <input type="radio" name="watermark" checked={!image.has_watermark} readOnly className="w-4 h-4" />
                     <span className="text-sm">无水印</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="watermark"
-                      checked={image.has_watermark}
-                      readOnly
-                      className="w-4 h-4"
-                    />
+                    <input type="radio" name="watermark" checked={image.has_watermark} readOnly className="w-4 h-4" />
                     <span className="text-sm">有水印 ({image.watermark_platform || "未知"})</span>
                   </label>
                 </div>
@@ -312,19 +443,15 @@ export default function QuickEditModal() {
           <Button variant="outline" onClick={closeQuickEdit}>
             取消
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleSaveAndArchive}
-            disabled={isSaving || isSavingAndArchiving}
-          >
+          <Button variant="outline" onClick={handleSaveAndArchive} disabled={isSaving || isSavingAndArchiving}>
             {isSavingAndArchiving ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                处理中...
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                保存并归档中...
               </>
             ) : (
               <>
-                <Archive className="w-4 h-4 mr-2" />
+                <Archive className="mr-2 h-4 w-4" />
                 保存并归档
               </>
             )}
@@ -332,7 +459,7 @@ export default function QuickEditModal() {
           <Button onClick={handleSave} disabled={isSaving || isSavingAndArchiving}>
             {isSaving ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 保存中...
               </>
             ) : (

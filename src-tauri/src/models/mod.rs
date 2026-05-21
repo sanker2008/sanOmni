@@ -71,3 +71,20 @@ pub struct ModelInfo {
     pub name: String,
     pub is_primary: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptGroup {
+    pub id: String,
+    pub prompt: String,
+    pub negative_prompt: Option<String>,
+    pub description: Option<String>,
+    pub image_count: i32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptGroupWithImages {
+    pub group: PromptGroup,
+    pub images: Vec<serde_json::Value>,
+}

@@ -12,7 +12,7 @@ export function useKeyboardShortcuts() {
     openSettings,
     setSearchQuery,
   } = useUIStore();
-  const { selectedImages, selectAll, clearSelection } = useImageStore();
+  const { inboxImages, archivedImages, selectedImages, selectAll, clearSelection } = useImageStore();
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -25,7 +25,9 @@ export function useKeyboardShortcuts() {
       // Ctrl+A: Select all images in current view (only when not in input)
       if (e.ctrlKey && e.key === "a" && !isInputFocused) {
         e.preventDefault();
-        selectAll();
+        selectAll(
+          (activeTab === "archived" ? archivedImages : inboxImages).map((img) => img.id)
+        );
         return;
       }
 
@@ -120,6 +122,8 @@ export function useKeyboardShortcuts() {
     },
     [
       activeTab,
+      inboxImages,
+      archivedImages,
       setActiveTab,
       isQuickEditOpen,
       closeQuickEdit,

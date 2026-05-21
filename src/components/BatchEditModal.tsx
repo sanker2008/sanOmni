@@ -116,7 +116,6 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
 
         const updated = await imageApi.update({
           image_id: imageId,
-          prompt: image.prompt,
           model_ids: finalModelIds,
           primary_model_id: finalPrimaryModel,
           tags: finalTags,

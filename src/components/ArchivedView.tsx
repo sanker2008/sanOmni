@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
-import { imageApi } from "@/services/tauri";
+import { imageApi, watermarkApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { 
   Archive, 
   Search, 
@@ -22,7 +21,8 @@ import {
   LayoutGrid,
   List,
   Filter,
-  X,
+  Scan,
+  Trash2,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import { cn } from "@/lib/utils";
@@ -48,12 +48,17 @@ export default function ArchivedView() {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [unarchiveResult, setUnarchiveResult] = useState<string | null>(null);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectionProgress, setDetectionProgress] = useState<string | null>(null);
 
   // 筛选器状态
   const [showFilters, setShowFilters] = useState(false);
   const [filterHasPrompt, setFilterHasPrompt] = useState<boolean | null>(null);
   const [filterHasTags, setFilterHasTags] = useState<boolean | null>(null);
   const [filterHasWatermark, setFilterHasWatermark] = useState<boolean | null>(null);
+  const activeFilterCount = [filterHasPrompt, filterHasTags, filterHasWatermark].filter(
+    (filter) => filter !== null
+  ).length;
 
   useEffect(() => {
     loadArchivedImages();
@@ -95,12 +100,12 @@ export default function ArchivedView() {
         
         return (
           image.filename.toLowerCase().includes(keyword) ||
-          image.prompt?.toLowerCase().includes(keyword) ||
           image.format?.toLowerCase().includes(keyword) ||
           image.watermark_platform?.toLowerCase().includes(keyword) ||
           vendorName.includes(keyword) ||
           image.models.some((m) => m.name.toLowerCase().includes(keyword)) ||
-          image.tags.some((tag) => tag.name.toLowerCase().includes(keyword))
+          image.tags.some((tag) => tag.name.toLowerCase().includes(keyword)) ||
+          image.prompt_groups.some((group) => group.prompt.toLowerCase().includes(keyword))
         );
       });
       
@@ -113,7 +118,7 @@ export default function ArchivedView() {
     
     // Prompt 筛选
     if (filterHasPrompt !== null) {
-      const hasPrompt = !!image.prompt && image.prompt.trim().length > 0;
+      const hasPrompt = image.prompt_groups.length > 0;
       if (hasPrompt !== filterHasPrompt) return false;
     }
     
@@ -236,6 +241,72 @@ export default function ArchivedView() {
     } catch (error) {
       console.error("Failed to delete image:", error);
       alert("删除图片失败");
+    }
+  };
+
+  const handleBatchDetect = async () => {
+    if (selectedImages.length === 0) return;
+
+    setIsDetecting(true);
+    setDetectionProgress("正在检测水印...");
+
+    try {
+      const selectedImagePaths = archivedImages
+        .filter((img) => selectedImages.includes(img.id))
+        .map((img) => img.absolute_path);
+
+      const results = await watermarkApi.batchDetect(selectedImagePaths);
+
+      let watermarkCount = 0;
+      results.forEach((result, index) => {
+        if (result.has_watermark) {
+          watermarkCount++;
+          console.log(
+            `Image ${index + 1}: Watermark detected - ${result.platform} (${(result.confidence * 100).toFixed(0)}%)`
+          );
+        }
+      });
+
+      setDetectionProgress(`检测完成！发现 ${watermarkCount}/${results.length} 张图片有水印`);
+      setTimeout(() => setDetectionProgress(null), 5000);
+    } catch (error) {
+      console.error("Batch detection failed:", error);
+      setDetectionProgress("批量检测失败");
+      setTimeout(() => setDetectionProgress(null), 3000);
+    } finally {
+      setIsDetecting(false);
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedImages.length === 0) return;
+
+    if (!confirm(`确定要删除选中的 ${selectedImages.length} 张图片吗？此操作不可恢复。`)) {
+      return;
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const imageId of selectedImages) {
+      try {
+        const success = await imageApi.delete(imageId);
+        if (success) {
+          removeImage(imageId);
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to delete image ${imageId}:`, error);
+        failCount++;
+      }
+    }
+
+    clearSelection();
+
+    if (failCount > 0) {
+      alert(`删除完成：成功 ${successCount} 张，失败 ${failCount} 张`);
     }
   };
 
@@ -365,9 +436,9 @@ export default function ArchivedView() {
             >
               <Filter className="w-4 h-4" />
               筛选
-              {(filterHasPrompt !== null || filterHasTags !== null || filterHasWatermark !== null) && (
+              {activeFilterCount > 0 && (
                 <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
-                  {[filterHasPrompt, filterHasTags, filterHasWatermark].filter(f => f !== null).length}
+                  {activeFilterCount}
                 </Badge>
               )}
             </Button>
@@ -412,9 +483,9 @@ export default function ArchivedView() {
             </div>
             
             <div className="grid grid-cols-3 gap-4">
-              {/* Prompt 筛选 */}
+              {/* Prompt 关联筛选 */}
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Prompt</label>
+                <label className="text-xs font-medium text-muted-foreground">Prompt 关联</label>
                 <div className="flex items-center gap-2">
                   <Button
                     variant={filterHasPrompt === true ? "default" : "outline"}
@@ -422,7 +493,7 @@ export default function ArchivedView() {
                     onClick={() => setFilterHasPrompt(filterHasPrompt === true ? null : true)}
                     className="flex-1 h-8 text-xs"
                   >
-                    已填写
+                    已关联
                   </Button>
                   <Button
                     variant={filterHasPrompt === false ? "default" : "outline"}
@@ -430,7 +501,7 @@ export default function ArchivedView() {
                     onClick={() => setFilterHasPrompt(filterHasPrompt === false ? null : false)}
                     className="flex-1 h-8 text-xs"
                   >
-                    未填写
+                    未关联
                   </Button>
                 </div>
               </div>
@@ -491,12 +562,20 @@ export default function ArchivedView() {
           </div>
         )}
 
+        {detectionProgress && (
+          <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-blue-800 text-sm">
+            {detectionProgress}
+          </div>
+        )}
+
         {/* Toolbar - Always reserve space */}
         <div className="border-b px-4 py-2 bg-muted/30 min-h-[44px] flex items-center">
           {filteredImages.length > 0 ? (
             <div className="flex items-center gap-4">
               <button
-                onClick={() => isAllSelected ? clearSelection() : selectAll()}
+                onClick={() =>
+                  isAllSelected ? clearSelection() : selectAll(filteredImages.map((img) => img.id))
+                }
                 className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
               >
                 {isAllSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
@@ -511,6 +590,20 @@ export default function ArchivedView() {
                     variant="ghost"
                     size="sm"
                     className="gap-1 h-7"
+                    onClick={handleBatchDetect}
+                    disabled={isDetecting}
+                  >
+                    {isDetecting ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Scan className="w-3 h-3" />
+                    )}
+                    批量检测水印
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 h-7"
                     onClick={handleUnarchive}
                     disabled={isUnarchiving}
                   >
@@ -520,6 +613,15 @@ export default function ArchivedView() {
                       <Undo2 className="w-3 h-3" />
                     )}
                     撤销归档
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 h-7"
+                    onClick={handleBatchDelete}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    批量删除
                   </Button>
                 </>
               )}

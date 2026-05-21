@@ -1,7 +1,8 @@
 use crate::commands::CommandResult;
-use crate::models::{Image, ModelInfo, Tag};
+use crate::models::{Image, ModelInfo, PromptGroup, Tag};
 use rusqlite::{Connection, Result};
 use serde::{Deserialize, Serialize};
+use std::io::ErrorKind;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -12,17 +13,17 @@ pub struct ImportImageRequest {
     pub vendor_id: Option<String>,
     pub model_ids: Vec<String>,
     pub primary_model_id: Option<String>,
-    pub prompt: Option<String>,
     pub tags: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateImageRequest {
     pub image_id: String,
-    pub prompt: Option<String>,
     pub model_ids: Vec<String>,
     pub primary_model_id: Option<String>,
     pub tags: Vec<String>,
+    pub prompt: Option<String>,
+    pub negative_prompt: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -45,6 +46,7 @@ pub struct ImageResponse {
     pub image: Image,
     pub models: Vec<ModelInfo>,
     pub tags: Vec<Tag>,
+    pub prompt_groups: Vec<PromptGroup>,
 }
 
 // ==================== Import ====================
@@ -121,7 +123,7 @@ pub async fn import_image(
         absolute_path: request.file_path,
         primary_model_id: primary_model_id.clone(),
         status: "inbox".to_string(),
-        prompt: request.prompt,
+        prompt: None,
         negative_prompt: None,
         file_size: Some(request.file_size),
         width: None,
@@ -210,8 +212,9 @@ pub async fn import_image(
 
     let models = fetch_image_models(&conn, &image_id).unwrap_or_default();
     let tags = fetch_image_tags(&conn, &image_id).unwrap_or_default();
+    let prompt_groups = fetch_image_prompt_groups(&conn, &image_id).unwrap_or_default();
 
-    CommandResult::ok(ImageResponse { image, models, tags })
+    CommandResult::ok(ImageResponse { image, models, tags, prompt_groups })
 }
 
 // ==================== Get Inbox ====================
@@ -261,21 +264,19 @@ pub async fn update_image(
         None => return CommandResult::err("Image not found".to_string()),
     };
 
-    // Update prompt
-    if let Some(ref prompt) = request.prompt {
+    // Mark inbox images as tagged once metadata is edited.
+    // Archived images must stay archived after edits.
+    if current_image.status != "archived" && !request.model_ids.is_empty() {
         let _ = conn.execute(
-            "UPDATE images SET prompt = ?, status = 'tagged' WHERE id = ?",
-            (prompt, image_id),
+            "UPDATE images SET status = 'tagged' WHERE id = ?",
+            [image_id],
         );
-    } else {
-        // Even without prompt change, mark as tagged if we have models
-        if !request.model_ids.is_empty() {
-            let _ = conn.execute(
-                "UPDATE images SET status = 'tagged' WHERE id = ?",
-                [image_id],
-            );
-        }
     }
+
+    let _ = conn.execute(
+        "UPDATE images SET prompt = ?, negative_prompt = ? WHERE id = ?",
+        rusqlite::params![&request.prompt, &request.negative_prompt, image_id],
+    );
 
     // Update model relations
     let mut new_primary_model_id = current_image.primary_model_id.clone();
@@ -490,8 +491,9 @@ pub async fn update_image(
     };
     let models = fetch_image_models(&conn, image_id).unwrap_or_default();
     let tags = fetch_image_tags(&conn, image_id).unwrap_or_default();
+    let prompt_groups = fetch_image_prompt_groups(&conn, image_id).unwrap_or_default();
 
-    CommandResult::ok(ImageResponse { image, models, tags })
+    CommandResult::ok(ImageResponse { image, models, tags, prompt_groups })
 }
 
 // ==================== Archive ====================
@@ -627,19 +629,46 @@ pub async fn archive_images(
 
 #[tauri::command]
 pub async fn delete_image(db_path: String, image_id: String) -> CommandResult<bool> {
-    let conn = match Connection::open(&db_path) {
+    let mut conn = match Connection::open(&db_path) {
         Ok(conn) => conn,
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
 
-    // Delete relations first
-    let _ = conn.execute("DELETE FROM image_model_relations WHERE image_id = ?", [&image_id]);
-    let _ = conn.execute("DELETE FROM image_tag_relations WHERE image_id = ?", [&image_id]);
-    let _ = conn.execute("DELETE FROM processing_history WHERE image_id = ?", [&image_id]);
+    let image = match fetch_image_by_id(&conn, &image_id) {
+        Some(image) => image,
+        None => return CommandResult::ok(false),
+    };
 
-    // Delete image record
-    match conn.execute("DELETE FROM images WHERE id = ?", [&image_id]) {
-        Ok(_) => CommandResult::ok(true),
+    let image_path = std::path::Path::new(&image.absolute_path);
+    match std::fs::remove_file(image_path) {
+        Ok(_) => {}
+        Err(e) if e.kind() == ErrorKind::NotFound => {}
+        Err(e) => {
+            return CommandResult::err(format!(
+                "Failed to delete image file '{}': {}",
+                image.absolute_path, e
+            ))
+        }
+    }
+
+    let tx = match conn.transaction() {
+        Ok(tx) => tx,
+        Err(e) => return CommandResult::err(format!("Failed to start transaction: {}", e)),
+    };
+
+    let _ = tx.execute("DELETE FROM image_model_relations WHERE image_id = ?", [&image_id]);
+    let _ = tx.execute("DELETE FROM image_tag_relations WHERE image_id = ?", [&image_id]);
+    let _ = tx.execute("DELETE FROM image_prompt_group_relations WHERE image_id = ?", [&image_id]);
+    let _ = tx.execute("DELETE FROM processing_history WHERE image_id = ?", [&image_id]);
+
+    match tx.execute("DELETE FROM images WHERE id = ?", [&image_id]) {
+        Ok(affected) if affected > 0 => {
+            if let Err(e) = tx.commit() {
+                return CommandResult::err(format!("Failed to commit delete transaction: {}", e));
+            }
+            CommandResult::ok(true)
+        }
+        Ok(_) => CommandResult::ok(false),
         Err(e) => CommandResult::err(format!("Failed to delete image: {}", e)),
     }
 }
@@ -878,7 +907,8 @@ fn fetch_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<ImageResp
         if let Ok(image) = image_result {
             let models = fetch_image_models(conn, &image.id).unwrap_or_default();
             let tags = fetch_image_tags(conn, &image.id).unwrap_or_default();
-            images.push(ImageResponse { image, models, tags });
+            let prompt_groups = fetch_image_prompt_groups(conn, &image.id).unwrap_or_default();
+            images.push(ImageResponse { image, models, tags, prompt_groups });
         }
     }
 
@@ -936,6 +966,41 @@ fn fetch_image_models(conn: &Connection, image_id: &str) -> Result<Vec<ModelInfo
     })?;
     
     models.collect()
+}
+
+fn fetch_image_prompt_groups(conn: &Connection, image_id: &str) -> Result<Vec<PromptGroup>> {
+    let mut stmt = conn.prepare(
+        "SELECT
+            pg.id,
+            pg.prompt,
+            pg.negative_prompt,
+            pg.description,
+            (
+                SELECT COUNT(*)
+                FROM image_prompt_group_relations ipgr2
+                WHERE ipgr2.prompt_group_id = pg.id
+            ) as image_count,
+            pg.created_at,
+            pg.updated_at
+         FROM prompt_groups pg
+         INNER JOIN image_prompt_group_relations ipgr ON pg.id = ipgr.prompt_group_id
+         WHERE ipgr.image_id = ?
+         ORDER BY pg.updated_at DESC"
+    )?;
+
+    let groups = stmt.query_map([image_id], |row| {
+        Ok(PromptGroup {
+            id: row.get(0)?,
+            prompt: row.get(1)?,
+            negative_prompt: row.get(2)?,
+            description: row.get(3)?,
+            image_count: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+        })
+    })?;
+
+    groups.collect()
 }
 
 fn fetch_image_tags(conn: &Connection, image_id: &str) -> Result<Vec<Tag>> {

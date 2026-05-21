@@ -3,6 +3,7 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useFolderWatcher } from "@/hooks/useFolderWatcher";
 import InboxView from "@/components/InboxView";
 import ArchivedView from "@/components/ArchivedView";
+import { PromptGroupsView } from "@/components/PromptGroupsView";
 import QuickEditModal from "@/components/QuickEditModal";
 import ImageViewer from "@/components/ImageViewer";
 import SettingsView from "@/components/SettingsView";
@@ -15,7 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Inbox, Archive, Settings, Search, Sun, Moon, Monitor } from "lucide-react";
+import { Inbox, Archive, Settings, Search, Sun, Moon, Monitor, Sparkles } from "lucide-react";
 import type { Theme } from "@/stores";
 
 const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
@@ -72,6 +73,15 @@ function App() {
                 <Archive className="w-4 h-4" />
                 已归档
               </Button>
+              <Button
+                variant={activeTab === "prompt-management" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTab("prompt-management")}
+                className="gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                Prompt 管理
+              </Button>
             </nav>
           </div>
 
@@ -111,9 +121,11 @@ function App() {
         <main className="flex-1 overflow-hidden">
           {activeTab === "inbox" ? (
             <InboxView />
-          ) : (
+          ) : activeTab === "archived" ? (
             <ArchivedView />
-          )}
+          ) : activeTab === "prompt-management" ? (
+            <PromptGroupsView />
+          ) : null}
         </main>
 
         {/* Quick Edit Modal */}

@@ -56,6 +56,17 @@ pub fn run() {
             commands::settings::save_settings,
             commands::settings::reset_database,
             commands::scanner::scan_archived_directory,
+            commands::scanner::cleanup_inbox_directory,
+            commands::prompt_groups::create_prompt_group,
+            commands::prompt_groups::get_prompt_groups,
+            commands::prompt_groups::get_prompt_group_with_images,
+            commands::prompt_groups::get_prompt_groups_for_image,
+            commands::prompt_groups::add_images_to_prompt_group,
+            commands::prompt_groups::remove_images_from_prompt_group,
+            commands::prompt_groups::set_prompt_groups_for_image,
+            commands::prompt_groups::update_prompt_group,
+            commands::prompt_groups::delete_prompt_group,
+            commands::prompt_groups::auto_group_by_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
