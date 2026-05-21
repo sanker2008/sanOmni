@@ -14,8 +14,10 @@ import { X, Plus, FolderOpen, AlertTriangle, Edit2, Trash2, ChevronDown, Chevron
 const DEFAULT_SETTINGS: Record<string, any> = {
   // 通用设置
   namingTemplate: "{vendor}-{model}-{date}-{index}",
-  customInboxPath: "",  // 自定义 inbox 路径（留空使用默认）
+  customInboxPath: "",  // 自定义待整理路径（留空使用默认）
   customArchivedPath: "",  // 自定义 archived 路径（留空使用默认）
+  lightThemeColor: "#2563eb",
+  darkThemeColor: "#60a5fa",
 
   // 水印设置
   watermarkAutoDetect: true,
@@ -54,7 +56,7 @@ const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
 function SettingsView() {
   const { settingsOpen, closeSettings, settings, updateSetting } = useUIStore();
   const { vendors, setVendors } = useVendorStore();
-  const { setArchivedImages } = useImageStore();
+  const { setArchivedImages, setInboxImages } = useImageStore();
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("general");
   const [localSettings, setLocalSettings] = useState<Record<string, any>>({});
   const [newWatchFolder, setNewWatchFolder] = useState("");
@@ -68,6 +70,14 @@ function SettingsView() {
     imported_count: number;
     skipped_count: number;
     renamed_count: number;
+    failed_count: number;
+    errors: string[];
+  } | null>(null);
+  const [isCleaningInbox, setIsCleaningInbox] = useState(false);
+  const [inboxCleanupResult, setInboxCleanupResult] = useState<{
+    scanned_count: number;
+    kept_count: number;
+    removed_count: number;
     failed_count: number;
     errors: string[];
   } | null>(null);
@@ -119,7 +129,8 @@ function SettingsView() {
       updateSetting(key, value);
     });
     setHasChanges(false);
-  }, [localSettings, updateSetting]);
+    closeSettings();
+  }, [closeSettings, localSettings, updateSetting]);
 
   // 添加监控文件夹
   const handleAddWatchFolder = useCallback(() => {
@@ -223,6 +234,55 @@ function SettingsView() {
             <div className="space-y-6">
               <Card>
                 <CardHeader>
+                  <CardTitle className="text-base">主题色</CardTitle>
+                  <CardDescription>
+                    分别设置普通模式和暗黑模式下的主色，保存后会应用到按钮、选中态和强调色。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">普通模式主题色</p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={localSettings.lightThemeColor || DEFAULT_SETTINGS.lightThemeColor}
+                          onChange={(e) => handleLocalUpdate("lightThemeColor", e.target.value)}
+                          className="h-10 w-16 cursor-pointer rounded border bg-background p-1"
+                        />
+                        <Input
+                          value={localSettings.lightThemeColor || DEFAULT_SETTINGS.lightThemeColor}
+                          onChange={(e) => handleLocalUpdate("lightThemeColor", e.target.value)}
+                          placeholder="#2563eb"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">暗黑模式主题色</p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={localSettings.darkThemeColor || DEFAULT_SETTINGS.darkThemeColor}
+                          onChange={(e) => handleLocalUpdate("darkThemeColor", e.target.value)}
+                          className="h-10 w-16 cursor-pointer rounded border bg-background p-1"
+                        />
+                        <Input
+                          value={localSettings.darkThemeColor || DEFAULT_SETTINGS.darkThemeColor}
+                          onChange={(e) => handleLocalUpdate("darkThemeColor", e.target.value)}
+                          placeholder="#60a5fa"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    支持 `#RRGGBB` 格式，例如 `#2563eb`。
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <CardTitle className="text-base">命名模板</CardTitle>
                   <CardDescription>
                     配置归档图片时的文件名模板。可用变量：
@@ -254,7 +314,7 @@ function SettingsView() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">自定义 Inbox 路径</CardTitle>
+                  <CardTitle className="text-base">自定义待整理路径</CardTitle>
                   <CardDescription>
                     导入图片时的临时存储位置。留空则使用默认位置（AppData）
                   </CardDescription>
@@ -314,6 +374,93 @@ function SettingsView() {
                     <p className="text-xs text-muted-foreground mt-2">
                       默认：%APPDATA%\com.sanmediabox.app\archived
                     </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ScanLine className="w-4 h-4" />
+                    扫描待整理目录
+                  </CardTitle>
+                  <CardDescription>
+                    扫描待整理目录当前实际存在的图片文件，清理数据库中已经被你手动删除的待整理记录。
+                    适用于你在文件夹里直接删掉图片后，同步待整理列表。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isCleaningInbox}
+                    onClick={async () => {
+                      setIsCleaningInbox(true);
+                      setInboxCleanupResult(null);
+                      try {
+                        let inboxPath: string;
+                        const customPath = localSettings.customInboxPath;
+
+                        if (customPath) {
+                          inboxPath = customPath;
+                        } else {
+                          const { appDataDir, join } = await import("@tauri-apps/api/path");
+                          const appDir = await appDataDir();
+                          inboxPath = await join(appDir, "inbox");
+                        }
+
+                        const result = await scannerApi.cleanupInbox(inboxPath);
+                        setInboxCleanupResult(result);
+
+                        if (result.removed_count > 0) {
+                          const { imageApi } = await import("@/services/tauri");
+                          const inbox = await imageApi.getInboxImages();
+                          setInboxImages(inbox);
+                        }
+                      } catch (error) {
+                        alert(`扫描失败: ${error}`);
+                      } finally {
+                        setIsCleaningInbox(false);
+                      }
+                    }}
+                  >
+                    {isCleaningInbox ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        扫描中...
+                      </>
+                    ) : (
+                      <>
+                        <ScanLine className="w-4 h-4 mr-2" />
+                        开始扫描
+                      </>
+                    )}
+                  </Button>
+
+                  {inboxCleanupResult && (
+                    <div className="rounded-md border bg-muted/40 p-3 space-y-2 text-sm">
+                      <p className="font-medium">扫描完成</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+                        <span>检查记录数</span>
+                        <span className="text-foreground font-medium">{inboxCleanupResult.scanned_count}</span>
+                        <span>保留记录</span>
+                        <span>{inboxCleanupResult.kept_count}</span>
+                        <span>清理记录</span>
+                        <span className="text-green-600 font-medium">{inboxCleanupResult.removed_count}</span>
+                        <span>失败</span>
+                        <span className={inboxCleanupResult.failed_count > 0 ? "text-destructive font-medium" : ""}>
+                          {inboxCleanupResult.failed_count}
+                        </span>
+                      </div>
+                      {inboxCleanupResult.errors.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-destructive">错误详情：</p>
+                          {inboxCleanupResult.errors.map((err, i) => (
+                            <p key={i} className="text-xs text-destructive/80 break-all">{err}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>

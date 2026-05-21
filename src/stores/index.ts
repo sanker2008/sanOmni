@@ -33,6 +33,16 @@ export interface ModelInfo {
   is_primary: boolean;
 }
 
+export interface PromptGroup {
+  id: string;
+  prompt: string;
+  negative_prompt?: string;
+  description?: string;
+  image_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Tag {
   id: string;
   name: string;
@@ -43,6 +53,7 @@ export interface Tag {
 export interface ImageWithRelations extends Image {
   models: ModelInfo[];
   tags: Tag[];
+  prompt_groups: PromptGroup[];
 }
 
 export interface Vendor {
@@ -73,7 +84,7 @@ interface ImageStore {
   setArchivedImages: (images: ImageWithRelations[]) => void;
   selectImage: (imageId: string) => void;
   deselectImage: (imageId: string) => void;
-  selectAll: () => void;
+  selectAll: (imageIds: string[]) => void;
   clearSelection: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -104,9 +115,9 @@ export const useImageStore = create<ImageStore>((set) => ({
     selectedImages: state.selectedImages.filter((id) => id !== imageId),
   })),
   
-  selectAll: () => set((state) => ({
-    selectedImages: state.inboxImages.map((img) => img.id),
-  })),
+  selectAll: (imageIds) => set({
+    selectedImages: imageIds,
+  }),
   
   clearSelection: () => set({ selectedImages: [] }),
   
@@ -167,6 +178,8 @@ export const useTagStore = create<TagStore>((set) => ({
 const SETTINGS_STORAGE_KEY = "ai-image-manager-settings";
 const THEME_STORAGE_KEY = "ai-image-manager-theme";
 const VIEW_MODE_STORAGE_KEY = "ai-image-manager-view-mode";
+const DEFAULT_LIGHT_THEME_COLOR = "#2563eb";
+const DEFAULT_DARK_THEME_COLOR = "#60a5fa";
 
 export type Theme = "light" | "dark" | "system";
 export type ViewMode = "grid" | "list";
@@ -191,6 +204,73 @@ function saveSettingsToStorage(settings: Record<string, any>): void {
   } catch {
     // ignore storage errors
   }
+}
+
+function normalizeThemeColor(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : fallback;
+}
+
+function hexToHsl(hex: string): string {
+  const sanitized = hex.replace("#", "");
+  const r = Number.parseInt(sanitized.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(sanitized.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(sanitized.slice(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lightness = (max + min) / 2;
+  const delta = max - min;
+
+  if (delta === 0) {
+    return `0 0% ${(lightness * 100).toFixed(1)}%`;
+  }
+
+  const saturation =
+    lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+
+  let hue = 0;
+  switch (max) {
+    case r:
+      hue = (g - b) / delta + (g < b ? 6 : 0);
+      break;
+    case g:
+      hue = (b - r) / delta + 2;
+      break;
+    default:
+      hue = (r - g) / delta + 4;
+      break;
+  }
+
+  hue /= 6;
+  return `${(hue * 360).toFixed(1)} ${(saturation * 100).toFixed(1)}% ${(lightness * 100).toFixed(1)}%`;
+}
+
+function getThemeColors(settings: Record<string, any>) {
+  return {
+    light: normalizeThemeColor(settings.lightThemeColor, DEFAULT_LIGHT_THEME_COLOR),
+    dark: normalizeThemeColor(settings.darkThemeColor, DEFAULT_DARK_THEME_COLOR),
+  };
+}
+
+function getThemeForegroundHex(hex: string): string {
+  const sanitized = hex.replace("#", "");
+  const r = Number.parseInt(sanitized.slice(0, 2), 16);
+  const g = Number.parseInt(sanitized.slice(2, 4), 16);
+  const b = Number.parseInt(sanitized.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? "#0f172a" : "#f8fafc";
+}
+
+function applyThemeColors(settings: Record<string, any>) {
+  const root = document.documentElement;
+  const themeColors = getThemeColors(settings);
+
+  root.style.setProperty("--primary-light", hexToHsl(themeColors.light));
+  root.style.setProperty("--primary-light-foreground", hexToHsl(getThemeForegroundHex(themeColors.light)));
+  root.style.setProperty("--primary-dark", hexToHsl(themeColors.dark));
+  root.style.setProperty("--primary-dark-foreground", hexToHsl(getThemeForegroundHex(themeColors.dark)));
 }
 
 // 读取保存的主题
@@ -220,10 +300,11 @@ function applyTheme(theme: Theme) {
 }
 
 // 初始化时立即应用主题
+applyThemeColors(loadSettings());
 applyTheme(loadTheme());
 
 interface UIStore {
-  activeTab: "inbox" | "archived";
+  activeTab: "inbox" | "archived" | "prompt-management";
   searchQuery: string;
   selectedVendorFilter: string | null;
   selectedModelFilter: string | null;
@@ -238,7 +319,7 @@ interface UIStore {
   theme: Theme;
   viewMode: ViewMode;
 
-  setActiveTab: (tab: "inbox" | "archived") => void;
+  setActiveTab: (tab: "inbox" | "archived" | "prompt-management") => void;
   setSearchQuery: (query: string) => void;
   setVendorFilter: (vendorId: string | null) => void;
   setModelFilter: (modelId: string | null) => void;
@@ -272,7 +353,10 @@ export const useUIStore = create<UIStore>((set, get) => ({
   theme: loadTheme(),
   viewMode: loadViewMode(),
 
-  setActiveTab: (tab) => set({ activeTab: tab }),
+  setActiveTab: (tab) => {
+    useImageStore.getState().clearSelection();
+    set({ activeTab: tab });
+  },
   setSearchQuery: (query) => set({ searchQuery: query }),
   setVendorFilter: (vendorId) => set({ selectedVendorFilter: vendorId }),
   setModelFilter: (modelId) => set({ selectedModelFilter: modelId }),
@@ -289,6 +373,9 @@ export const useUIStore = create<UIStore>((set, get) => ({
     const newSettings = { ...get().settings, [key]: value };
     set({ settings: newSettings });
     saveSettingsToStorage(newSettings);
+    if (key === "lightThemeColor" || key === "darkThemeColor") {
+      applyThemeColors(newSettings);
+    }
   },
   setTheme: (theme) => {
     set({ theme });
