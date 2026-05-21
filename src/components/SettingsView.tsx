@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useUIStore, useVendorStore } from "@/stores";
-import { settingsApi } from "@/services/tauri";
+import { useUIStore, useVendorStore, useImageStore } from "@/stores";
+import { settingsApi, scannerApi } from "@/services/tauri";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, FolderOpen, AlertTriangle, Edit2, Trash2, ChevronDown, ChevronRight, Save } from "lucide-react";
+import { X, Plus, FolderOpen, AlertTriangle, Edit2, Trash2, ChevronDown, ChevronRight, Save, ScanLine, Loader2 } from "lucide-react";
 
 // 默认设置
 const DEFAULT_SETTINGS: Record<string, any> = {
@@ -36,7 +36,7 @@ const SHORTCUTS = [
   { key: "Ctrl + S", description: "归档选中图片" },
   { key: "Ctrl + F", description: "聚焦搜索框" },
   { key: "Escape", description: "取消选择 / 关闭弹窗" },
-  { key: "Ctrl + 1", description: "切换到收件箱" },
+  { key: "Ctrl + 1", description: "切换到待整理" },
   { key: "Ctrl + 2", description: "切换到已归档" },
   { key: "Ctrl + ,", description: "打开设置" },
 ];
@@ -54,11 +54,23 @@ const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
 function SettingsView() {
   const { settingsOpen, closeSettings, settings, updateSetting } = useUIStore();
   const { vendors, setVendors } = useVendorStore();
+  const { setArchivedImages } = useImageStore();
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("general");
   const [localSettings, setLocalSettings] = useState<Record<string, any>>({});
   const [newWatchFolder, setNewWatchFolder] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
   const [activeWatchers, setActiveWatchers] = useState<any[]>([]);
+
+  // 扫描状态
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<{
+    scanned_count: number;
+    imported_count: number;
+    skipped_count: number;
+    renamed_count: number;
+    failed_count: number;
+    errors: string[];
+  } | null>(null);
   
   // Vendor management state
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
@@ -306,6 +318,99 @@ function SettingsView() {
                 </CardContent>
               </Card>
 
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ScanLine className="w-4 h-4" />
+                    扫描归档目录
+                  </CardTitle>
+                  <CardDescription>
+                    扫描归档目录下的图片文件，将未入库的图片按命名模板重命名后直接写入归档数据库。
+                    适用于从外部复制图片到归档目录后的批量导入。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isScanning}
+                    onClick={async () => {
+                      setIsScanning(true);
+                      setScanResult(null);
+                      try {
+                        // 使用自定义路径或默认路径
+                        let libraryPath: string;
+                        const customPath = localSettings.customArchivedPath;
+                        
+                        if (customPath) {
+                          libraryPath = customPath;
+                        } else {
+                          // 使用默认路径
+                          const { appDataDir } = await import("@tauri-apps/api/path");
+                          libraryPath = await appDataDir();
+                        }
+                        
+                        const result = await scannerApi.scanArchived(
+                          libraryPath,
+                          localSettings.namingTemplate
+                        );
+                        setScanResult(result);
+                        // 刷新已归档图片列表
+                        if (result.imported_count > 0) {
+                          const { imageApi } = await import("@/services/tauri");
+                          const archived = await imageApi.getArchivedImages();
+                          setArchivedImages(archived);
+                        }
+                      } catch (error) {
+                        alert(`扫描失败: ${error}`);
+                      } finally {
+                        setIsScanning(false);
+                      }
+                    }}
+                  >
+                    {isScanning ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        扫描中...
+                      </>
+                    ) : (
+                      <>
+                        <ScanLine className="w-4 h-4 mr-2" />
+                        开始扫描
+                      </>
+                    )}
+                  </Button>
+
+                  {scanResult && (
+                    <div className="rounded-md border bg-muted/40 p-3 space-y-2 text-sm">
+                      <p className="font-medium">扫描完成</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+                        <span>扫描文件数</span>
+                        <span className="text-foreground font-medium">{scanResult.scanned_count}</span>
+                        <span>新增入库</span>
+                        <span className="text-green-600 font-medium">{scanResult.imported_count}</span>
+                        <span>已重命名</span>
+                        <span className="text-blue-600 font-medium">{scanResult.renamed_count}</span>
+                        <span>已跳过（已入库）</span>
+                        <span>{scanResult.skipped_count}</span>
+                        <span>失败</span>
+                        <span className={scanResult.failed_count > 0 ? "text-destructive font-medium" : ""}>
+                          {scanResult.failed_count}
+                        </span>
+                      </div>
+                      {scanResult.errors.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-destructive">错误详情：</p>
+                          {scanResult.errors.map((err, i) => (
+                            <p key={i} className="text-xs text-destructive/80 break-all">{err}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <Card className="border-destructive/50">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2 text-destructive">
@@ -438,7 +543,7 @@ function SettingsView() {
                 <CardHeader>
                   <CardTitle className="text-base">监控文件夹</CardTitle>
                   <CardDescription>
-                    添加需要自动监控的文件夹路径，新图片会自动导入到收件箱
+                    添加需要自动监控的文件夹路径，新图片会自动导入到待整理
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

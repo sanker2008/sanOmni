@@ -41,7 +41,7 @@
 | 命令 | 状态 | 说明 |
 |------|------|------|
 | `import_image` | ✅ | 导入图片 |
-| `get_inbox_images` | ✅ | 获取收件箱图片 |
+| `get_inbox_images` | ✅ | 获取待整理图片 |
 | `get_archived_images` | ✅ | 获取已归档图片 |
 | `update_image` | ✅ | 更新图片 |
 | `delete_image` | ✅ | 删除图片 |
@@ -76,7 +76,7 @@
 | 组件 | 状态 | 说明 |
 |------|------|------|
 | `App.tsx` | ✅ | 主框架（含主题切换+快捷键） |
-| `InboxView` | ✅ | 收件箱 |
+| `InboxView` | ✅ | 待整理 |
 | `ArchivedView` | ✅ | 已归档视图 |
 | `ImageCard` | ✅ | 图片卡片 |
 | `DropZone` | ✅ | 拖拽上传（含自动分类） |
@@ -149,7 +149,7 @@
 | Ctrl+A | 全选图片 |
 | Delete | 删除选中图片 |
 | Ctrl+Enter | 归档选中图片 |
-| 1 / 2 | 切换收件箱/已归档 |
+| 1 / 2 | 切换待整理/已归档 |
 | Ctrl+F | 聚焦搜索框 |
 | Ctrl+, | 打开/关闭设置 |
 | Escape | 取消选择/关闭弹窗 |
@@ -187,7 +187,7 @@ ai-image-manager/
 │   ├── App.tsx                   # 主应用
 │   ├── main.tsx                  # 入口
 │   ├── components/
-│   │   ├── InboxView.tsx         # 收件箱视图
+│   │   ├── InboxView.tsx         # 待整理视图
 │   │   ├── ArchivedView.tsx      # 已归档视图
 │   │   ├── ImageCard.tsx         # 图片卡片
 │   │   ├── DropZone.tsx          # 拖拽上传

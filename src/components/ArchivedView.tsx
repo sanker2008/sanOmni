@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { 
   Archive, 
   Search, 
@@ -20,6 +21,8 @@ import {
   Edit2,
   LayoutGrid,
   List,
+  Filter,
+  X,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import { cn } from "@/lib/utils";
@@ -45,6 +48,12 @@ export default function ArchivedView() {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [unarchiveResult, setUnarchiveResult] = useState<string | null>(null);
+
+  // 筛选器状态
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterHasPrompt, setFilterHasPrompt] = useState<boolean | null>(null);
+  const [filterHasTags, setFilterHasTags] = useState<boolean | null>(null);
+  const [filterHasWatermark, setFilterHasWatermark] = useState<boolean | null>(null);
 
   useEffect(() => {
     loadArchivedImages();
@@ -101,6 +110,23 @@ export default function ArchivedView() {
     // 厂商/模型筛选
     if (selectedVendor && image.storage_vendor_id !== selectedVendor) return false;
     if (selectedModel && image.primary_model_id !== selectedModel) return false;
+    
+    // Prompt 筛选
+    if (filterHasPrompt !== null) {
+      const hasPrompt = !!image.prompt && image.prompt.trim().length > 0;
+      if (hasPrompt !== filterHasPrompt) return false;
+    }
+    
+    // Tags 筛选
+    if (filterHasTags !== null) {
+      const hasTags = image.tags.length > 0;
+      if (hasTags !== filterHasTags) return false;
+    }
+    
+    // 水印筛选
+    if (filterHasWatermark !== null) {
+      if (image.has_watermark !== filterHasWatermark) return false;
+    }
     
     return true;
   });
@@ -330,6 +356,22 @@ export default function ArchivedView() {
               />
             </div>
 
+            {/* 筛选按钮 */}
+            <Button
+              variant={showFilters ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className="gap-2"
+            >
+              <Filter className="w-4 h-4" />
+              筛选
+              {(filterHasPrompt !== null || filterHasTags !== null || filterHasWatermark !== null) && (
+                <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
+                  {[filterHasPrompt, filterHasTags, filterHasWatermark].filter(f => f !== null).length}
+                </Badge>
+              )}
+            </Button>
+
             {/* 视图切换 */}
             <div className="flex items-center border rounded-md overflow-hidden">
               <button
@@ -349,6 +391,98 @@ export default function ArchivedView() {
             </div>
           </div>
         </div>
+
+        {/* 筛选面板 */}
+        {showFilters && (
+          <div className="border-b px-4 py-3 bg-muted/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium">筛选条件</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilterHasPrompt(null);
+                  setFilterHasTags(null);
+                  setFilterHasWatermark(null);
+                }}
+                className="h-7 text-xs"
+              >
+                清除全部
+              </Button>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-4">
+              {/* Prompt 筛选 */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Prompt</label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={filterHasPrompt === true ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterHasPrompt(filterHasPrompt === true ? null : true)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    已填写
+                  </Button>
+                  <Button
+                    variant={filterHasPrompt === false ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterHasPrompt(filterHasPrompt === false ? null : false)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    未填写
+                  </Button>
+                </div>
+              </div>
+
+              {/* Tags 筛选 */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">标签</label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={filterHasTags === true ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterHasTags(filterHasTags === true ? null : true)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    有标签
+                  </Button>
+                  <Button
+                    variant={filterHasTags === false ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterHasTags(filterHasTags === false ? null : false)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    无标签
+                  </Button>
+                </div>
+              </div>
+
+              {/* 水印筛选 */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">水印</label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={filterHasWatermark === true ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterHasWatermark(filterHasWatermark === true ? null : true)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    有水印
+                  </Button>
+                  <Button
+                    variant={filterHasWatermark === false ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterHasWatermark(filterHasWatermark === false ? null : false)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    无水印
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Unarchive result notification */}
         {unarchiveResult && (
@@ -413,7 +547,7 @@ export default function ArchivedView() {
                 <div>
                   <p className="text-muted-foreground">暂无归档图片</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    在收件箱中标记图片后，点击归档
+                    在待整理中标记图片后，点击归档
                   </p>
                 </div>
               </div>

@@ -13,7 +13,7 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 ├── data\
 │   └── database.sqlite          # 数据库文件
-├── inbox\                        # 收件箱图片（复制的副本）
+├── inbox\                        # 待整理图片（复制的副本）
 │   ├── 1234567890_image1.png
 │   ├── 1234567891_image2.jpg
 │   └── ...
@@ -40,7 +40,7 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 ```
 原始位置: D:\Pictures\my-image.png  (保持不变)
          ↓ 复制
-收件箱: C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\inbox\1234567890_my-image.png
+待整理: C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\inbox\1234567890_my-image.png
 ```
 
 **关键点：**
@@ -48,13 +48,13 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 - 在 inbox 目录中创建一个副本
 - 文件名前加时间戳避免冲突：`{timestamp}_{原文件名}`
 
-### 2. 收件箱阶段
+### 2. 待整理阶段
 - 所有操作（查看、编辑标签、检测水印等）都针对 inbox 中的副本
 - 原始文件完全不受影响
 
 ### 3. 归档阶段
 ```
-收件箱: C:\...\inbox\1234567890_my-image.png
+待整理: C:\...\inbox\1234567890_my-image.png
          ↓ 移动（不是复制）
 归档: C:\...\archived\midjourney\v6\midjourney-v6-2024-01-15-001.png
 ```

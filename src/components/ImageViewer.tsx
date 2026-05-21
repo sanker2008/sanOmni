@@ -281,7 +281,7 @@ export default function ImageViewer() {
                     )}
                     <div className="flex justify-between">
                       <span>状态:</span>
-                      <span>{image.status === "archived" ? "已归档" : "收件箱"}</span>
+                      <span>{image.status === "archived" ? "已归档" : "待整理"}</span>
                     </div>
                   </div>
                 </div>

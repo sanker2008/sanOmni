@@ -22,7 +22,7 @@ C:\Program Files\sanMediaBox\          # 应用程序文件
 C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 ├── data\
 │   └── database.sqlite          # 数据库
-├── inbox\                        # 收件箱图片
+├── inbox\                        # 待整理图片
 │   └── ...
 └── archived\                     # 归档图片
     └── ...

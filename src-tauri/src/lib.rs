@@ -55,6 +55,7 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::settings::reset_database,
+            commands::scanner::scan_archived_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

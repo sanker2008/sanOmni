@@ -33,3 +33,4 @@ pub mod watermark_removal;
 pub mod watcher;
 pub mod classifier;
 pub mod settings;
+pub mod scanner;

@@ -61,7 +61,7 @@ function App() {
                 className="gap-2"
               >
                 <Inbox className="w-4 h-4" />
-                收件箱
+                待整理
               </Button>
               <Button
                 variant={activeTab === "archived" ? "default" : "ghost"}

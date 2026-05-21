@@ -301,7 +301,7 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              图片将导入到收件箱，你可以稍后打标签并归档
+              图片将导入到待整理，你可以稍后打标签并归档
             </p>
           </>
         )}

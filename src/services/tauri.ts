@@ -346,6 +346,32 @@ export const classifyApi = {
   },
 };
 
+// ==================== Scanner API ====================
+
+export interface ScanResult {
+  scanned_count: number;
+  imported_count: number;
+  skipped_count: number;
+  renamed_count: number;
+  failed_count: number;
+  errors: string[];
+}
+
+export const scannerApi = {
+  async scanArchived(libraryPath: string, namingTemplate?: string): Promise<ScanResult> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<ScanResult>>("scan_archived_directory", {
+      dbPath,
+      libraryPath,
+      namingTemplate,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "扫描失败");
+    }
+    return result.data;
+  },
+};
+
 // ==================== Settings API ====================
 
 export const settingsApi = {

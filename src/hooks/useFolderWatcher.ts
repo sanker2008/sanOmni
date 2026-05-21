@@ -132,7 +132,7 @@ export function useFolderWatcher() {
           // 可选：显示通知
           if ("Notification" in window && Notification.permission === "granted") {
             new Notification("新图片已导入", {
-              body: `${fileName} 已自动导入到收件箱`,
+              body: `${fileName} 已自动导入到待整理`,
               icon: "/icon.png",
             });
           }

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { 
   Inbox, 
   Archive, 
@@ -19,6 +20,8 @@ import {
   Trash2,
   LayoutGrid,
   List,
+  Filter,
+  X,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import DropZone from "./DropZone";
@@ -46,6 +49,12 @@ export default function InboxView() {
   const [detectionProgress, setDetectionProgress] = useState<string | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showBatchEdit, setShowBatchEdit] = useState(false);
+
+  // 筛选器状态
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterHasPrompt, setFilterHasPrompt] = useState<boolean | null>(null); // null = 不筛选
+  const [filterHasTags, setFilterHasTags] = useState<boolean | null>(null);
+  const [filterHasWatermark, setFilterHasWatermark] = useState<boolean | null>(null);
 
   useEffect(() => {
     loadInboxImages();
@@ -250,22 +259,43 @@ export default function InboxView() {
 
   // Filter images by search query
   const filteredImages = inboxImages.filter((image) => {
-    if (!searchQuery) return true;
+    // 搜索关键词过滤
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase().trim();
+      const keywords = query.split(/\s+/).filter(k => k.length > 0);
+      
+      const matchesSearch = keywords.every(keyword => {
+        return (
+          image.filename.toLowerCase().includes(keyword) ||
+          image.prompt?.toLowerCase().includes(keyword) ||
+          image.format?.toLowerCase().includes(keyword) ||
+          image.watermark_platform?.toLowerCase().includes(keyword) ||
+          image.models.some((m) => m.name.toLowerCase().includes(keyword)) ||
+          image.tags.some((tag) => tag.name.toLowerCase().includes(keyword))
+        );
+      });
+      
+      if (!matchesSearch) return false;
+    }
     
-    const query = searchQuery.toLowerCase().trim();
-    const keywords = query.split(/\s+/).filter(k => k.length > 0);
+    // Prompt 筛选
+    if (filterHasPrompt !== null) {
+      const hasPrompt = !!image.prompt && image.prompt.trim().length > 0;
+      if (hasPrompt !== filterHasPrompt) return false;
+    }
     
-    // 每个关键词都要匹配（AND 逻辑）
-    return keywords.every(keyword => {
-      return (
-        image.filename.toLowerCase().includes(keyword) ||
-        image.prompt?.toLowerCase().includes(keyword) ||
-        image.format?.toLowerCase().includes(keyword) ||
-        image.watermark_platform?.toLowerCase().includes(keyword) ||
-        image.models.some((m) => m.name.toLowerCase().includes(keyword)) ||
-        image.tags.some((tag) => tag.name.toLowerCase().includes(keyword))
-      );
-    });
+    // Tags 筛选
+    if (filterHasTags !== null) {
+      const hasTags = image.tags.length > 0;
+      if (hasTags !== filterHasTags) return false;
+    }
+    
+    // 水印筛选
+    if (filterHasWatermark !== null) {
+      if (image.has_watermark !== filterHasWatermark) return false;
+    }
+    
+    return true;
   });
 
   const isAllSelected = filteredImages.length > 0 && 
@@ -291,7 +321,7 @@ export default function InboxView() {
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Inbox className="w-5 h-5" />
-            收件箱
+            待整理
           </h2>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Badge variant="secondary">{inboxCount} 张图片</Badge>
@@ -354,6 +384,98 @@ export default function InboxView() {
           )}
         </div>
       </div>
+
+      {/* 筛选面板 */}
+      {showFilters && (
+        <div className="border-b px-4 py-3 bg-muted/20 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">筛选条件</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterHasPrompt(null);
+                setFilterHasTags(null);
+                setFilterHasWatermark(null);
+              }}
+              className="h-7 text-xs"
+            >
+              清除全部
+            </Button>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4">
+            {/* Prompt 筛选 */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Prompt</label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={filterHasPrompt === true ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterHasPrompt(filterHasPrompt === true ? null : true)}
+                  className="flex-1 h-8 text-xs"
+                >
+                  已填写
+                </Button>
+                <Button
+                  variant={filterHasPrompt === false ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterHasPrompt(filterHasPrompt === false ? null : false)}
+                  className="flex-1 h-8 text-xs"
+                >
+                  未填写
+                </Button>
+              </div>
+            </div>
+
+            {/* Tags 筛选 */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">标签</label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={filterHasTags === true ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterHasTags(filterHasTags === true ? null : true)}
+                  className="flex-1 h-8 text-xs"
+                >
+                  有标签
+                </Button>
+                <Button
+                  variant={filterHasTags === false ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterHasTags(filterHasTags === false ? null : false)}
+                  className="flex-1 h-8 text-xs"
+                >
+                  无标签
+                </Button>
+              </div>
+            </div>
+
+            {/* 水印筛选 */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">水印</label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={filterHasWatermark === true ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterHasWatermark(filterHasWatermark === true ? null : true)}
+                  className="flex-1 h-8 text-xs"
+                >
+                  有水印
+                </Button>
+                <Button
+                  variant={filterHasWatermark === false ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterHasWatermark(filterHasWatermark === false ? null : false)}
+                  className="flex-1 h-8 text-xs"
+                >
+                  无水印
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Archive result notification */}
       {archiveResult && (
