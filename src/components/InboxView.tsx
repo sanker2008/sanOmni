@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
 import { imageApi, vendorApi, watermarkApi } from "@/services/tauri";
+import { toast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,10 +21,13 @@ import {
   LayoutGrid,
   List,
   Filter,
+  Check,
+  AlertCircle,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import DropZone from "./DropZone";
 import BatchEditModal from "./BatchEditModal";
+import ConfirmDialog from "./ConfirmDialog";
 
 export default function InboxView() {
   const { 
@@ -36,6 +40,7 @@ export default function InboxView() {
     clearSelection,
     removeImage,
     deselectImage,
+    updateImage,
   } = useImageStore();
 
   const { searchQuery, setSearchQuery, viewMode, setViewMode } = useUIStore();
@@ -44,9 +49,49 @@ export default function InboxView() {
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveResult, setArchiveResult] = useState<string | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [detectionProgress, setDetectionProgress] = useState<string | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showBatchEdit, setShowBatchEdit] = useState(false);
+  const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
+  const [batchDeleteStep, setBatchDeleteStep] = useState(0);
+
+  const handleBatchSetWatermark = async (hasWatermark: boolean) => {
+    if (selectedImages.length === 0) return;
+
+    setIsUpdatingWatermark(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const imageId of selectedImages) {
+      const image = inboxImages.find((img) => img.id === imageId);
+      if (!image) continue;
+
+      try {
+        const updated = await imageApi.update({
+          image_id: imageId,
+          model_ids: image.models.map((m) => m.id),
+          primary_model_id: image.models.find((m) => m.is_primary)?.id || undefined,
+          tags: image.tags.map((t) => t.name),
+          has_watermark: hasWatermark,
+          watermark_platform: hasWatermark ? "unknown" : undefined,
+        });
+
+        updateImage(imageId, updated);
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to update watermark for image ${imageId}:`, err);
+        failCount++;
+      }
+    }
+
+    setIsUpdatingWatermark(false);
+    clearSelection();
+    
+    toast({
+      title: `✓ 批量修改水印完成`,
+      description: `已成功标记 ${successCount} 张图片，失败 ${failCount} 张`,
+      variant: failCount > 0 ? "destructive" : "default",
+    });
+  };
 
   // 筛选器状态
   const [showFilters, setShowFilters] = useState(false);
@@ -141,7 +186,6 @@ export default function InboxView() {
     if (selectedImages.length === 0) return;
 
     setIsDetecting(true);
-    setDetectionProgress("正在检测水印...");
 
     try {
       const selectedImagePaths = inboxImages
@@ -151,21 +195,44 @@ export default function InboxView() {
       const results = await watermarkApi.batchDetect(selectedImagePaths);
 
       let watermarkCount = 0;
+      const detectedPlatforms: { [key: string]: number } = {};
+      
       results.forEach((result, index) => {
         if (result.has_watermark) {
           watermarkCount++;
+          const platform = result.platform || "未知";
+          detectedPlatforms[platform] = (detectedPlatforms[platform] || 0) + 1;
           console.log(
             `Image ${index + 1}: Watermark detected - ${result.platform} (${(result.confidence * 100).toFixed(0)}%)`
           );
         }
       });
 
-      setDetectionProgress(`检测完成！发现 ${watermarkCount}/${results.length} 张图片有水印`);
-      setTimeout(() => setDetectionProgress(null), 5000);
+      // 显示汇总结果
+      if (watermarkCount > 0) {
+        const platformSummary = Object.entries(detectedPlatforms)
+          .map(([platform, count]) => `${platform}: ${count}`)
+          .join(", ");
+        
+        toast({
+          title: `✓ 批量检测完成`,
+          description: `发现 ${watermarkCount}/${results.length} 张图片有水印\n${platformSummary}`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "✓ 批量检测完成",
+          description: `检测了 ${results.length} 张图片，未发现水印`,
+          variant: "success",
+        });
+      }
     } catch (error) {
       console.error("Batch detection failed:", error);
-      setDetectionProgress("批量检测失败");
-      setTimeout(() => setDetectionProgress(null), 3000);
+      toast({
+        title: "✗ 批量检测失败",
+        description: String(error),
+        variant: "destructive",
+      });
     } finally {
       setIsDetecting(false);
     }
@@ -183,16 +250,21 @@ export default function InboxView() {
       }
     } catch (error) {
       console.error("Failed to delete image:", error);
-      alert("删除图片失败");
+      toast({
+        title: "✗ 删除图片失败",
+        description: String(error),
+        variant: "destructive",
+      });
     }
   };
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = () => {
     if (selectedImages.length === 0) return;
+    setBatchDeleteStep(1);
+  };
 
-    if (!confirm(`确定要删除选中的 ${selectedImages.length} 张图片吗？此操作不可恢复。`)) {
-      return;
-    }
+  const executeBatchDelete = async () => {
+    setBatchDeleteStep(0);
 
     let successCount = 0;
     let failCount = 0;
@@ -215,7 +287,11 @@ export default function InboxView() {
     clearSelection();
 
     if (failCount > 0) {
-      alert(`删除完成：成功 ${successCount} 张，失败 ${failCount} 张`);
+      toast({
+        title: "删除完成",
+        description: `成功 ${successCount} 张，失败 ${failCount} 张`,
+        variant: failCount === selectedImages.length ? "destructive" : "default",
+      });
     }
   };
 
@@ -324,6 +400,10 @@ export default function InboxView() {
             <Inbox className="w-5 h-5" />
             待整理
           </h2>
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleImportClick}>
+            <Upload className="w-4 h-4" />
+            导入
+          </Button>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Badge variant="secondary">{inboxCount} 张图片</Badge>
             {taggedCount > 0 && (
@@ -379,10 +459,6 @@ export default function InboxView() {
             </button>
           </div>
 
-          <Button variant="outline" size="sm" className="gap-2" onClick={handleImportClick}>
-            <Upload className="w-4 h-4" />
-            导入
-          </Button>
           {selectedImages.length > 0 && (
             <Button
               size="sm"
@@ -500,13 +576,6 @@ export default function InboxView() {
         </div>
       )}
 
-      {/* Detection progress notification */}
-      {detectionProgress && (
-        <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-blue-800 text-sm">
-          {detectionProgress}
-        </div>
-      )}
-
       {/* Toolbar - Always reserve space */}
       <div className="border-b px-4 py-2 bg-muted/30 min-h-[44px] flex items-center">
         {filteredImages.length > 0 ? (
@@ -532,6 +601,34 @@ export default function InboxView() {
                   onClick={() => setShowBatchEdit(true)}>
                   <Edit className="w-3 h-3" />
                   批量编辑
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 h-7 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+                  onClick={() => handleBatchSetWatermark(false)}
+                  disabled={isUpdatingWatermark}
+                >
+                  {isUpdatingWatermark ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Check className="w-3 h-3" />
+                  )}
+                  标记无水印
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 h-7 text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+                  onClick={() => handleBatchSetWatermark(true)}
+                  disabled={isUpdatingWatermark}
+                >
+                  {isUpdatingWatermark ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <AlertCircle className="w-3 h-3" />
+                  )}
+                  标记有水印
                 </Button>
                 <Button
                   variant="ghost"
@@ -626,6 +723,30 @@ export default function InboxView() {
 
       {/* Batch Edit Modal */}
       <BatchEditModal open={showBatchEdit} onClose={() => setShowBatchEdit(false)} />
+
+      {/* Batch Delete Confirmation - Step 1 */}
+      <ConfirmDialog
+        open={batchDeleteStep === 1}
+        title="确认批量删除"
+        description={`确定要删除选中的 ${selectedImages.length} 张图片吗？此操作不可恢复。`}
+        confirmText="继续"
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={() => setBatchDeleteStep(2)}
+        onCancel={() => setBatchDeleteStep(0)}
+      />
+
+      {/* Batch Delete Confirmation - Step 2 */}
+      <ConfirmDialog
+        open={batchDeleteStep === 2}
+        title="⚠️ 最终确认"
+        description={`【警告】您正在批量删除 ${selectedImages.length} 张图片！此操作将永久删除这些图片记录及源文件，无法撤销！`}
+        confirmText="确认删除"
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={executeBatchDelete}
+        onCancel={() => setBatchDeleteStep(0)}
+      />
     </div>
   );
 }

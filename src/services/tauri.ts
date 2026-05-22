@@ -19,6 +19,8 @@ interface UpdateImageRequest {
   tags: string[];
   prompt?: string;
   negative_prompt?: string;
+  has_watermark?: boolean;
+  watermark_platform?: string;
 }
 
 interface ArchiveRequest {
@@ -376,6 +378,87 @@ export interface WatermarkRemovalRequest {
   output_path: string;
   region?: WatermarkRegion;
 }
+
+// ==================== Gemini Watermark Removal API ====================
+
+export interface GeminiWatermarkColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+export interface GeminiWatermarkRemovalResult {
+  success: boolean;
+  output_path: string;
+  method: string;
+  processing_time_ms: number;
+  watermark_detected: boolean;
+  alpha_value: number;
+}
+
+export interface GeminiWatermarkRemovalRequest {
+  image_path: string;
+  output_path: string;
+  watermark_color?: GeminiWatermarkColor;
+  alpha?: number;
+  region?: WatermarkRegion;
+}
+
+export const geminiWatermarkApi = {
+  /**
+   * 使用反向透明度混合算法移除 Gemini 水印
+   * @param imagePath 输入图片路径
+   * @param outputPath 输出图片路径
+   * @param watermarkColor 水印颜色（可选，自动检测）
+   * @param alpha 透明度值（可选，自动检测）
+   * @param region 水印区域（可选，默认右下角）
+   */
+  async remove(
+    imagePath: string,
+    outputPath: string,
+    watermarkColor?: GeminiWatermarkColor,
+    alpha?: number,
+    region?: WatermarkRegion
+  ): Promise<GeminiWatermarkRemovalResult> {
+    const result = await invoke<GeminiWatermarkRemovalResult>("remove_gemini_watermark", {
+      imagePath,
+      outputPath,
+      watermarkColor,
+      alpha,
+      region,
+    });
+    return result;
+  },
+
+  /**
+   * 自动检测并移除 Gemini 水印（一键操作）
+   * @param imagePath 输入图片路径
+   * @param outputPath 输出图片路径
+   */
+  async autoRemove(
+    imagePath: string,
+    outputPath: string
+  ): Promise<GeminiWatermarkRemovalResult> {
+    const result = await invoke<GeminiWatermarkRemovalResult>("auto_remove_gemini_watermark", {
+      imagePath,
+      outputPath,
+    });
+    return result;
+  },
+
+  /**
+   * 批量移除 Gemini 水印
+   * @param requests 批量请求列表
+   */
+  async batchRemove(
+    requests: GeminiWatermarkRemovalRequest[]
+  ): Promise<GeminiWatermarkRemovalResult[]> {
+    const result = await invoke<GeminiWatermarkRemovalResult[]>("batch_remove_gemini_watermarks", {
+      requests,
+    });
+    return result;
+  },
+};
 
 // ==================== Watcher API ====================
 

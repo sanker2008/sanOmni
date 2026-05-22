@@ -24,6 +24,8 @@ pub struct UpdateImageRequest {
     pub tags: Vec<String>,
     pub prompt: Option<String>,
     pub negative_prompt: Option<String>,
+    pub has_watermark: Option<bool>,
+    pub watermark_platform: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -70,26 +72,27 @@ pub async fn import_image(
     let image_id = format!("img_{}", &uuid_str[..12]);
     let now = chrono::Utc::now().to_rfc3339();
 
+    let mut valid_model_ids = Vec::new();
+    for model_id in &request.model_ids {
+        let exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM models WHERE id = ?",
+            [model_id],
+            |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count > 0)
+            },
+        ).unwrap_or(false);
+        if exists {
+            valid_model_ids.push(model_id.clone());
+        } else {
+            eprintln!("Model '{}' not found, ignoring", model_id);
+        }
+    }
+
     let primary_model_id = request.primary_model_id
-        .or_else(|| request.model_ids.first().cloned())
+        .filter(|id| valid_model_ids.contains(id))
+        .or_else(|| valid_model_ids.first().cloned())
         .unwrap_or_else(|| "unknown".to_string());
-
-    // Verify the model exists, if not use "unknown"
-    let model_exists: bool = conn.query_row(
-        "SELECT COUNT(*) FROM models WHERE id = ?",
-        [&primary_model_id],
-        |row| {
-            let count: i64 = row.get(0)?;
-            Ok(count > 0)
-        },
-    ).unwrap_or(false);
-
-    let primary_model_id = if model_exists {
-        primary_model_id
-    } else {
-        eprintln!("Model '{}' not found, using 'unknown'", primary_model_id);
-        "unknown".to_string()
-    };
 
     let vendor_id: String = conn.query_row(
         "SELECT vendor_id FROM models WHERE id = ?",
@@ -177,7 +180,7 @@ pub async fn import_image(
         return CommandResult::err(format!("Failed to update image optional fields: {}", e));
     }
 
-    for model_id in &request.model_ids {
+    for model_id in &valid_model_ids {
         let is_primary = model_id == &primary_model_id;
         let _ = conn.execute(
             "INSERT INTO image_model_relations (image_id, model_id, is_primary) VALUES (?, ?, ?)",
@@ -185,8 +188,8 @@ pub async fn import_image(
         );
     }
     
-    // If no model_ids provided, insert at least the primary model relation
-    if request.model_ids.is_empty() {
+    // If no valid model_ids provided, insert at least the primary model relation
+    if valid_model_ids.is_empty() {
         let _ = conn.execute(
             "INSERT INTO image_model_relations (image_id, model_id, is_primary) VALUES (?, ?, ?)",
             (&image_id, &primary_model_id, 1),
@@ -277,6 +280,26 @@ pub async fn update_image(
         "UPDATE images SET prompt = ?, negative_prompt = ? WHERE id = ?",
         rusqlite::params![&request.prompt, &request.negative_prompt, image_id],
     );
+
+    if let Some(has_watermark) = request.has_watermark {
+        let _ = conn.execute(
+            "UPDATE images SET has_watermark = ? WHERE id = ?",
+            rusqlite::params![has_watermark as i32, image_id],
+        );
+        if !has_watermark {
+            let _ = conn.execute(
+                "UPDATE images SET watermark_platform = NULL WHERE id = ?",
+                [image_id],
+            );
+        }
+    }
+
+    if let Some(watermark_platform) = &request.watermark_platform {
+        let _ = conn.execute(
+            "UPDATE images SET watermark_platform = ? WHERE id = ?",
+            rusqlite::params![watermark_platform, image_id],
+        );
+    }
 
     // Update model relations
     let mut new_primary_model_id = current_image.primary_model_id.clone();

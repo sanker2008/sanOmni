@@ -30,6 +30,7 @@ pub mod vendors;
 pub mod tags;
 pub mod watermark;
 pub mod watermark_removal;
+pub mod gemini_watermark_removal;
 pub mod watcher;
 pub mod classifier;
 pub mod settings;

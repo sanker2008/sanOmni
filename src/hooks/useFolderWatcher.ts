@@ -21,7 +21,7 @@ export function useFolderWatcher() {
       const folders = settings.watchFolders || [];
       const extensions = (settings.watchExtensions || "png,jpg,jpeg,webp,gif")
         .split(",")
-        .map((ext) => ext.trim());
+        .map((ext: string) => ext.trim());
       const debounceMs = settings.watchDebounceMs || 1000;
 
       for (const folder of folders) {

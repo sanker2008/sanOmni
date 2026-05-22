@@ -7,6 +7,7 @@ import { PromptGroupsView } from "@/components/PromptGroupsView";
 import QuickEditModal from "@/components/QuickEditModal";
 import ImageViewer from "@/components/ImageViewer";
 import SettingsView from "@/components/SettingsView";
+import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -136,6 +137,9 @@ function App() {
 
         {/* Settings View */}
         <SettingsView />
+
+        {/* Toast Notifications */}
+        <Toaster />
       </div>
     </TooltipProvider>
   );

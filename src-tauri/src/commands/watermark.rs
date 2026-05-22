@@ -79,64 +79,47 @@ fn detect_gemini_watermark(img: &DynamicImage) -> WatermarkDetectionResult {
     let width = img.width();
     let height = img.height();
     
-    // Gemini watermark is typically in the bottom-right corner
-    // Check a region of about 150x30 pixels from the bottom-right
-    let region_width = (width as f32 * 0.15).min(200.0) as u32;
-    let region_height = (height as f32 * 0.05).min(50.0) as u32;
+    // Gemini watermark is in the bottom-right corner, typically 150-200px wide, 20-40px tall
+    let region_width = (width as f32 * 0.12).max(120.0).min(250.0) as u32;
+    let region_height = (height as f32 * 0.04).max(20.0).min(60.0) as u32;
     
     let start_x = width.saturating_sub(region_width);
     let start_y = height.saturating_sub(region_height);
     
-    // Analyze the corner region
     let corner_region = img.crop_imm(start_x, start_y, region_width, region_height);
     
-    // Gemini watermarks typically have:
-    // 1. Semi-transparent text
-    // 2. Low contrast with background
-    // 3. Specific color patterns (usually white/light text with shadow)
+    // Convert to grayscale for better analysis
+    let gray = corner_region.to_luma8();
     
-    let mut text_pixel_count = 0;
-    let mut total_pixels = 0;
+    // Multiple detection strategies
+    let mut scores = Vec::new();
     
-    for pixel in corner_region.pixels() {
-        let rgba = pixel.2;
-        let r = rgba[0] as f32;
-        let g = rgba[1] as f32;
-        let b = rgba[2] as f32;
-        let a = rgba[3] as f32;
-        
-        // Check for semi-transparent pixels (watermark characteristic)
-        if a > 100.0 && a < 255.0 {
-            // Check for light-colored text (white/gray)
-            let brightness = (r + g + b) / 3.0;
-            if brightness > 150.0 {
-                text_pixel_count += 1;
-            }
-        }
-        total_pixels += 1;
-    }
+    // Strategy 1: Text edge detection
+    let edge_score = detect_text_edges(&gray);
+    scores.push(edge_score);
     
-    let ratio = text_pixel_count as f32 / total_pixels as f32;
+    // Strategy 2: Horizontal text line detection
+    let line_score = detect_horizontal_text_lines(&gray);
+    scores.push(line_score);
     
-    // Gemini watermark typically has 5-20% semi-transparent pixels in corner
-    let has_gemini_pattern = ratio > 0.03 && ratio < 0.35;
+    // Strategy 3: Character pattern detection (look for "AI" or "generated")
+    let pattern_score = detect_gemini_text_pattern(&corner_region);
+    scores.push(pattern_score);
     
-    // Additional check: look for "AI" pattern by checking horizontal lines
-    let has_ai_pattern = check_ai_text_pattern(&corner_region);
+    // Strategy 4: Color consistency check (Gemini uses consistent gray/white text)
+    let color_score = detect_gemini_color_pattern(&corner_region);
+    scores.push(color_score);
     
-    let confidence = if has_gemini_pattern && has_ai_pattern {
-        0.85
-    } else if has_gemini_pattern {
-        0.65
-    } else if has_ai_pattern {
-        0.55
-    } else {
-        ratio * 2.0 // Low confidence based on pixel ratio
-    };
+    // Strategy 5: Shadow detection (Gemini text often has subtle shadow)
+    let shadow_score = detect_text_shadow(&corner_region);
+    scores.push(shadow_score);
+    
+    // Weighted average of all scores
+    let confidence = (edge_score * 0.25 + line_score * 0.2 + pattern_score * 0.3 + color_score * 0.15 + shadow_score * 0.1).min(0.95);
     
     WatermarkDetectionResult {
-        has_watermark: confidence > 0.5,
-        platform: if confidence > 0.5 { Some("gemini".to_string()) } else { None },
+        has_watermark: confidence > 0.4, // Lower threshold for better detection
+        platform: if confidence > 0.4 { Some("gemini".to_string()) } else { None },
         confidence,
         watermark_region: Some(WatermarkRegion {
             x: start_x,
@@ -144,90 +127,239 @@ fn detect_gemini_watermark(img: &DynamicImage) -> WatermarkDetectionResult {
             width: region_width,
             height: region_height,
         }),
-        detection_method: "gemini_corner_analysis".to_string(),
+        detection_method: "gemini_multi_strategy".to_string(),
     }
 }
 
-/// Check for "AI" text pattern in region
-fn check_ai_text_pattern(img: &DynamicImage) -> bool {
+/// Detect text edges using Sobel-like edge detection
+fn detect_text_edges(gray: &image::GrayImage) -> f32 {
+    let width = gray.width();
+    let height = gray.height();
+    
+    if width < 3 || height < 3 {
+        return 0.0;
+    }
+    
+    let mut edge_pixels = 0;
+    let mut total_pixels = 0;
+    
+    for y in 1..height-1 {
+        for x in 1..width-1 {
+            let center = gray.get_pixel(x, y)[0] as i32;
+            
+            // Horizontal gradient
+            let gx = (gray.get_pixel(x+1, y)[0] as i32 - gray.get_pixel(x-1, y)[0] as i32).abs();
+            // Vertical gradient
+            let gy = (gray.get_pixel(x, y+1)[0] as i32 - gray.get_pixel(x, y-1)[0] as i32).abs();
+            
+            let gradient = ((gx * gx + gy * gy) as f32).sqrt();
+            
+            if gradient > 30.0 && center > 100 {
+                edge_pixels += 1;
+            }
+            total_pixels += 1;
+        }
+    }
+    
+    let edge_ratio = edge_pixels as f32 / total_pixels as f32;
+    
+    // Text typically has 5-15% edge pixels
+    if edge_ratio > 0.03 && edge_ratio < 0.20 {
+        (edge_ratio * 5.0).min(1.0)
+    } else {
+        0.0
+    }
+}
+
+/// Detect horizontal text lines
+fn detect_horizontal_text_lines(gray: &image::GrayImage) -> f32 {
+    let width = gray.width();
+    let height = gray.height();
+    
+    let mut row_intensities = vec![0u32; height as usize];
+    
+    for y in 0..height {
+        let mut row_sum = 0u32;
+        for x in 0..width {
+            row_sum += gray.get_pixel(x, y)[0] as u32;
+        }
+        row_intensities[y as usize] = row_sum / width;
+    }
+    
+    // Find peaks (text lines) and valleys (gaps between lines)
+    let mut text_lines = 0;
+    let mut in_text = false;
+    let avg_intensity: u32 = row_intensities.iter().sum::<u32>() / height;
+    
+    for intensity in row_intensities {
+        if intensity > avg_intensity + 20 {
+            if !in_text {
+                text_lines += 1;
+                in_text = true;
+            }
+        } else if intensity < avg_intensity - 10 {
+            in_text = false;
+        }
+    }
+    
+    // Gemini watermark typically has 1-2 text lines
+    if text_lines >= 1 && text_lines <= 3 {
+        0.7
+    } else if text_lines > 0 {
+        0.3
+    } else {
+        0.0
+    }
+}
+
+/// Detect Gemini-specific text patterns
+fn detect_gemini_text_pattern(img: &DynamicImage) -> f32 {
     let width = img.width();
     let height = img.height();
     
-    // Look for vertical lines (characteristic of "I" and "A")
-    let mut vertical_lines = 0;
-    let threshold = 0.7;
+    // Look for vertical strokes (common in "AI", "I", "l", "t", etc.)
+    let mut vertical_strokes = 0;
+    let stroke_threshold = (height as f32 * 0.4) as u32;
     
     for x in 0..width {
-        let mut consecutive = 0;
+        let mut consecutive_bright = 0;
         for y in 0..height {
             let pixel = img.get_pixel(x, y);
-            let brightness = (pixel[0] as f32 + pixel[1] as f32 + pixel[2] as f32) / 3.0;
-            if brightness > 150.0 {
-                consecutive += 1;
+            let brightness = (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32) / 3;
+            
+            if brightness > 150 {
+                consecutive_bright += 1;
+            } else if consecutive_bright > 0 {
+                if consecutive_bright >= stroke_threshold {
+                    vertical_strokes += 1;
+                }
+                consecutive_bright = 0;
             }
         }
-        if consecutive as f32 / height as f32 > threshold {
-            vertical_lines += 1;
+        if consecutive_bright >= stroke_threshold {
+            vertical_strokes += 1;
         }
     }
     
-    // "AI" text typically has 2-4 strong vertical lines
-    vertical_lines >= 2 && vertical_lines <= 8
+    // "AI-generated" or similar text should have 3-10 vertical strokes
+    if vertical_strokes >= 3 && vertical_strokes <= 15 {
+        (vertical_strokes as f32 / 10.0).min(1.0)
+    } else {
+        0.0
+    }
 }
 
-/// Detect DALL-E watermark (colorful dots pattern)
+/// Detect Gemini's characteristic color pattern (gray/white text)
+fn detect_gemini_color_pattern(img: &DynamicImage) -> f32 {
+    let mut light_pixels = 0;
+    let mut gray_pixels = 0;
+    let mut total_pixels = 0;
+    
+    for pixel in img.pixels() {
+        let rgba = pixel.2;
+        let r = rgba[0] as i32;
+        let g = rgba[1] as i32;
+        let b = rgba[2] as i32;
+        
+        // Check if pixel is grayscale (R≈G≈B)
+        let color_diff = (r - g).abs() + (g - b).abs() + (b - r).abs();
+        let brightness = (r + g + b) / 3;
+        
+        if color_diff < 30 && brightness > 150 {
+            light_pixels += 1;
+            if brightness < 240 {
+                gray_pixels += 1;
+            }
+        }
+        total_pixels += 1;
+    }
+    
+    let light_ratio = light_pixels as f32 / total_pixels as f32;
+    let gray_ratio = gray_pixels as f32 / total_pixels as f32;
+    
+    // Gemini watermark has 10-30% light gray pixels
+    if light_ratio > 0.08 && light_ratio < 0.40 && gray_ratio > 0.05 {
+        0.8
+    } else if light_ratio > 0.05 {
+        0.4
+    } else {
+        0.0
+    }
+}
+
+/// Detect text shadow (Gemini text often has subtle shadow for readability)
+fn detect_text_shadow(img: &DynamicImage) -> f32 {
+    let width = img.width();
+    let height = img.height();
+    
+    if width < 2 || height < 2 {
+        return 0.0;
+    }
+    
+    let mut shadow_pairs = 0;
+    let mut total_checks = 0;
+    
+    // Check for light pixel followed by darker pixel (shadow effect)
+    for y in 0..height {
+        for x in 0..width-1 {
+            let p1 = img.get_pixel(x, y);
+            let p2 = img.get_pixel(x + 1, y);
+            
+            let b1 = (p1[0] as u32 + p1[1] as u32 + p1[2] as u32) / 3;
+            let b2 = (p2[0] as u32 + p2[1] as u32 + p2[2] as u32) / 3;
+            
+            // Light pixel followed by darker pixel
+            if b1 > 180 && b2 < b1 - 30 && b2 > 50 {
+                shadow_pairs += 1;
+            }
+            total_checks += 1;
+        }
+    }
+    
+    let shadow_ratio = shadow_pairs as f32 / total_checks as f32;
+    
+    if shadow_ratio > 0.02 && shadow_ratio < 0.15 {
+        0.6
+    } else {
+        0.0
+    }
+}
+
+/// Detect DALL-E watermark (colorful dots pattern in bottom-right)
 fn detect_dalle_watermark(img: &DynamicImage) -> WatermarkDetectionResult {
     let width = img.width();
     let height = img.height();
     
-    // DALL-E 3 uses a pattern of colorful dots in the bottom-right corner
-    let region_size = (width.min(height) as f32 * 0.1).min(100.0) as u32;
+    // DALL-E 3 watermark: colorful dots/squares pattern, typically 80-120px square
+    let region_size = (width.min(height) as f32 * 0.08).max(60.0).min(150.0) as u32;
     let start_x = width.saturating_sub(region_size);
     let start_y = height.saturating_sub(region_size);
     
     let corner_region = img.crop_imm(start_x, start_y, region_size, region_size);
     
-    // Look for colorful dots pattern
-    let mut color_variety = std::collections::HashSet::new();
-    let mut bright_pixels = 0;
-    let mut total_pixels = 0;
+    let mut scores = Vec::new();
     
-    for pixel in corner_region.pixels() {
-        let rgba = pixel.2;
-        let r = rgba[0];
-        let g = rgba[1];
-        let b = rgba[2];
-        
-        // Quantize colors to detect variety
-        let color_key = (r / 32, g / 32, b / 32);
-        color_variety.insert(color_key);
-        
-        // Count bright, saturated pixels
-        let max = r.max(g).max(b);
-        let min = r.min(g).min(b);
-        let saturation = if max > 0 { (max - min) as f32 / max as f32 } else { 0.0 };
-        
-        if saturation > 0.5 && max > 150 {
-            bright_pixels += 1;
-        }
-        total_pixels += 1;
-    }
+    // Strategy 1: Color diversity (DALL-E uses multiple colors)
+    let color_score = detect_dalle_color_diversity(&corner_region);
+    scores.push(color_score);
     
-    let color_variety_score = color_variety.len() as f32 / 64.0; // Max possible quantized colors
-    let bright_ratio = bright_pixels as f32 / total_pixels as f32;
+    // Strategy 2: Dot/square pattern detection
+    let pattern_score = detect_dalle_dot_pattern(&corner_region);
+    scores.push(pattern_score);
     
-    // DALL-E watermark has high color variety and scattered bright pixels
-    let has_dalle_pattern = color_variety_score > 0.3 && bright_ratio > 0.1 && bright_ratio < 0.5;
+    // Strategy 3: High frequency content (dots create high frequency)
+    let frequency_score = detect_high_frequency_pattern(&corner_region);
+    scores.push(frequency_score);
     
-    let confidence = if has_dalle_pattern {
-        0.7 + color_variety_score * 0.2
-    } else {
-        0.0
-    };
+    // Strategy 4: Saturation check (DALL-E dots are highly saturated)
+    let saturation_score = detect_high_saturation(&corner_region);
+    scores.push(saturation_score);
+    
+    let confidence = (color_score * 0.3 + pattern_score * 0.35 + frequency_score * 0.2 + saturation_score * 0.15).min(0.95);
     
     WatermarkDetectionResult {
-        has_watermark: confidence > 0.5,
-        platform: if confidence > 0.5 { Some("dalle".to_string()) } else { None },
+        has_watermark: confidence > 0.4,
+        platform: if confidence > 0.4 { Some("dalle".to_string()) } else { None },
         confidence,
         watermark_region: Some(WatermarkRegion {
             x: start_x,
@@ -235,71 +367,201 @@ fn detect_dalle_watermark(img: &DynamicImage) -> WatermarkDetectionResult {
             width: region_size,
             height: region_size,
         }),
-        detection_method: "dalle_color_pattern".to_string(),
+        detection_method: "dalle_multi_strategy".to_string(),
     }
 }
 
-/// Detect Midjourney watermark (bottom-right identifier)
+/// Detect DALL-E's color diversity
+fn detect_dalle_color_diversity(img: &DynamicImage) -> f32 {
+    let mut color_buckets = std::collections::HashMap::new();
+    let mut total_pixels = 0;
+    
+    for pixel in img.pixels() {
+        let rgba = pixel.2;
+        let r = rgba[0];
+        let g = rgba[1];
+        let b = rgba[2];
+        
+        // Quantize to reduce noise
+        let color_key = (r / 16, g / 16, b / 16);
+        *color_buckets.entry(color_key).or_insert(0) += 1;
+        total_pixels += 1;
+    }
+    
+    let unique_colors = color_buckets.len();
+    let color_diversity = unique_colors as f32 / (total_pixels as f32).sqrt();
+    
+    // DALL-E watermark has high color diversity
+    if color_diversity > 2.0 {
+        (color_diversity / 5.0).min(1.0)
+    } else {
+        0.0
+    }
+}
+
+/// Detect DALL-E's dot pattern
+fn detect_dalle_dot_pattern(img: &DynamicImage) -> f32 {
+    let width = img.width();
+    let height = img.height();
+    
+    if width < 10 || height < 10 {
+        return 0.0;
+    }
+    
+    // Sample grid to detect regular pattern
+    let step = 3u32;
+    let mut pattern_matches = 0;
+    let mut total_checks = 0;
+    
+    for y in (0..height-step).step_by(step as usize) {
+        for x in (0..width-step).step_by(step as usize) {
+            let center = img.get_pixel(x, y);
+            let neighbors = [
+                img.get_pixel((x + step).min(width - 1), y),
+                img.get_pixel(x, (y + step).min(height - 1)),
+            ];
+            
+            let center_brightness = (center[0] as u32 + center[1] as u32 + center[2] as u32) / 3;
+            
+            // Check if center is different from neighbors (dot characteristic)
+            let mut is_dot = true;
+            for neighbor in &neighbors {
+                let neighbor_brightness = (neighbor[0] as u32 + neighbor[1] as u32 + neighbor[2] as u32) / 3;
+                let diff = (center_brightness as i32 - neighbor_brightness as i32).abs();
+                if diff < 30 {
+                    is_dot = false;
+                    break;
+                }
+            }
+            
+            if is_dot && center_brightness > 100 {
+                pattern_matches += 1;
+            }
+            total_checks += 1;
+        }
+    }
+    
+    let pattern_ratio = pattern_matches as f32 / total_checks as f32;
+    
+    if pattern_ratio > 0.15 && pattern_ratio < 0.60 {
+        (pattern_ratio * 2.0).min(1.0)
+    } else {
+        0.0
+    }
+}
+
+/// Detect high frequency content
+fn detect_high_frequency_pattern(img: &DynamicImage) -> f32 {
+    let width = img.width();
+    let height = img.height();
+    
+    if width < 2 || height < 2 {
+        return 0.0;
+    }
+    
+    let mut high_freq_pixels = 0;
+    let mut total_pixels = 0;
+    
+    for y in 0..height-1 {
+        for x in 0..width-1 {
+            let p1 = img.get_pixel(x, y);
+            let p2 = img.get_pixel(x + 1, y);
+            let p3 = img.get_pixel(x, y + 1);
+            
+            let b1 = (p1[0] as i32 + p1[1] as i32 + p1[2] as i32) / 3;
+            let b2 = (p2[0] as i32 + p2[1] as i32 + p2[2] as i32) / 3;
+            let b3 = (p3[0] as i32 + p3[1] as i32 + p3[2] as i32) / 3;
+            
+            let diff = (b1 - b2).abs() + (b1 - b3).abs();
+            
+            if diff > 60 {
+                high_freq_pixels += 1;
+            }
+            total_pixels += 1;
+        }
+    }
+    
+    let freq_ratio = high_freq_pixels as f32 / total_pixels as f32;
+    
+    if freq_ratio > 0.2 && freq_ratio < 0.7 {
+        (freq_ratio * 1.5).min(1.0)
+    } else {
+        0.0
+    }
+}
+
+/// Detect high saturation pixels
+fn detect_high_saturation(img: &DynamicImage) -> f32 {
+    let mut saturated_pixels = 0;
+    let mut total_pixels = 0;
+    
+    for pixel in img.pixels() {
+        let rgba = pixel.2;
+        let r = rgba[0];
+        let g = rgba[1];
+        let b = rgba[2];
+        
+        let max = r.max(g).max(b);
+        let min = r.min(g).min(b);
+        
+        let saturation = if max > 0 {
+            ((max - min) as f32 / max as f32) * 100.0
+        } else {
+            0.0
+        };
+        
+        if saturation > 40.0 && max > 100 {
+            saturated_pixels += 1;
+        }
+        total_pixels += 1;
+    }
+    
+    let saturation_ratio = saturated_pixels as f32 / total_pixels as f32;
+    
+    if saturation_ratio > 0.15 && saturation_ratio < 0.70 {
+        (saturation_ratio * 1.5).min(1.0)
+    } else {
+        0.0
+    }
+}
+
+/// Detect Midjourney watermark (bottom-right text identifier)
 fn detect_midjourney_watermark(img: &DynamicImage) -> WatermarkDetectionResult {
     let width = img.width();
     let height = img.height();
     
-    // Midjourney watermark is typically in the bottom-right corner
-    let region_width = (width as f32 * 0.2).min(250.0) as u32;
-    let region_height = (height as f32 * 0.08).min(80.0) as u32;
+    // Midjourney watermark: text in bottom-right, typically 200-300px wide, 40-80px tall
+    let region_width = (width as f32 * 0.18).max(150.0).min(350.0) as u32;
+    let region_height = (height as f32 * 0.06).max(30.0).min(100.0) as u32;
     
     let start_x = width.saturating_sub(region_width);
     let start_y = height.saturating_sub(region_height);
     
     let corner_region = img.crop_imm(start_x, start_y, region_width, region_height);
     
-    // Midjourney watermarks typically have:
-    // 1. User identifier text
-    // 2. Version info
-    // 3. Usually white or light colored
+    let mut scores = Vec::new();
     
-    let mut light_pixel_rows = vec![0u32; region_height as usize];
+    // Strategy 1: Horizontal text line detection
+    let line_score = detect_mj_text_lines(&corner_region);
+    scores.push(line_score);
     
-    for (_x, y, pixel) in corner_region.pixels() {
-        let brightness = (pixel[0] as f32 + pixel[1] as f32 + pixel[2] as f32) / 3.0;
-        if brightness > 180.0 {
-            light_pixel_rows[y as usize] += 1;
-        }
-    }
+    // Strategy 2: Small text characteristics (MJ uses small font)
+    let small_text_score = detect_small_text(&corner_region);
+    scores.push(small_text_score);
     
-    // Look for horizontal text lines (consecutive rows with light pixels)
-    let mut text_lines = 0;
-    let mut in_line = false;
-    let threshold = region_width as f32 * 0.2;
+    // Strategy 3: White/light text on various backgrounds
+    let text_color_score = detect_mj_text_color(&corner_region);
+    scores.push(text_color_score);
     
-    for count in light_pixel_rows {
-        if count as f32 > threshold {
-            if !in_line {
-                text_lines += 1;
-                in_line = true;
-            }
-        } else {
-            in_line = false;
-        }
-    }
+    // Strategy 4: Look for typical MJ patterns (username, version info)
+    let pattern_score = detect_mj_pattern(&corner_region);
+    scores.push(pattern_score);
     
-    // Midjourney typically has 1-2 text lines
-    let has_mj_pattern = text_lines >= 1 && text_lines <= 3;
-    
-    // Additional check for MJ-specific patterns
-    let has_grid_pattern = check_midjourney_grid(&corner_region);
-    
-    let confidence = if has_mj_pattern && has_grid_pattern {
-        0.8
-    } else if has_mj_pattern {
-        0.6
-    } else {
-        0.0
-    };
+    let confidence = (line_score * 0.3 + small_text_score * 0.25 + text_color_score * 0.25 + pattern_score * 0.2).min(0.95);
     
     WatermarkDetectionResult {
-        has_watermark: confidence > 0.5,
-        platform: if confidence > 0.5 { Some("midjourney".to_string()) } else { None },
+        has_watermark: confidence > 0.4,
+        platform: if confidence > 0.4 { Some("midjourney".to_string()) } else { None },
         confidence,
         watermark_region: Some(WatermarkRegion {
             x: start_x,
@@ -307,45 +569,209 @@ fn detect_midjourney_watermark(img: &DynamicImage) -> WatermarkDetectionResult {
             width: region_width,
             height: region_height,
         }),
-        detection_method: "midjourney_text_analysis".to_string(),
+        detection_method: "midjourney_multi_strategy".to_string(),
     }
 }
 
-/// Check for Midjourney grid pattern (characteristic of MJ outputs)
-fn check_midjourney_grid(img: &DynamicImage) -> bool {
-    // Midjourney images sometimes have a subtle grid pattern
-    // This is a simplified check
+/// Detect Midjourney text lines
+fn detect_mj_text_lines(img: &DynamicImage) -> f32 {
     let width = img.width();
     let height = img.height();
     
-    if width < 10 || height < 10 {
-        return false;
+    let mut row_brightness = vec![0u32; height as usize];
+    
+    for y in 0..height {
+        let mut sum = 0u32;
+        for x in 0..width {
+            let pixel = img.get_pixel(x, y);
+            sum += (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32) / 3;
+        }
+        row_brightness[y as usize] = sum / width;
     }
     
-    // Sample pixels at regular intervals
-    let step: u32 = 5;
-    let mut pattern_count = 0;
-    let mut total_checks = 0;
+    // Find text lines (bright rows)
+    let avg_brightness: u32 = row_brightness.iter().sum::<u32>() / height;
+    let mut in_line = false;
+    let mut line_heights = Vec::new();
+    let mut current_line_height = 0;
     
-    for y in (0..height.saturating_sub(step)).step_by(step as usize) {
-        for x in (0..width.saturating_sub(step)).step_by(step as usize) {
-            let p1 = img.get_pixel(x, y);
-            let p2 = img.get_pixel(x + step, y + step);
-            
-            // Check if diagonal pixels are similar (grid characteristic)
-            let diff = (p1[0] as i32 - p2[0] as i32).abs()
-                + (p1[1] as i32 - p2[1] as i32).abs()
-                + (p1[2] as i32 - p2[2] as i32).abs();
-            
-            if diff < 30 {
-                pattern_count += 1;
+    for brightness in &row_brightness {
+        if *brightness > avg_brightness + 15 {
+            if !in_line {
+                in_line = true;
             }
-            total_checks += 1;
+            current_line_height += 1;
+        } else {
+            if in_line && current_line_height > 0 {
+                line_heights.push(current_line_height);
+                current_line_height = 0;
+            }
+            in_line = false;
         }
     }
     
-    let pattern_ratio = pattern_count as f32 / total_checks as f32;
-    pattern_ratio > 0.4
+    // MJ typically has 1-2 text lines, each 8-20 pixels tall
+    let valid_lines = line_heights.iter().filter(|&&h| h >= 6 && h <= 25).count();
+    
+    if valid_lines >= 1 && valid_lines <= 3 {
+        0.8
+    } else if valid_lines > 0 {
+        0.4
+    } else {
+        0.0
+    }
+}
+
+/// Detect small text characteristics
+fn detect_small_text(img: &DynamicImage) -> f32 {
+    let width = img.width();
+    let height = img.height();
+    
+    if width < 5 || height < 5 {
+        return 0.0;
+    }
+    
+    // Look for small clusters of bright pixels (small text)
+    let mut small_clusters = 0;
+    let mut checked = vec![vec![false; width as usize]; height as usize];
+    
+    for y in 0..height {
+        for x in 0..width {
+            if checked[y as usize][x as usize] {
+                continue;
+            }
+            
+            let pixel = img.get_pixel(x, y);
+            let brightness = (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32) / 3;
+            
+            if brightness > 160 {
+                // Found bright pixel, check cluster size
+                let cluster_size = flood_fill_count(img, &mut checked, x, y, 160);
+                
+                // Small text clusters are typically 5-50 pixels
+                if cluster_size >= 5 && cluster_size <= 60 {
+                    small_clusters += 1;
+                }
+            }
+        }
+    }
+    
+    // MJ watermark should have multiple small text clusters
+    if small_clusters >= 5 && small_clusters <= 50 {
+        (small_clusters as f32 / 30.0).min(1.0)
+    } else {
+        0.0
+    }
+}
+
+/// Simple flood fill to count cluster size
+fn flood_fill_count(img: &DynamicImage, checked: &mut Vec<Vec<bool>>, start_x: u32, start_y: u32, threshold: u32) -> u32 {
+    let width = img.width();
+    let height = img.height();
+    let mut count = 0;
+    let mut stack = vec![(start_x, start_y)];
+    
+    while let Some((x, y)) = stack.pop() {
+        if x >= width || y >= height || checked[y as usize][x as usize] {
+            continue;
+        }
+        
+        let pixel = img.get_pixel(x, y);
+        let brightness = (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32) / 3;
+        
+        if brightness < threshold {
+            continue;
+        }
+        
+        checked[y as usize][x as usize] = true;
+        count += 1;
+        
+        // Limit cluster size check to avoid infinite loops
+        if count > 100 {
+            return count;
+        }
+        
+        // Check 4-connected neighbors
+        if x > 0 { stack.push((x - 1, y)); }
+        if x < width - 1 { stack.push((x + 1, y)); }
+        if y > 0 { stack.push((x, y - 1)); }
+        if y < height - 1 { stack.push((x, y + 1)); }
+    }
+    
+    count
+}
+
+/// Detect Midjourney text color (typically white/light)
+fn detect_mj_text_color(img: &DynamicImage) -> f32 {
+    let mut light_pixels = 0;
+    let mut total_pixels = 0;
+    
+    for pixel in img.pixels() {
+        let rgba = pixel.2;
+        let brightness = (rgba[0] as u32 + rgba[1] as u32 + rgba[2] as u32) / 3;
+        
+        if brightness > 180 {
+            light_pixels += 1;
+        }
+        total_pixels += 1;
+    }
+    
+    let light_ratio = light_pixels as f32 / total_pixels as f32;
+    
+    // MJ watermark has 10-35% light pixels
+    if light_ratio > 0.08 && light_ratio < 0.40 {
+        0.7
+    } else if light_ratio > 0.05 {
+        0.3
+    } else {
+        0.0
+    }
+}
+
+/// Detect Midjourney-specific patterns
+fn detect_mj_pattern(img: &DynamicImage) -> f32 {
+    let width = img.width();
+    let height = img.height();
+    
+    // Look for character-like patterns (letters, numbers)
+    let mut char_patterns = 0;
+    let step = 8u32;
+    
+    for y in (0..height.saturating_sub(step)).step_by(step as usize) {
+        for x in (0..width.saturating_sub(step)).step_by(step as usize) {
+            // Check if this region has text-like characteristics
+            let mut bright_count = 0;
+            let mut total = 0;
+            
+            for dy in 0..step {
+                for dx in 0..step {
+                    let px = (x + dx).min(width - 1);
+                    let py = (y + dy).min(height - 1);
+                    let pixel = img.get_pixel(px, py);
+                    let brightness = (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32) / 3;
+                    
+                    if brightness > 170 {
+                        bright_count += 1;
+                    }
+                    total += 1;
+                }
+            }
+            
+            let bright_ratio = bright_count as f32 / total as f32;
+            
+            // Character-like regions have 20-70% bright pixels
+            if bright_ratio > 0.2 && bright_ratio < 0.7 {
+                char_patterns += 1;
+            }
+        }
+    }
+    
+    // Should have multiple character patterns
+    if char_patterns >= 3 && char_patterns <= 20 {
+        (char_patterns as f32 / 15.0).min(1.0)
+    } else {
+        0.0
+    }
 }
 
 /// Batch detect watermarks for multiple images

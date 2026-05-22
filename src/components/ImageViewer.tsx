@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useImageStore, useUIStore, type ImageWithRelations } from "@/stores";
+import { useImageStore, useUIStore } from "@/stores";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,12 @@ export default function ImageViewer() {
   const image = currentImages[currentIndex];
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [imageTimestamp, setImageTimestamp] = useState(Date.now());
+
+  // Update timestamp when image changes
+  useEffect(() => {
+    setImageTimestamp(Date.now());
+  }, [viewingImageId]);
 
   // Navigate to previous/next image
   const goToPrevious = () => {
@@ -214,7 +220,7 @@ export default function ImageViewer() {
 
             {/* Image */}
             <img
-              src={convertFileSrc(image.absolute_path)}
+              src={`${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`}
               alt={image.filename}
               className="max-w-full max-h-full object-contain cursor-zoom-in"
               style={{ maxHeight: "calc(95vh - 120px)" }}

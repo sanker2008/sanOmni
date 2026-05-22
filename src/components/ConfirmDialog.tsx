@@ -54,10 +54,7 @@ export default function ConfirmDialog({
           </Button>
           <Button
             variant={variant === "destructive" ? "destructive" : "default"}
-            onClick={() => {
-              onConfirm();
-              onCancel();
-            }}
+            onClick={onConfirm}
           >
             {confirmText}
           </Button>

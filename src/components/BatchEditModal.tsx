@@ -29,9 +29,10 @@ interface BatchEditModalProps {
 
 type ModelAction = "replace" | "append" | "none";
 type TagAction = "append" | "replace" | "none";
+type WatermarkAction = "none" | "no_watermark" | "has_watermark";
 
 export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
-  const { inboxImages, selectedImages, updateImage } = useImageStore();
+  const { inboxImages, archivedImages, selectedImages, updateImage } = useImageStore();
   const { vendors } = useVendorStore();
 
   // Model settings
@@ -43,6 +44,10 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
   const [tagAction, setTagAction] = useState<TagAction>("none");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+
+  // Watermark settings
+  const [watermarkAction, setWatermarkAction] = useState<WatermarkAction>("none");
+  const [watermarkPlatform, setWatermarkPlatform] = useState<string>("unknown");
 
   const [isSaving, setIsSaving] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -70,7 +75,7 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
   };
 
   const handleSave = async () => {
-    if (modelAction === "none" && tagAction === "none") return;
+    if (modelAction === "none" && tagAction === "none" && watermarkAction === "none") return;
 
     setIsSaving(true);
     setResult(null);
@@ -79,7 +84,8 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
     let failCount = 0;
 
     for (const imageId of selectedImages) {
-      const image = inboxImages.find((img) => img.id === imageId);
+      const image = inboxImages.find((img) => img.id === imageId) || 
+                    archivedImages.find((img) => img.id === imageId);
       if (!image) continue;
 
       try {
@@ -114,11 +120,23 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
           finalTags = image.tags.map((t) => t.name);
         }
 
+        let finalHasWatermark: boolean | undefined;
+        let finalWatermarkPlatform: string | undefined;
+
+        if (watermarkAction === "no_watermark") {
+          finalHasWatermark = false;
+        } else if (watermarkAction === "has_watermark") {
+          finalHasWatermark = true;
+          finalWatermarkPlatform = watermarkPlatform;
+        }
+
         const updated = await imageApi.update({
           image_id: imageId,
           model_ids: finalModelIds,
           primary_model_id: finalPrimaryModel,
           tags: finalTags,
+          has_watermark: finalHasWatermark,
+          watermark_platform: finalWatermarkPlatform,
         });
 
         updateImage(imageId, updated);
@@ -148,11 +166,13 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
     setTagAction("none");
     setTags([]);
     setTagInput("");
+    setWatermarkAction("none");
+    setWatermarkPlatform("unknown");
     setResult(null);
     onClose();
   };
 
-  const canSave = (modelAction !== "none" || tagAction !== "none") && !isSaving;
+  const canSave = (modelAction !== "none" || tagAction !== "none" || watermarkAction !== "none") && !isSaving;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
@@ -292,6 +312,47 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* ── Watermark ── */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">水印</label>
+              <div className="flex items-center gap-1 text-xs">
+                {(["none", "no_watermark", "has_watermark"] as WatermarkAction[]).map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => setWatermarkAction(a)}
+                    className={cn(
+                      "px-2 py-0.5 rounded border transition-colors",
+                      watermarkAction === a
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-input hover:bg-muted"
+                    )}
+                  >
+                    {{ none: "不修改", no_watermark: "设为无水印", has_watermark: "设为有水印" }[a]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {watermarkAction === "has_watermark" && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">平台:</label>
+                <select
+                  value={watermarkPlatform}
+                  onChange={(e) => setWatermarkPlatform(e.target.value)}
+                  className="text-xs border rounded p-1 bg-background"
+                >
+                  <option value="unknown">未知</option>
+                  <option value="gemini">gemini</option>
+                  <option value="dalle">dalle</option>
+                  <option value="midjourney">midjourney</option>
+                </select>
               </div>
             )}
           </div>

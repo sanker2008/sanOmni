@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "sanMediaBox - Manage AI-generated images"
 authors = ["you"]
 edition = "2021"
+default-run = "sanmediabox"
 
 [lib]
 name = "sanmediabox_lib"

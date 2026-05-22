@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, Image as ImageIcon, FolderOpen, Loader2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { stat } from "@tauri-apps/plugin-fs";
+import { toast } from "@/hooks/useToast";
 
 interface DropZoneProps {
   onImportComplete?: () => void;
@@ -207,7 +208,11 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
           console.log("File copied successfully");
         } catch (error) {
           console.error("Failed to copy file:", error);
-          alert(`复制文件失败: ${fileName}\n${error}`);
+          toast({
+            title: "✗ 复制文件失败",
+            description: `${fileName}: ${String(error)}`,
+            variant: "destructive",
+          });
           continue; // Skip this file and continue with next
         }
 
@@ -232,13 +237,21 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
           addImage(result);
         } catch (error) {
           console.error("Failed to import image:", error);
-          alert(`导入图片失败: ${fileName}\n${error}`);
+          toast({
+            title: "✗ 导入图片失败",
+            description: `${fileName}: ${String(error)}`,
+            variant: "destructive",
+          });
         }
       }
       onImportComplete?.();
     } catch (error) {
       console.error("Failed to import files:", error);
-      alert(`导入失败: ${error}`);
+      toast({
+        title: "✗ 导入失败",
+        description: String(error),
+        variant: "destructive",
+      });
     } finally {
       setIsImporting(false);
     }

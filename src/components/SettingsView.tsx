@@ -9,6 +9,9 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus, FolderOpen, AlertTriangle, Edit2, Trash2, ChevronDown, ChevronRight, Save, ScanLine, Loader2 } from "lucide-react";
+import { toast } from "@/hooks/useToast";
+import TrashView from "./TrashView";
+import ConfirmDialog from "./ConfirmDialog";
 
 // 默认设置
 const DEFAULT_SETTINGS: Record<string, any> = {
@@ -16,6 +19,7 @@ const DEFAULT_SETTINGS: Record<string, any> = {
   namingTemplate: "{vendor}-{model}-{date}-{index}",
   customInboxPath: "",  // 自定义待整理路径（留空使用默认）
   customArchivedPath: "",  // 自定义 archived 路径（留空使用默认）
+  showFullImage: false,  // 列表中是否显示完整图片（不裁剪）
   lightThemeColor: "#2563eb",
   darkThemeColor: "#60a5fa",
 
@@ -43,7 +47,7 @@ const SHORTCUTS = [
   { key: "Ctrl + ,", description: "打开设置" },
 ];
 
-type SettingsTab = "general" | "watermark" | "monitor" | "vendors" | "shortcuts";
+type SettingsTab = "general" | "watermark" | "monitor" | "vendors" | "shortcuts" | "trash";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "通用设置" },
@@ -51,6 +55,7 @@ const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "monitor", label: "监控设置" },
   { key: "vendors", label: "厂商管理" },
   { key: "shortcuts", label: "快捷键" },
+  { key: "trash", label: "回收站" },
 ];
 
 function SettingsView() {
@@ -89,6 +94,7 @@ function SettingsView() {
   const [vendorForm, setVendorForm] = useState({ name: "", path: "" });
   const [modelForm, setModelForm] = useState({ name: "", path: "", description: "" });
   const [addingModelForVendor, setAddingModelForVendor] = useState<string | null>(null);
+  const [resetDbStep, setResetDbStep] = useState(0);
 
   // 初始化本地设置
   useEffect(() => {
@@ -189,6 +195,7 @@ function SettingsView() {
   if (!settingsOpen) return null;
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* 遮罩层 */}
       <div className="absolute inset-0 bg-black/50" onClick={closeSettings} />
@@ -281,6 +288,30 @@ function SettingsView() {
                 </CardContent>
               </Card>
 
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">图片显示模式</CardTitle>
+                  <CardDescription>
+                    控制网格列表中图片的显示方式
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">显示完整图片</p>
+                      <p className="text-xs text-muted-foreground">
+                        开启后图片不会被裁剪，将完整显示在卡片中；关闭则以正方形裁剪填充
+                      </p>
+                    </div>
+                    <Switch
+                      checked={localSettings.showFullImage ?? false}
+                      onCheckedChange={(checked) =>
+                        handleLocalUpdate("showFullImage", checked)
+                      }
+                    />
+                  </div>
+                </CardContent>
+              </Card>
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">命名模板</CardTitle>
@@ -418,7 +449,11 @@ function SettingsView() {
                           setInboxImages(inbox);
                         }
                       } catch (error) {
-                        alert(`扫描失败: ${error}`);
+                        toast({
+                          title: "✗ 扫描失败",
+                          description: String(error),
+                          variant: "destructive",
+                        });
                       } finally {
                         setIsCleaningInbox(false);
                       }
@@ -509,7 +544,11 @@ function SettingsView() {
                           setArchivedImages(archived);
                         }
                       } catch (error) {
-                        alert(`扫描失败: ${error}`);
+                        toast({
+                          title: "✗ 扫描失败",
+                          description: String(error),
+                          variant: "destructive",
+                        });
                       } finally {
                         setIsScanning(false);
                       }
@@ -572,17 +611,7 @@ function SettingsView() {
                   <Button 
                     variant="destructive" 
                     size="sm"
-                    onClick={async () => {
-                      if (confirm("确定要重置数据库吗？这将删除所有图片记录、标签和设置！\n\n注意：图片文件本身不会被删除。")) {
-                        try {
-                          await settingsApi.resetDatabase();
-                          alert("数据库已重置，请重启应用。");
-                          window.location.reload();
-                        } catch (error) {
-                          alert(`重置失败: ${error}`);
-                        }
-                      }
-                    }}
+                    onClick={() => setResetDbStep(1)}
                   >
                     重置数据库
                   </Button>
@@ -880,7 +909,11 @@ function SettingsView() {
                                       setVendors(updatedVendors);
                                       setEditingVendor(null);
                                     } catch (error) {
-                                      alert(`更新失败: ${error}`);
+                                      toast({
+                                        title: "✗ 更新失败",
+                                        description: String(error),
+                                        variant: "destructive",
+                                      });
                                     }
                                   }}
                                 >
@@ -900,34 +933,42 @@ function SettingsView() {
                                 <Badge variant="secondary" className="text-xs">
                                   {vendor.models.length} 个模型
                                 </Badge>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setEditingVendor(vendor.id);
-                                    setVendorForm({ name: vendor.name, path: vendor.path });
-                                  }}
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={async () => {
-                                    if (confirm(`确定要删除厂商 "${vendor.name}" 吗？`)) {
-                                      try {
-                                        const { vendorApi } = await import("@/services/tauri");
-                                        await vendorApi.delete(vendor.id);
-                                        const updatedVendors = await vendorApi.getAll();
-                                        setVendors(updatedVendors);
-                                      } catch (error) {
-                                        alert(`删除失败: ${error}`);
-                                      }
-                                    }
-                                  }}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
+                                {vendor.id !== "unknown" && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        setEditingVendor(vendor.id);
+                                        setVendorForm({ name: vendor.name, path: vendor.path });
+                                      }}
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={async () => {
+                                        if (confirm(`确定要删除厂商 "${vendor.name}" 吗？`)) {
+                                          try {
+                                            const { vendorApi } = await import("@/services/tauri");
+                                            await vendorApi.delete(vendor.id);
+                                            const updatedVendors = await vendorApi.getAll();
+                                            setVendors(updatedVendors);
+                                          } catch (error) {
+                                            toast({
+                                              title: "✗ 删除失败",
+                                              description: String(error),
+                                              variant: "destructive",
+                                            });
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </>
+                                )}
                               </>
                             )}
                           </div>
@@ -977,7 +1018,11 @@ function SettingsView() {
                                               setVendors(updatedVendors);
                                               setEditingModel(null);
                                             } catch (error) {
-                                              alert(`更新失败: ${error}`);
+                                              toast({
+                                                title: "✗ 更新失败",
+                                                description: String(error),
+                                                variant: "destructive",
+                                              });
                                             }
                                           }}
                                         >
@@ -994,38 +1039,46 @@ function SettingsView() {
                                     ) : (
                                       <>
                                         <span className="text-sm flex-1">{model.name}</span>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => {
-                                            setEditingModel(model.id);
-                                            setModelForm({
-                                              name: model.name,
-                                              path: model.path,
-                                              description: model.description || "",
-                                            });
-                                          }}
-                                        >
-                                          <Edit2 className="w-3 h-3" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={async () => {
-                                            if (confirm(`确定要删除模型 "${model.name}" 吗？`)) {
-                                              try {
-                                                const { vendorApi } = await import("@/services/tauri");
-                                                await vendorApi.deleteModel(model.id);
-                                                const updatedVendors = await vendorApi.getAll();
-                                                setVendors(updatedVendors);
-                                              } catch (error) {
-                                                alert(`删除失败: ${error}`);
-                                              }
-                                            }
-                                          }}
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </Button>
+                                        {model.id !== "unknown" && (
+                                          <>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={() => {
+                                                setEditingModel(model.id);
+                                                setModelForm({
+                                                  name: model.name,
+                                                  path: model.path,
+                                                  description: model.description || "",
+                                                });
+                                              }}
+                                            >
+                                              <Edit2 className="w-3 h-3" />
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={async () => {
+                                                if (confirm(`确定要删除模型 "${model.name}" 吗？`)) {
+                                                  try {
+                                                    const { vendorApi } = await import("@/services/tauri");
+                                                    await vendorApi.deleteModel(model.id);
+                                                    const updatedVendors = await vendorApi.getAll();
+                                                    setVendors(updatedVendors);
+                                                  } catch (error) {
+                                                    toast({
+                                                      title: "✗ 删除失败",
+                                                      description: String(error),
+                                                      variant: "destructive",
+                                                    });
+                                                  }
+                                                }
+                                              }}
+                                            >
+                                              <Trash2 className="w-3 h-3" />
+                                            </Button>
+                                          </>
+                                        )}
                                       </>
                                     )}
                                   </div>
@@ -1068,7 +1121,11 @@ function SettingsView() {
                                         setAddingModelForVendor(null);
                                         setModelForm({ name: "", path: "", description: "" });
                                       } catch (error) {
-                                        alert(`添加失败: ${error}`);
+                                        toast({
+                                          title: "✗ 添加失败",
+                                          description: String(error),
+                                          variant: "destructive",
+                                        });
                                       }
                                     }}
                                   >
@@ -1136,7 +1193,11 @@ function SettingsView() {
                               setEditingVendor(null);
                               setVendorForm({ name: "", path: "" });
                             } catch (error) {
-                              alert(`添加失败: ${error}`);
+                              toast({
+                                title: "✗ 添加失败",
+                                description: String(error),
+                                variant: "destructive",
+                              });
                             }
                           }}
                         >
@@ -1203,6 +1264,13 @@ function SettingsView() {
               </Card>
             </div>
           )}
+
+          {/* 回收站 */}
+          {activeSettingsTab === "trash" && (
+            <div className="space-y-6">
+              <TrashView />
+            </div>
+          )}
         </div>
 
         {/* 底部 */}
@@ -1223,6 +1291,47 @@ function SettingsView() {
         </div>
       </div>
     </div>
+
+    {/* Reset Database Confirmation - Step 1 */}
+    <ConfirmDialog
+      open={resetDbStep === 1}
+      title="确认重置数据库"
+      description="确定要重置数据库吗？这将删除所有图片记录、标签和设置！注意：图片文件本身不会被删除。"
+      confirmText="继续"
+      cancelText="取消"
+      variant="destructive"
+      onConfirm={() => setResetDbStep(2)}
+      onCancel={() => setResetDbStep(0)}
+    />
+
+    {/* Reset Database Confirmation - Step 2 */}
+    <ConfirmDialog
+      open={resetDbStep === 2}
+      title="⚠️ 最终确认"
+      description="【警告】重置数据库是不可逆的！所有归档记录、待整理图片关联和系统设置都会被彻底删除！您真的非常确定要重置数据库吗？"
+      confirmText="确认重置"
+      cancelText="取消"
+      variant="destructive"
+      onConfirm={async () => {
+        setResetDbStep(0);
+        try {
+          await settingsApi.resetDatabase();
+          toast({
+            title: "✓ 数据库已重置",
+            description: "应用将重新加载",
+          });
+          setTimeout(() => window.location.reload(), 1000);
+        } catch (error) {
+          toast({
+            title: "✗ 重置失败",
+            description: String(error),
+            variant: "destructive",
+          });
+        }
+      }}
+      onCancel={() => setResetDbStep(0)}
+    />
+    </>
   );
 }
 

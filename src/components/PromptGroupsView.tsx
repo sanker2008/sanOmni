@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check } from "lucide-react";
+import { toast } from "@/hooks/useToast";
 
 interface PromptGroupWithImages {
   group: PromptGroup;
@@ -146,7 +147,10 @@ export function PromptGroupsView() {
   const savePrompt = async () => {
     const prompt = form.prompt.trim();
     if (!prompt) {
-      alert("Prompt 不能为空");
+      toast({
+        title: "✗ Prompt 不能为空",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -192,7 +196,11 @@ export function PromptGroupsView() {
       }
     } catch (error) {
       console.error("保存 Prompt 失败:", error);
-      alert("保存失败");
+      toast({
+        title: "✗ 保存失败",
+        description: String(error),
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +220,11 @@ export function PromptGroupsView() {
       await loadGroups();
     } catch (error) {
       console.error("删除 Prompt 失败:", error);
-      alert("删除失败");
+      toast({
+        title: "✗ 删除失败",
+        description: String(error),
+        variant: "destructive",
+      });
     }
   };
 
@@ -239,7 +251,11 @@ export function PromptGroupsView() {
       }, 1500);
     } catch (error) {
       console.error("复制完整 Prompt 失败:", error);
-      alert("复制失败");
+      toast({
+        title: "✗ 复制失败",
+        description: String(error),
+        variant: "destructive",
+      });
     }
   };
 

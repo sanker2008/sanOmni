@@ -47,6 +47,8 @@ export default function QuickEditModal() {
   const [isSavingAndArchiving, setIsSavingAndArchiving] = useState(false);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [hasWatermark, setHasWatermark] = useState<boolean>(false);
+  const [watermarkPlatform, setWatermarkPlatform] = useState<string>("");
 
   const image =
     inboxImages.find((img) => img.id === editingImageId) ||
@@ -60,6 +62,8 @@ export default function QuickEditModal() {
     setSelectedModels(image.models.map((model) => model.id));
     setPrimaryModel(image.models.find((model) => model.is_primary)?.id || null);
     setTags(image.tags.map((tag) => tag.name));
+    setHasWatermark(image.has_watermark);
+    setWatermarkPlatform(image.watermark_platform || "");
     setNewPromptText("");
     setNewNegativePrompt("");
     setNewPromptDescription("");
@@ -108,6 +112,8 @@ export default function QuickEditModal() {
       model_ids: selectedModels,
       primary_model_id: primaryModel || undefined,
       tags,
+      has_watermark: hasWatermark,
+      watermark_platform: watermarkPlatform || undefined,
     });
 
     await promptApi.setForImage(image.id, nextPromptGroupIds);
@@ -219,11 +225,11 @@ export default function QuickEditModal() {
 
         <div className="flex flex-1 gap-4 overflow-hidden">
           <div className="w-1/3 flex-shrink-0">
-            <div className="aspect-square bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+            <div className="bg-muted rounded-lg overflow-hidden flex items-center justify-center max-h-[50vh]">
               <img
                 src={convertFileSrc(image.absolute_path)}
                 alt={image.filename}
-                className="w-full h-full object-cover"
+                className="max-w-full max-h-[50vh] object-contain"
                 onLoad={(e) => {
                   const target = e.currentTarget;
                   setLoadedDimensions({
@@ -426,14 +432,48 @@ export default function QuickEditModal() {
                 <label className="text-sm font-medium">水印</label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="watermark" checked={!image.has_watermark} readOnly className="w-4 h-4" />
+                    <input 
+                      type="radio" 
+                      name="watermark" 
+                      checked={!hasWatermark} 
+                      onChange={() => {
+                        setHasWatermark(false);
+                      }} 
+                      className="w-4 h-4" 
+                    />
                     <span className="text-sm">无水印</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="watermark" checked={image.has_watermark} readOnly className="w-4 h-4" />
-                    <span className="text-sm">有水印 ({image.watermark_platform || "未知"})</span>
+                    <input 
+                      type="radio" 
+                      name="watermark" 
+                      checked={hasWatermark} 
+                      onChange={() => {
+                        setHasWatermark(true);
+                        if (!watermarkPlatform) {
+                          setWatermarkPlatform("unknown");
+                        }
+                      }} 
+                      className="w-4 h-4" 
+                    />
+                    <span className="text-sm">有水印</span>
                   </label>
                 </div>
+                {hasWatermark && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="text-xs text-muted-foreground">平台:</label>
+                    <select
+                      value={watermarkPlatform}
+                      onChange={(e) => setWatermarkPlatform(e.target.value)}
+                      className="text-xs border rounded p-1 bg-background"
+                    >
+                      <option value="unknown">未知</option>
+                      <option value="gemini">gemini</option>
+                      <option value="dalle">dalle</option>
+                      <option value="midjourney">midjourney</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
           </ScrollArea>
