@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
-import { imageApi, watermarkApi } from "@/services/tauri";
+import { imageApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,6 @@ import {
   LayoutGrid,
   List,
   Filter,
-  Scan,
   Trash2,
   Check,
   AlertCircle,
@@ -54,7 +53,6 @@ export default function ArchivedView() {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [unarchiveResult, setUnarchiveResult] = useState<string | null>(null);
-  const [isDetecting, setIsDetecting] = useState(false);
   const [showBatchEdit, setShowBatchEdit] = useState(false);
   const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
   const [batchDeleteStep, setBatchDeleteStep] = useState(0);
@@ -292,62 +290,6 @@ export default function ArchivedView() {
         description: String(error),
         variant: "destructive",
       });
-    }
-  };
-
-  const handleBatchDetect = async () => {
-    if (selectedImages.length === 0) return;
-
-    setIsDetecting(true);
-
-    try {
-      const selectedImagePaths = archivedImages
-        .filter((img) => selectedImages.includes(img.id))
-        .map((img) => img.absolute_path);
-
-      const results = await watermarkApi.batchDetect(selectedImagePaths);
-
-      let watermarkCount = 0;
-      const detectedPlatforms: { [key: string]: number } = {};
-      
-      results.forEach((result, index) => {
-        if (result.has_watermark) {
-          watermarkCount++;
-          const platform = result.platform || "未知";
-          detectedPlatforms[platform] = (detectedPlatforms[platform] || 0) + 1;
-          console.log(
-            `Image ${index + 1}: Watermark detected - ${result.platform} (${(result.confidence * 100).toFixed(0)}%)`
-          );
-        }
-      });
-
-      // 显示汇总结果
-      if (watermarkCount > 0) {
-        const platformSummary = Object.entries(detectedPlatforms)
-          .map(([platform, count]) => `${platform}: ${count}`)
-          .join(", ");
-        
-        toast({
-          title: `✓ 批量检测完成`,
-          description: `发现 ${watermarkCount}/${results.length} 张图片有水印\n${platformSummary}`,
-          variant: "default",
-        });
-      } else {
-        toast({
-          title: "✓ 批量检测完成",
-          description: `检测了 ${results.length} 张图片，未发现水印`,
-          variant: "success",
-        });
-      }
-    } catch (error) {
-      console.error("Batch detection failed:", error);
-      toast({
-        title: "✗ 批量检测失败",
-        description: String(error),
-        variant: "destructive",
-      });
-    } finally {
-      setIsDetecting(false);
     }
   };
 
@@ -691,20 +633,7 @@ export default function ArchivedView() {
                     )}
                     标记有水印
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1 h-7"
-                    onClick={handleBatchDetect}
-                    disabled={isDetecting}
-                  >
-                    {isDetecting ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Scan className="w-3 h-3" />
-                    )}
-                    批量检测水印
-                  </Button>
+
                   <Button
                     variant="ghost"
                     size="sm"

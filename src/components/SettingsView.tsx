@@ -23,9 +23,7 @@ const DEFAULT_SETTINGS: Record<string, any> = {
   lightThemeColor: "#2563eb",
   darkThemeColor: "#60a5fa",
 
-  // 水印设置
-  watermarkAutoDetect: true,
-  watermarkConfidenceThreshold: 0.7,
+
 
   // 监控设置
   watchFolders: [],
@@ -47,11 +45,11 @@ const SHORTCUTS = [
   { key: "Ctrl + ,", description: "打开设置" },
 ];
 
-type SettingsTab = "general" | "watermark" | "monitor" | "vendors" | "shortcuts" | "trash";
+type SettingsTab = "general" | "monitor" | "vendors" | "shortcuts" | "trash";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "通用设置" },
-  { key: "watermark", label: "水印设置" },
+
   { key: "monitor", label: "监控设置" },
   { key: "vendors", label: "厂商管理" },
   { key: "shortcuts", label: "快捷键" },
@@ -620,70 +618,6 @@ function SettingsView() {
             </div>
           )}
 
-          {/* 水印设置 */}
-          {activeSettingsTab === "watermark" && (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">自动检测水印</CardTitle>
-                  <CardDescription>
-                    导入图片时自动检测是否包含水印
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">启用自动检测</p>
-                      <p className="text-xs text-muted-foreground">
-                        开启后将在导入时自动运行水印检测
-                      </p>
-                    </div>
-                    <Switch
-                      checked={localSettings.watermarkAutoDetect ?? true}
-                      onCheckedChange={(checked) =>
-                        handleLocalUpdate("watermarkAutoDetect", checked)
-                      }
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">检测置信度阈值</CardTitle>
-                  <CardDescription>
-                    水印检测的置信度阈值，低于此值的结果将被忽略
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <Slider
-                      value={[
-                        (localSettings.watermarkConfidenceThreshold ?? 0.7) * 100,
-                      ]}
-                      onValueChange={([val]) =>
-                        handleLocalUpdate(
-                          "watermarkConfidenceThreshold",
-                          Math.round(val) / 100
-                        )
-                      }
-                      min={0}
-                      max={100}
-                      step={5}
-                      className="w-full"
-                    />
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">宽松 (0%)</span>
-                      <Badge variant="secondary">
-                        {Math.round((localSettings.watermarkConfidenceThreshold ?? 0.7) * 100)}%
-                      </Badge>
-                      <span className="text-muted-foreground">严格 (100%)</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
 
           {/* 监控设置 */}
           {activeSettingsTab === "monitor" && (

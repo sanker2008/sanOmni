@@ -13,7 +13,6 @@ import {
   Edit,
   Archive,
   Image as ImageIcon,
-  Scan,
   Loader2,
   Eraser,
   Trash2,
@@ -36,31 +35,23 @@ import { watermarkApi, geminiWatermarkApi, imageApi } from "@/services/tauri";
 
 interface ImageCardProps {
   image: ImageWithRelations;
-  onWatermarkDetected?: (imageId: string, result: { has_watermark: boolean; platform?: string }) => void;
   onWatermarkRemoved?: (imageId: string, outputPath: string) => void;
   onDelete?: (imageId: string) => void;
   onArchive?: (imageId: string) => void;
   listMode?: boolean;
 }
 
-export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemoved, onDelete, onArchive, listMode = false }: ImageCardProps) {
+export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchive, listMode = false }: ImageCardProps) {
   const { selectedImages, selectImage, deselectImage } = useImageStore();
   const { openQuickEdit, openImageViewer, settings } = useUIStore();
   const showFullImage = settings.showFullImage ?? false;
   const showMenu = false;
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const [detecting, setDetecting] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [clickTimeout, setClickTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const [watermarkResult, setWatermarkResult] = useState<{
-    has_watermark: boolean;
-    platform?: string;
-    confidence: number;
-    watermark_region?: { x: number; y: number; width: number; height: number };
-  } | null>(null);
   const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
   const [imageTimestamp, setImageTimestamp] = useState(Date.now());
 
@@ -222,54 +213,6 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
     openImageViewer(image.id);
   };
 
-  const handleDetectWatermark = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    console.log("Watermark detection button clicked for:", image.filename);
-    if (detecting) {
-      console.log("Already detecting, skipping...");
-      return;
-    }
-
-    setDetecting(true);
-    console.log("Starting watermark detection for:", image.absolute_path);
-    try {
-      const result = await watermarkApi.detect(image.absolute_path);
-      console.log("Watermark detection result:", result);
-      setWatermarkResult(result);
-      onWatermarkDetected?.(image.id, {
-        has_watermark: result.has_watermark,
-        platform: result.platform,
-      });
-      
-      // 显示检测结果反馈
-      if (result.has_watermark) {
-        const platformName = result.platform || "未知平台";
-        const confidence = (result.confidence * 100).toFixed(0);
-        toast({
-          title: "✓ 检测到水印",
-          description: `平台: ${platformName} | 置信度: ${confidence}%`,
-          variant: "default",
-        });
-      } else {
-        toast({
-          title: "✓ 未检测到水印",
-          description: "该图片看起来没有水印",
-          variant: "success",
-        });
-      }
-    } catch (error) {
-      console.error("Watermark detection failed:", error);
-      toast({
-        title: "✗ 水印检测失败",
-        description: String(error),
-        variant: "destructive",
-      });
-    } finally {
-      setDetecting(false);
-      console.log("Watermark detection completed");
-    }
-  };
-
   const handleRemoveWatermark = async (e: React.MouseEvent, algorithm: 'gemini' | 'general' = 'gemini') => {
     e.stopPropagation();
     if (removing) return;
@@ -326,7 +269,6 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
               description: "原图已移至回收站",
             });
             onWatermarkRemoved?.(image.id, image.absolute_path);
-            setWatermarkResult(null);
           } catch (error) {
             console.error("Failed to replace file:", error);
             toast({
@@ -341,7 +283,7 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
         const result = await watermarkApi.remove(
           image.absolute_path,
           tempPath,
-          watermarkResult?.watermark_region
+          undefined
         );
 
         if (result.success) {
@@ -370,7 +312,6 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
               description: "原图已移至回收站",
             });
             onWatermarkRemoved?.(image.id, image.absolute_path);
-            setWatermarkResult(null);
           } catch (error) {
             console.error("Failed to replace file:", error);
             toast({
@@ -448,10 +389,7 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
     }
   };
 
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    handleOpenFolder(e);
-  };
+
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return "";
@@ -483,8 +421,8 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
   };
 
   // Use detected result or stored watermark info
-  const showWatermarkBadge = watermarkResult?.has_watermark ?? image.has_watermark;
-  const watermarkPlatform = watermarkResult?.platform ?? image.watermark_platform;
+  const showWatermarkBadge = image.has_watermark;
+  const watermarkPlatform = image.watermark_platform;
 
   // ── List mode ──────────────────────────────────────────────────────────────
   if (listMode) {
@@ -497,7 +435,6 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
           }`}
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
-          onContextMenu={handleContextMenu}
         >
           {/* Checkbox */}
           <button
@@ -582,15 +519,7 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
               <TooltipContent>编辑</TooltipContent>
             </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7"
-                  onClick={handleDetectWatermark} disabled={detecting}>
-                  {detecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Scan className="w-3 h-3" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>检测水印</TooltipContent>
-            </Tooltip>
+
 
             <DropdownMenu>
               <Tooltip>
@@ -671,7 +600,6 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
         }`}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
-        onContextMenu={handleContextMenu}
       >
       {/* Selection indicator */}
       <div className="absolute top-2 left-2 z-10">
@@ -702,11 +630,6 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
             </TooltipTrigger>
             <TooltipContent>
               <p>检测到 {watermarkPlatform || "未知"} 水印</p>
-              {watermarkResult && (
-                <p className="text-xs text-muted-foreground">
-                  置信度: {(watermarkResult.confidence * 100).toFixed(0)}%
-                </p>
-              )}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -871,24 +794,7 @@ export default function ImageCard({ image, onWatermarkDetected, onWatermarkRemov
               <TooltipContent>编辑</TooltipContent>
             </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={handleDetectWatermark}
-                  disabled={detecting}
-                >
-                  {detecting ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Scan className="w-3 h-3" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>检测水印</TooltipContent>
-            </Tooltip>
+
 
             <DropdownMenu>
               <Tooltip>
