@@ -430,7 +430,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
       <>
         <TooltipProvider>
         <Card
-          className={`group relative flex items-center gap-3 px-3 py-2 cursor-pointer transition-all hover:shadow-sm ${
+          className={`group relative flex items-center gap-3 px-3 py-2 cursor-pointer transition-all hover:shadow-sm shadow-[0_1px_0_0_hsl(var(--border))] ${
             isSelected ? "!shadow-[0_0_0_2px_hsl(var(--primary))]" : ""
           }`}
           onClick={handleClick}
@@ -595,7 +595,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
     <>
       <TooltipProvider>
       <Card
-        className={`group relative overflow-hidden cursor-pointer transition-all hover:shadow-md shadow-[0_0_0_2px_transparent] ${
+        className={`group relative overflow-hidden cursor-pointer transition-all hover:shadow-md shadow-[0_0_0_1px_hsl(var(--border))] ${
           isSelected ? "!shadow-[0_0_0_2px_hsl(var(--primary))]" : ""
         }`}
         onClick={handleClick}

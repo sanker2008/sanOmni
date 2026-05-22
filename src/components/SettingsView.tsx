@@ -199,7 +199,7 @@ function SettingsView() {
       <div className="absolute inset-0 bg-black/50" onClick={closeSettings} />
 
       {/* 设置面板 */}
-      <div className="relative z-10 w-full max-w-3xl max-h-[85vh] bg-background rounded-lg border shadow-lg flex flex-col overflow-hidden">
+      <div className="relative z-10 w-full max-w-3xl max-h-[85vh] bg-card rounded-lg border shadow-lg flex flex-col overflow-hidden">
         {/* 头部 */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-semibold">设置</h2>

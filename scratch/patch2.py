@@ -1,41 +1,21 @@
-import sys
 import re
 
-content = open('src-tauri/src/commands/images.rs', 'r', encoding='utf-8').read()
+with open("d:/dev/san/sanMediaBox/src/styles/globals.css", "r", encoding="utf-8") as f:
+    content = f.read()
 
-target = '''    for model_id in &request.model_ids {
-        let is_primary = model_id == &primary_model_id;
-        let _ = conn.execute(
-            "INSERT INTO image_model_relations (image_id, model_id, is_primary) VALUES (?, ?, ?)",
-            (&image_id, model_id, is_primary as i32),
-        );
-    }
-    
-    // If no model_ids provided, insert at least the primary model relation
-    if request.model_ids.is_empty() {
-        let _ = conn.execute(
-            "INSERT INTO image_model_relations (image_id, model_id, is_primary) VALUES (?, ?, ?)",
-            (&image_id, &primary_model_id, 1),
-        );
-    }'''
+# Light mode
+content = re.sub(
+    r"--background: 0 0% 100%;\n\s*--foreground: 222\.2 84% 4\.9%;\n\s*--card: 0 0% 100%;\n\s*--popover: 0 0% 100%;",
+    "--background: 210 20% 98%;\n    --foreground: 222.2 84% 4.9%;\n    --card: 0 0% 100%;\n    --popover: 0 0% 100%;",
+    content
+)
 
-replacement = '''    for model_id in &valid_model_ids {
-        let is_primary = model_id == &primary_model_id;
-        let _ = conn.execute(
-            "INSERT INTO image_model_relations (image_id, model_id, is_primary) VALUES (?, ?, ?)",
-            (&image_id, model_id, is_primary as i32),
-        );
-    }
-    
-    // If no valid model_ids provided, insert at least the primary model relation
-    if valid_model_ids.is_empty() {
-        let _ = conn.execute(
-            "INSERT INTO image_model_relations (image_id, model_id, is_primary) VALUES (?, ?, ?)",
-            (&image_id, &primary_model_id, 1),
-        );
-    }'''
+# Dark mode
+content = re.sub(
+    r"--background: 222\.2 84% 4\.9%;\n\s*--foreground: 210 40% 98%;\n\s*--card: 222\.2 84% 4\.9%;\n\s*--card-foreground: 210 40% 98%;\n\s*--popover: 222\.2 84% 4\.9%;",
+    "--background: 240 10% 4%;\n    --foreground: 210 40% 98%;\n    --card: 240 10% 8%;\n    --card-foreground: 210 40% 98%;\n    --popover: 240 10% 8%;",
+    content
+)
 
-escaped_target = re.escape(target).replace(r'\n', r'\s+')
-new_content = re.sub(escaped_target, replacement, content)
-open('src-tauri/src/commands/images.rs', 'w', encoding='utf-8').write(new_content)
-print("Replaced 2")
+with open("d:/dev/san/sanMediaBox/src/styles/globals.css", "w", encoding="utf-8") as f:
+    f.write(content)

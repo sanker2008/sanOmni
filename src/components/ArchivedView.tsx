@@ -333,7 +333,7 @@ export default function ArchivedView() {
   return (
     <div className="flex h-full">
       {/* Sidebar - Vendor Tree */}
-      <div className="w-56 border-r bg-muted/20 flex flex-col">
+      <div className="w-56 border-r bg-card flex flex-col z-10 shadow-[1px_0_2px_rgba(0,0,0,0.02)]">
         <div className="p-3 border-b flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FolderTree className="w-4 h-4" />
@@ -422,7 +422,7 @@ export default function ArchivedView() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="border-b px-4 py-3 flex items-center justify-between">
+        <div className="border-b px-4 py-3 flex items-center justify-between bg-card shadow-sm z-10">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Archive className="w-5 h-5" />

@@ -48,7 +48,7 @@ function App() {
     <TooltipProvider delayDuration={300}>
       <div className="min-h-screen bg-background flex flex-col">
         {/* Header */}
-        <header className="border-b px-4 py-3 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="border-b px-4 py-3 flex items-center justify-between bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 shadow-sm">
           <div className="flex items-center gap-6">
             <h1 className="text-xl font-semibold">
               sanMediaBox

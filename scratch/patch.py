@@ -1,52 +1,39 @@
-import sys
-import re
+with open("d:/dev/san/sanMediaBox/src/styles/globals.css", "r", encoding="utf-8") as f:
+    content = f.read()
 
-content = open('src-tauri/src/commands/images.rs', 'r', encoding='utf-8').read()
+content = content.replace("--radius: 0.5rem;", "--radius: 0rem;")
 
-target = '''    let primary_model_id = request.primary_model_id
-        .or_else(|| request.model_ids.first().cloned())
-        .unwrap_or_else(|| "unknown".to_string());
+old_tail = """@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}"""
 
-    // Verify the model exists, if not use "unknown"
-    let model_exists: bool = conn.query_row(
-        "SELECT COUNT(*) FROM models WHERE id = ?",
-        [&primary_model_id],
-        |row| {
-            let count: i64 = row.get(0)?;
-            Ok(count > 0)
-        },
-    ).unwrap_or(false);
+new_tail = """@layer base {
+  * {
+    @apply border-border;
+    border-radius: 0 !important;
+  }
+  
+  .border, .border-t, .border-b, .border-l, .border-r {
+    border-width: 0 !important;
+  }
 
-    let primary_model_id = if model_exists {
-        primary_model_id
-    } else {
-        eprintln!("Model '{}' not found, using 'unknown'", primary_model_id);
-        "unknown".to_string()
-    };'''
+  input:not([type="color"]):not([type="checkbox"]):not([type="radio"]), 
+  textarea, 
+  select {
+    background-color: hsl(var(--muted)) !important;
+  }
 
-replacement = '''    let mut valid_model_ids = Vec::new();
-    for model_id in &request.model_ids {
-        let exists: bool = conn.query_row(
-            "SELECT COUNT(*) FROM models WHERE id = ?",
-            [model_id],
-            |row| {
-                let count: i64 = row.get(0)?;
-                Ok(count > 0)
-            },
-        ).unwrap_or(false);
-        if exists {
-            valid_model_ids.push(model_id.clone());
-        } else {
-            eprintln!("Model '{}' not found, ignoring", model_id);
-        }
-    }
+  body {
+    @apply bg-background text-foreground;
+  }
+}"""
 
-    let primary_model_id = request.primary_model_id
-        .filter(|id| valid_model_ids.contains(id))
-        .or_else(|| valid_model_ids.first().cloned())
-        .unwrap_or_else(|| "unknown".to_string());'''
+content = content.replace(old_tail, new_tail)
 
-escaped_target = re.escape(target).replace(r'\n', r'\s+')
-new_content = re.sub(escaped_target, replacement, content)
-open('src-tauri/src/commands/images.rs', 'w', encoding='utf-8').write(new_content)
-print("Replaced")
+with open("d:/dev/san/sanMediaBox/src/styles/globals.css", "w", encoding="utf-8") as f:
+    f.write(content)

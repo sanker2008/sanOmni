@@ -336,7 +336,7 @@ export default function InboxView() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b px-4 py-3 flex items-center justify-between bg-background">
+      <div className="border-b px-4 py-3 flex items-center justify-between bg-card shadow-sm z-10">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Inbox className="w-5 h-5" />

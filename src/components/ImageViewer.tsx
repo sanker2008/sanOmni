@@ -153,7 +153,7 @@ export default function ImageViewer() {
     <Dialog open={isImageViewerOpen} onOpenChange={(open) => !open && closeImageViewer()}>
       <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 overflow-hidden flex flex-col" hideClose>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-card shadow-sm z-10">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold truncate" title={image.filename}>
               {image.filename}
@@ -236,7 +236,7 @@ export default function ImageViewer() {
           </div>
 
           {/* Info Sidebar */}
-          <div className="w-80 border-l bg-background flex flex-col">
+          <div className="w-80 border-l bg-card flex flex-col z-10 shadow-[-1px_0_2px_rgba(0,0,0,0.02)]">
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
                 {/* Models */}

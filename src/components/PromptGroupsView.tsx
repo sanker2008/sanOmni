@@ -414,7 +414,7 @@ export function PromptGroupsView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b p-4">
+      <div className="flex items-center justify-between border-b p-4 bg-card shadow-sm z-10">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-amber-500" />
           <h2 className="text-lg font-semibold">Prompt 管理</h2>
