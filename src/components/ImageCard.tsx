@@ -664,61 +664,63 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
       </div>
 
       {/* Image preview */}
-      <div className="aspect-square bg-muted relative">
-        {!imageLoaded && !imageError && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <ImageIcon className="w-8 h-8 text-muted-foreground/50" />
-          </div>
-        )}
-        {imageError ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted">
-            <ImageIcon className="w-8 h-8 text-muted-foreground" />
-          </div>
-        ) : (
-          <img
-            src={`${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`}
-            alt={image.filename}
-            className={`w-full h-full ${showFullImage ? 'object-contain' : 'object-cover'} transition-opacity ${
-              imageLoaded ? "opacity-100" : "opacity-0"
-            }`}
-            onLoad={() => setImageLoaded(true)}
-            onError={() => setImageError(true)}
-          />
-        )}
-        
-        {/* Format & Models badges */}
-        <div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-end gap-1.5 z-10 pointer-events-none px-1">
-          {image.format && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono uppercase bg-black/70 text-white border-0">
-              {image.format}
-            </Badge>
+      <div className="w-full pb-[100%] h-0 bg-muted relative">
+        <div className="absolute inset-0">
+          {!imageLoaded && !imageError && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <ImageIcon className="w-8 h-8 text-muted-foreground/50" />
+            </div>
           )}
-          {image.models.slice(0, 2).map((model) => (
-            <Badge key={model.id} variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/70 text-white border-0 pointer-events-auto shadow-sm backdrop-blur-sm">
-              {model.name}
-              {model.is_primary && " ★"}
-            </Badge>
-          ))}
-          {image.models.length > 2 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/70 text-white border-0 cursor-help pointer-events-auto shadow-sm backdrop-blur-sm">
-                  +{image.models.length - 2}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                <div className="space-y-1">
-                  <p className="font-medium text-xs">其他模型：</p>
-                  {image.models.slice(2).map((model) => (
-                    <p key={model.id} className="text-xs">
-                      {model.name}
-                      {model.is_primary && " ★"}
-                    </p>
-                  ))}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+          {imageError ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-muted">
+              <ImageIcon className="w-8 h-8 text-muted-foreground" />
+            </div>
+          ) : (
+            <img
+              src={`${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`}
+              alt={image.filename}
+              className={`w-full h-full ${showFullImage ? 'object-contain' : 'object-cover'} transition-opacity ${
+                imageLoaded ? "opacity-100" : "opacity-0"
+              }`}
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError(true)}
+            />
           )}
+          
+          {/* Format & Models badges */}
+          <div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-end gap-1.5 z-10 pointer-events-none px-1">
+            {image.format && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono uppercase bg-black/70 text-white border-0">
+                {image.format}
+              </Badge>
+            )}
+            {image.models.slice(0, 2).map((model) => (
+              <Badge key={model.id} variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/70 text-white border-0 pointer-events-auto shadow-sm backdrop-blur-sm">
+                {model.name}
+                {model.is_primary && " ★"}
+              </Badge>
+            ))}
+            {image.models.length > 2 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/70 text-white border-0 cursor-help pointer-events-auto shadow-sm backdrop-blur-sm">
+                    +{image.models.length - 2}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="space-y-1">
+                    <p className="font-medium text-xs">其他模型：</p>
+                    {image.models.slice(2).map((model) => (
+                      <p key={model.id} className="text-xs">
+                        {model.name}
+                        {model.is_primary && " ★"}
+                      </p>
+                    ))}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </div>
       </div>
 
