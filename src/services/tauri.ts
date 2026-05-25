@@ -255,25 +255,29 @@ export const promptApi = {
     return invoke<PromptGroupWithImages>("get_prompt_group_with_images", { dbPath, groupId });
   },
 
-  async create(payload: {
+  async create(params: {
     prompt: string;
     negativePrompt?: string;
+    name?: string;
     description?: string;
+    templateSchema?: string;
     imageIds: string[];
   }): Promise<PromptGroup> {
     const dbPath = await getDbPath();
     return invoke<PromptGroup>("create_prompt_group", { 
       dbPath, 
-      prompt: payload.prompt,
-      negativePrompt: payload.negativePrompt,
-      description: payload.description,
-      imageIds: payload.imageIds,
+      prompt: params.prompt,
+      negativePrompt: params.negativePrompt,
+      name: params.name,
+      description: params.description,
+      templateSchema: params.templateSchema,
+      imageIds: params.imageIds,
     });
   },
 
   async update(
     groupId: string,
-    payload: { prompt?: string; negativePrompt?: string; description?: string }
+    payload: { prompt?: string; negativePrompt?: string; name?: string; description?: string; templateSchema?: string }
   ): Promise<void> {
     const dbPath = await getDbPath();
     return invoke("update_prompt_group", { 
@@ -281,7 +285,9 @@ export const promptApi = {
       groupId, 
       prompt: payload.prompt,
       negativePrompt: payload.negativePrompt,
+      name: payload.name,
       description: payload.description,
+      templateSchema: payload.templateSchema,
     });
   },
 

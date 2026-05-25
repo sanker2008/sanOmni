@@ -97,6 +97,9 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
     const hasWatermark = image.has_watermark;
 
     if (hasWatermark === true) {
+      const hasSpecificPlatform = image.watermark_platform && 
+        image.watermark_platform !== "unknown" && 
+        image.watermark_platform !== "未知";
       return (
         <button
           onClick={handleWatermarkToggle}
@@ -110,7 +113,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
             {isUpdatingWatermark ? (
               <Loader2 className="w-3 h-3 animate-spin mr-1" />
             ) : null}
-            有水印 ({image.watermark_platform || "未知"})
+            有水印{hasSpecificPlatform ? ` (${image.watermark_platform})` : ""}
           </Badge>
         </button>
       );
@@ -218,6 +221,17 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
     if (removing) return;
 
     setRemoving(true);
+    const loadingToast = toast({
+      title: "正在去除水印",
+      description: (
+        <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <span>正在使用 {algorithm === 'gemini' ? 'Gemini' : '通用'} 算法处理图片...</span>
+        </div>
+      ),
+      duration: 1000000,
+    });
+
     try {
       const ext = image.filename.split('.').pop() || 'png';
       const baseName = image.filename.replace(/\.[^/.]+$/, '');
@@ -230,54 +244,15 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
       // 临时文件名
       const tempPath = `${outputDir}${baseName}_temp_${Date.now()}.${ext}`;
 
+      let success = false;
+
       // 使用选择的算法移除水印
       if (algorithm === 'gemini') {
         const result = await geminiWatermarkApi.autoRemove(
           image.absolute_path,
           tempPath
         );
-
-        if (result.success) {
-          try {
-            // 移动原图到应用回收站
-            const { mkdir, exists, rename } = await import("@tauri-apps/plugin-fs");
-            const { appDataDir, join } = await import("@tauri-apps/api/path");
-            
-            const appDir = await appDataDir();
-            const trashDir = await join(appDir, "trash");
-            
-            // 确保回收站目录存在
-            if (!(await exists(trashDir))) {
-              await mkdir(trashDir, { recursive: true });
-            }
-            
-            // 生成回收站中的文件名（带时间戳避免冲突）
-            const timestamp = Date.now();
-            const trashFileName = `${baseName}_${timestamp}.${ext}`;
-            const trashPath = await join(trashDir, trashFileName);
-            
-            // 移动原图到回收站
-            await rename(image.absolute_path, trashPath);
-            
-            // 重命名临时文件为原文件名
-            await rename(tempPath, image.absolute_path);
-            
-            setImageTimestamp(Date.now());
-
-            toast({
-              title: "✓ 水印移除成功",
-              description: "原图已移至回收站",
-            });
-            onWatermarkRemoved?.(image.id, image.absolute_path);
-          } catch (error) {
-            console.error("Failed to replace file:", error);
-            toast({
-              title: "✗ 替换文件失败",
-              description: String(error),
-              variant: "destructive",
-            });
-          }
-        }
+        success = result.success;
       } else {
         // 其他情况使用通用算法
         const result = await watermarkApi.remove(
@@ -285,42 +260,55 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
           tempPath,
           undefined
         );
+        success = result.success;
+      }
 
-        if (result.success) {
-          try {
-            const { mkdir, exists, rename } = await import("@tauri-apps/plugin-fs");
-            const { appDataDir, join } = await import("@tauri-apps/api/path");
-            
-            const appDir = await appDataDir();
-            const trashDir = await join(appDir, "trash");
-            
-            if (!(await exists(trashDir))) {
-              await mkdir(trashDir, { recursive: true });
-            }
-            
-            const timestamp = Date.now();
-            const trashFileName = `${baseName}_${timestamp}.${ext}`;
-            const trashPath = await join(trashDir, trashFileName);
-            
-            await rename(image.absolute_path, trashPath);
-            await rename(tempPath, image.absolute_path);
-            
-            setImageTimestamp(Date.now());
-
-            toast({
-              title: "✓ 水印移除成功",
-              description: "原图已移至回收站",
-            });
-            onWatermarkRemoved?.(image.id, image.absolute_path);
-          } catch (error) {
-            console.error("Failed to replace file:", error);
-            toast({
-              title: "✗ 替换文件失败",
-              description: String(error),
-              variant: "destructive",
-            });
+      if (success) {
+        try {
+          // 移动原图到应用回收站
+          const { mkdir, exists, rename } = await import("@tauri-apps/plugin-fs");
+          const { appDataDir, join } = await import("@tauri-apps/api/path");
+          
+          const appDir = await appDataDir();
+          const trashDir = await join(appDir, "trash");
+          
+          // 确保回收站目录存在
+          if (!(await exists(trashDir))) {
+            await mkdir(trashDir, { recursive: true });
           }
+          
+          // 生成回收站中的文件名（带时间戳避免冲突）
+          const timestamp = Date.now();
+          const trashFileName = `${baseName}_${timestamp}.${ext}`;
+          const trashPath = await join(trashDir, trashFileName);
+          
+          // 移动原图到回收站
+          await rename(image.absolute_path, trashPath);
+          
+          // 重命名临时文件为原文件名
+          await rename(tempPath, image.absolute_path);
+          
+          setImageTimestamp(Date.now());
+
+          toast({
+            title: "✓ 水印移除成功",
+            description: "原图已移至回收站",
+          });
+          onWatermarkRemoved?.(image.id, image.absolute_path);
+        } catch (error) {
+          console.error("Failed to replace file:", error);
+          toast({
+            title: "✗ 替换文件失败",
+            description: String(error),
+            variant: "destructive",
+          });
         }
+      } else {
+        toast({
+          title: "✗ 水印移除失败",
+          description: "水印移除算法未能成功处理图片",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("Watermark removal failed:", error);
@@ -331,6 +319,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
       });
     } finally {
       setRemoving(false);
+      loadingToast.dismiss();
     }
   };
 
@@ -421,7 +410,6 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
   };
 
   // Use detected result or stored watermark info
-  const showWatermarkBadge = image.has_watermark;
   const watermarkPlatform = image.watermark_platform;
 
   // ── List mode ──────────────────────────────────────────────────────────────
@@ -458,7 +446,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
               <img
                 src={`${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`}
                 alt={image.filename}
-                className={`w-full h-full object-cover transition-opacity ${imageLoaded ? "opacity-100" : "opacity-0"}`}
+                className={`w-full h-full ${showFullImage ? 'object-contain' : 'object-cover'} transition-opacity ${imageLoaded ? "opacity-100" : "opacity-0"}`}
                 onLoad={() => setImageLoaded(true)}
                 onError={() => setImageError(true)}
               />
@@ -620,20 +608,60 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
       </div>
 
       {/* Watermark indicator */}
-      {showWatermarkBadge && (
-        <div className="absolute top-2 right-2 z-10">
-          <Tooltip>
-            <TooltipTrigger>
-              <Badge variant="destructive" className="text-xs">
-                水印
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>检测到 {watermarkPlatform || "未知"} 水印</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      )}
+      <div className="absolute top-2 right-2 z-10">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleWatermarkToggle}
+              disabled={isUpdatingWatermark}
+              className={`cursor-pointer transition-opacity duration-200 ${
+                image.has_watermark
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100"
+              }`}
+            >
+              {image.has_watermark ? (
+                <Badge variant="destructive" className="text-xs hover:bg-red-600 transition-colors shadow-sm">
+                  {isUpdatingWatermark ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    "水印"
+                  )}
+                </Badge>
+              ) : image.has_watermark === false ? (
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-green-50 hover:bg-green-100 text-green-700 border-green-200 transition-colors shadow-sm"
+                >
+                  {isUpdatingWatermark ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : null}
+                  无水印
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200 border-dashed transition-colors shadow-sm"
+                >
+                  {isUpdatingWatermark ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : null}
+                  未标注
+                </Badge>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="end">
+            <p>
+              {image.has_watermark
+                ? `点击切换为无水印状态 (检测到 ${watermarkPlatform || "未知"} 水印)`
+                : image.has_watermark === false
+                ? "点击切换为有水印状态"
+                : "点击标记为有水印状态"}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
 
       {/* Image preview */}
       <div className="aspect-square bg-muted relative">
@@ -658,14 +686,40 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
           />
         )}
         
-        {/* Format badge */}
-        {image.format && (
-          <div className="absolute bottom-2 left-2 z-10">
-            <Badge variant="secondary" className="text-xs font-mono uppercase bg-black/70 text-white border-0 hover:bg-black/70">
+        {/* Format & Models badges */}
+        <div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-end gap-1.5 z-10 pointer-events-none px-1">
+          {image.format && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono uppercase bg-black/70 text-white border-0">
               {image.format}
             </Badge>
-          </div>
-        )}
+          )}
+          {image.models.slice(0, 2).map((model) => (
+            <Badge key={model.id} variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/70 text-white border-0 pointer-events-auto shadow-sm backdrop-blur-sm">
+              {model.name}
+              {model.is_primary && " ★"}
+            </Badge>
+          ))}
+          {image.models.length > 2 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/70 text-white border-0 cursor-help pointer-events-auto shadow-sm backdrop-blur-sm">
+                  +{image.models.length - 2}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="space-y-1">
+                  <p className="font-medium text-xs">其他模型：</p>
+                  {image.models.slice(2).map((model) => (
+                    <p key={model.id} className="text-xs">
+                      {model.name}
+                      {model.is_primary && " ★"}
+                    </p>
+                  ))}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
       {/* Hover overlay - covers entire card */}
@@ -678,37 +732,6 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
           {image.filename}
         </p>
 
-        {/* Models */}
-        {image.models.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {image.models.slice(0, 2).map((model) => (
-              <Badge key={model.id} variant="secondary" className="text-xs">
-                {model.name}
-                {model.is_primary && " ★"}
-              </Badge>
-            ))}
-            {image.models.length > 2 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="text-xs cursor-help">
-                    +{image.models.length - 2}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <div className="space-y-1">
-                    <p className="font-medium text-xs">其他模型：</p>
-                    {image.models.slice(2).map((model) => (
-                      <p key={model.id} className="text-xs">
-                        {model.name}
-                        {model.is_primary && " ★"}
-                      </p>
-                    ))}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        )}
 
         {/* Tags */}
         {image.tags.length > 0 && (
@@ -744,7 +767,6 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             {getStatusBadge()}
-            {getWatermarkBadge()}
           </div>
           {image.file_size && (
             <span className="text-xs text-muted-foreground">
@@ -756,11 +778,11 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
 
       {/* Hover menu */}
       <div
-        className={`absolute bottom-3 left-3 right-3 z-20 transition-opacity ${
+        className={`absolute bottom-3 left-3 right-3 z-20 transition-opacity pointer-events-none ${
           showMenu ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
       >
-        <div className="ml-auto flex flex-col w-fit max-w-full items-end gap-1.5">
+        <div className="ml-auto flex flex-col w-fit max-w-full items-end gap-1.5 pointer-events-auto">
           {/* 上组：内容操作 */}
           <div className="flex gap-1 bg-background/95 dark:bg-background/95 rounded-md shadow-lg border p-1 backdrop-blur-sm">
             <Tooltip>

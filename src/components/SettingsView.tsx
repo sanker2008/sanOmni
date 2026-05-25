@@ -57,10 +57,11 @@ const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
 ];
 
 function SettingsView() {
-  const { settingsOpen, closeSettings, settings, updateSetting } = useUIStore();
+  const { settingsOpen, closeSettings, settings, updateSetting, settingsTab, setSettingsTab } = useUIStore();
   const { vendors, setVendors } = useVendorStore();
   const { setArchivedImages, setInboxImages } = useImageStore();
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("general");
+  const activeSettingsTab = (settingsTab as SettingsTab) || "general";
+  const setActiveSettingsTab = (tab: SettingsTab) => setSettingsTab(tab);
   const [localSettings, setLocalSettings] = useState<Record<string, any>>({});
   const [newWatchFolder, setNewWatchFolder] = useState("");
   const [hasChanges, setHasChanges] = useState(false);

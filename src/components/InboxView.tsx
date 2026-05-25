@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
 import { imageApi, vendorApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
@@ -51,6 +51,7 @@ export default function InboxView() {
   const [showBatchEdit, setShowBatchEdit] = useState(false);
   const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
   const [batchDeleteStep, setBatchDeleteStep] = useState(0);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
   const handleBatchSetWatermark = async (hasWatermark: boolean) => {
     if (selectedImages.length === 0) return;
@@ -126,7 +127,7 @@ export default function InboxView() {
     }
   };
 
-  const handleArchive = async () => {
+  const executeArchive = async () => {
     if (selectedImages.length === 0) return;
 
     setIsArchiving(true);
@@ -171,6 +172,15 @@ export default function InboxView() {
       setTimeout(() => setArchiveResult(null), 5000);
     } finally {
       setIsArchiving(false);
+      setShowArchiveConfirm(false);
+    }
+  };
+
+  const handleArchive = () => {
+    if (selectedImages.length > 10) {
+      setShowArchiveConfirm(true);
+    } else {
+      void executeArchive();
     }
   };
 
@@ -317,14 +327,35 @@ export default function InboxView() {
     return true;
   });
 
-  const isAllSelected = filteredImages.length > 0 && 
-    filteredImages.every((img) => selectedImages.includes(img.id));
+  const [sortBy, setSortBy] = useState<"time" | "size">("time");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const sortedImages = useMemo(() => {
+    const result = [...filteredImages];
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "time") {
+        const dateA = a.created_at || "";
+        const dateB = b.created_at || "";
+        comparison = dateA.localeCompare(dateB);
+      } else if (sortBy === "size") {
+        const sizeA = a.file_size || 0;
+        const sizeB = b.file_size || 0;
+        comparison = sizeA - sizeB;
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+    return result;
+  }, [filteredImages, sortBy, sortOrder]);
+
+  const isAllSelected = sortedImages.length > 0 && 
+    sortedImages.every((img) => selectedImages.includes(img.id));
 
   const handleSelectAll = () => {
     if (isAllSelected) {
       clearSelection();
     } else {
-      selectAll(filteredImages.map((img) => img.id));
+      selectAll(sortedImages.map((img) => img.id));
     }
   };
 
@@ -342,7 +373,7 @@ export default function InboxView() {
             <Inbox className="w-5 h-5" />
             待整理
           </h2>
-          <Button variant="outline" size="sm" className="gap-2" onClick={handleImportClick}>
+          <Button variant="default" size="sm" className="gap-2" onClick={handleImportClick}>
             <Upload className="w-4 h-4" />
             导入
           </Button>
@@ -383,6 +414,22 @@ export default function InboxView() {
             )}
           </Button>
 
+          {/* 排序 */}
+          <select
+            value={`${sortBy}-${sortOrder}`}
+            onChange={(e) => {
+              const [by, order] = e.target.value.split("-") as [("time" | "size"), ("asc" | "desc")];
+              setSortBy(by);
+              setSortOrder(order);
+            }}
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+          >
+            <option value="time-desc">时间降序 (最新)</option>
+            <option value="time-asc">时间升序 (最早)</option>
+            <option value="size-desc">大小降序 (从大到小)</option>
+            <option value="size-asc">大小升序 (从小到大)</option>
+          </select>
+
           {/* 视图切换 */}
           <div className="flex items-center border rounded-md overflow-hidden">
             <button
@@ -400,22 +447,6 @@ export default function InboxView() {
               <List className="w-4 h-4" />
             </button>
           </div>
-
-          {selectedImages.length > 0 && (
-            <Button
-              size="sm"
-              className="gap-2"
-              onClick={handleArchive}
-              disabled={isArchiving}
-            >
-              {isArchiving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Archive className="w-4 h-4" />
-              )}
-              归档 ({selectedImages.length})
-            </Button>
-          )}
         </div>
       </div>
 
@@ -547,6 +578,20 @@ export default function InboxView() {
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="gap-1 h-7 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                  onClick={handleArchive}
+                  disabled={isArchiving}
+                >
+                  {isArchiving ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Archive className="w-3 h-3" />
+                  )}
+                  批量归档
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="gap-1 h-7 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
                   onClick={() => handleBatchSetWatermark(false)}
                   disabled={isUpdatingWatermark}
@@ -608,7 +653,7 @@ export default function InboxView() {
           <ScrollArea className="h-full">
             {viewMode === "grid" ? (
               <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {filteredImages.map((image) => (
+                {sortedImages.map((image) => (
                   <ImageCard 
                     key={image.id} 
                     image={image}
@@ -619,7 +664,7 @@ export default function InboxView() {
               </div>
             ) : (
               <div className="p-4 space-y-2">
-                {filteredImages.map((image) => (
+                {sortedImages.map((image) => (
                   <ImageCard
                     key={image.id}
                     image={image}
@@ -658,10 +703,16 @@ export default function InboxView() {
         open={batchDeleteStep === 1}
         title="确认批量删除"
         description={`确定要删除选中的 ${selectedImages.length} 张图片吗？此操作不可恢复。`}
-        confirmText="继续"
+        confirmText={selectedImages.length > 10 ? "继续" : "确认删除"}
         cancelText="取消"
         variant="destructive"
-        onConfirm={() => setBatchDeleteStep(2)}
+        onConfirm={() => {
+          if (selectedImages.length > 10) {
+            setBatchDeleteStep(2);
+          } else {
+            void executeBatchDelete();
+          }
+        }}
         onCancel={() => setBatchDeleteStep(0)}
       />
 
@@ -675,6 +726,17 @@ export default function InboxView() {
         variant="destructive"
         onConfirm={executeBatchDelete}
         onCancel={() => setBatchDeleteStep(0)}
+      />
+
+      {/* Batch Archive Confirmation */}
+      <ConfirmDialog
+        open={showArchiveConfirm}
+        title="确认批量归档"
+        description={`您选择了一次性归档 ${selectedImages.length} 张图片。请确认这些图片已正确标记了“厂商”与“模型”。是否继续归档？`}
+        confirmText="确认归档"
+        cancelText="取消"
+        onConfirm={executeArchive}
+        onCancel={() => setShowArchiveConfirm(false)}
       />
     </div>
   );

@@ -46,7 +46,7 @@ function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="h-screen bg-background flex flex-col overflow-hidden">
         {/* Header */}
         <header className="border-b px-4 py-3 flex items-center justify-between bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 shadow-sm">
           <div className="flex items-center gap-6">
@@ -81,7 +81,7 @@ function App() {
                 className="gap-2"
               >
                 <Sparkles className="w-4 h-4" />
-                Prompt 管理
+                Prompt 模板管理
               </Button>
             </nav>
           </div>
@@ -119,7 +119,7 @@ function App() {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-hidden">
           {activeTab === "inbox" ? (
             <InboxView />
           ) : activeTab === "archived" ? (

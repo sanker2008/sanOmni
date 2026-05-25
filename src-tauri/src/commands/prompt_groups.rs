@@ -9,7 +9,9 @@ pub async fn create_prompt_group(
     db_path: PathBuf,
     prompt: String,
     negative_prompt: Option<String>,
+    name: Option<String>,
     description: Option<String>,
+    template_schema: Option<String>,
     image_ids: Vec<String>,
 ) -> Result<PromptGroup, String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
@@ -19,9 +21,9 @@ pub async fn create_prompt_group(
     
     // 插入 prompt 组
     conn.execute(
-        "INSERT INTO prompt_groups (id, prompt, negative_prompt, description, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![&id, &prompt, &negative_prompt, &description, &now, &now],
+        "INSERT INTO prompt_groups (id, prompt, negative_prompt, name, description, template_schema, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params![&id, &prompt, &negative_prompt, &name, &description, &template_schema, &now, &now],
     )
     .map_err(|e| e.to_string())?;
     
@@ -39,7 +41,9 @@ pub async fn create_prompt_group(
         id,
         prompt,
         negative_prompt,
+        name,
         description,
+        template_schema,
         image_count: image_ids.len() as i32,
         created_at: now.clone(),
         updated_at: now,
@@ -57,13 +61,15 @@ pub async fn get_prompt_groups(db_path: PathBuf) -> Result<Vec<PromptGroup>, Str
                 pg.id,
                 pg.prompt,
                 pg.negative_prompt,
+                pg.name,
                 pg.description,
+                pg.template_schema,
                 COUNT(ipgr.image_id) as image_count,
                 pg.created_at,
                 pg.updated_at
              FROM prompt_groups pg
              LEFT JOIN image_prompt_group_relations ipgr ON pg.id = ipgr.prompt_group_id
-             GROUP BY pg.id, pg.prompt, pg.negative_prompt, pg.description, pg.created_at, pg.updated_at
+             GROUP BY pg.id, pg.prompt, pg.negative_prompt, pg.name, pg.description, pg.template_schema, pg.created_at, pg.updated_at
              ORDER BY created_at DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -74,10 +80,12 @@ pub async fn get_prompt_groups(db_path: PathBuf) -> Result<Vec<PromptGroup>, Str
                 id: row.get(0)?,
                 prompt: row.get(1)?,
                 negative_prompt: row.get(2)?,
-                description: row.get(3)?,
-                image_count: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                template_schema: row.get(5)?,
+                image_count: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -98,7 +106,7 @@ pub async fn get_prompt_group_with_images(
     // 获取 prompt 组信息
     let group: PromptGroup = conn
         .query_row(
-            "SELECT id, prompt, negative_prompt, description, created_at, updated_at
+            "SELECT id, prompt, negative_prompt, name, description, template_schema, created_at, updated_at
              FROM prompt_groups
              WHERE id = ?1",
             [&group_id],
@@ -107,10 +115,12 @@ pub async fn get_prompt_group_with_images(
                     id: row.get(0)?,
                     prompt: row.get(1)?,
                     negative_prompt: row.get(2)?,
-                    description: row.get(3)?,
+                    name: row.get(3)?,
+                    description: row.get(4)?,
+                    template_schema: row.get(5)?,
                     image_count: 0,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             },
         )
@@ -199,7 +209,9 @@ pub async fn get_prompt_groups_for_image(
                 pg.id,
                 pg.prompt,
                 pg.negative_prompt,
+                pg.name,
                 pg.description,
+                pg.template_schema,
                 (
                     SELECT COUNT(*)
                     FROM image_prompt_group_relations ipgr2
@@ -220,10 +232,12 @@ pub async fn get_prompt_groups_for_image(
                 id: row.get(0)?,
                 prompt: row.get(1)?,
                 negative_prompt: row.get(2)?,
-                description: row.get(3)?,
-                image_count: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                template_schema: row.get(5)?,
+                image_count: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -305,7 +319,9 @@ pub async fn update_prompt_group(
     group_id: String,
     prompt: Option<String>,
     negative_prompt: Option<String>,
+    name: Option<String>,
     description: Option<String>,
+    template_schema: Option<String>,
 ) -> Result<(), String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
@@ -324,9 +340,19 @@ pub async fn update_prompt_group(
         params.push(Box::new(np));
     }
     
+    if let Some(n) = name {
+        updates.push("name = ?");
+        params.push(Box::new(n));
+    }
+    
     if let Some(d) = description {
         updates.push("description = ?");
         params.push(Box::new(d));
+    }
+    
+    if let Some(ts) = template_schema {
+        updates.push("template_schema = ?");
+        params.push(Box::new(ts));
     }
     
     let sql = format!(
@@ -402,13 +428,15 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
             
             // 创建 prompt 组
             conn.execute(
-                "INSERT INTO prompt_groups (id, prompt, negative_prompt, description, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO prompt_groups (id, prompt, negative_prompt, name, description, template_schema, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 rusqlite::params![
                     &id,
                     &prompt,
                     &negative_prompt,
+                    None::<String>,
                     Some(format!("自动创建 - {} 张图片", image_ids.len())),
+                    None::<String>,
                     &now,
                     &now
                 ],
@@ -429,7 +457,9 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
                 id,
                 prompt: prompt.clone(),
                 negative_prompt: negative_prompt.clone(),
+                name: None,
                 description: Some(format!("自动创建 - {} 张图片", image_ids.len())),
+                template_schema: None,
                 image_count: image_ids.len() as i32,
                 created_at: now.clone(),
                 updated_at: now.clone(),

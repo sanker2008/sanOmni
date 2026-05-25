@@ -342,25 +342,23 @@ pub async fn update_image(
     }
 
     // Update tags
-    if !request.tags.is_empty() {
-        // Delete old tag relations
-        let _ = conn.execute(
-            "DELETE FROM image_tag_relations WHERE image_id = ?",
-            [image_id],
-        );
+    // Delete old tag relations
+    let _ = conn.execute(
+        "DELETE FROM image_tag_relations WHERE image_id = ?",
+        [image_id],
+    );
 
-        // Insert new tags
-        for tag_name in &request.tags {
-            let tag_id = tag_name.to_lowercase().replace(" ", "-");
-            let _ = conn.execute(
-                "INSERT OR IGNORE INTO tags (id, name, created_at) VALUES (?, ?, ?)",
-                (&tag_id, tag_name, &now),
-            );
-            let _ = conn.execute(
-                "INSERT INTO image_tag_relations (image_id, tag_id) VALUES (?, ?)",
-                (image_id, &tag_id),
-            );
-        }
+    // Insert new tags
+    for tag_name in &request.tags {
+        let tag_id = tag_name.to_lowercase().replace(" ", "-");
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO tags (id, name, created_at) VALUES (?, ?, ?)",
+            (&tag_id, tag_name, &now),
+        );
+        let _ = conn.execute(
+            "INSERT INTO image_tag_relations (image_id, tag_id) VALUES (?, ?)",
+            (image_id, &tag_id),
+        );
     }
 
     // Rename file if vendor or model changed
@@ -448,8 +446,26 @@ pub async fn update_image(
                 }
             };
             
+            let mut final_path = new_path.clone();
+            let mut final_filename = new_filename.clone();
+            let mut counter = 1;
+
+            while final_path.exists() {
+                let stem = std::path::Path::new(&new_filename)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&new_filename);
+                final_filename = format!("{}_{}.{}", stem, counter, ext);
+                if let Some(parent) = new_path.parent() {
+                    final_path = parent.join(&final_filename);
+                } else {
+                    break;
+                }
+                counter += 1;
+            }
+
             // Move/rename the file
-            if let Err(e) = std::fs::rename(old_path, &new_path) {
+            if let Err(e) = std::fs::rename(old_path, &final_path) {
                 eprintln!("Failed to move/rename file: {}", e);
                 return CommandResult::err(format!("Failed to move/rename file: {}", e));
             }
@@ -472,22 +488,22 @@ pub async fn update_image(
                 std::path::Path::new("archived")
                     .join(&vendor_path)
                     .join(&model_path)
-                    .join(&new_filename)
+                    .join(&final_filename)
                     .to_string_lossy()
                     .to_string()
             } else {
                 // For inbox
                 std::path::Path::new("inbox")
-                    .join(&new_filename)
+                    .join(&final_filename)
                     .to_string_lossy()
                     .to_string()
             };
             
-            let new_absolute = new_path.to_string_lossy().to_string();
+            let new_absolute = final_path.to_string_lossy().to_string();
             
             if let Err(e) = conn.execute(
                 "UPDATE images SET filename = ?, relative_path = ?, absolute_path = ? WHERE id = ?",
-                (&new_filename, &new_relative, &new_absolute, image_id),
+                (&final_filename, &new_relative, &new_absolute, image_id),
             ) {
                 eprintln!("Failed to update database: {}", e);
                 return CommandResult::err(format!("Failed to update database: {}", e));
@@ -577,27 +593,55 @@ pub async fn archive_images(
             .join(&vendor_path)
             .join(&model_path);
 
-        // Generate new filename
+        // Generate unique filename to prevent overwriting existing files
         let date = &image.created_at[..10]; // YYYY-MM-DD
-        let new_filename = template
-            .replace("{vendor}", &vendor_path)
-            .replace("{model}", &model_path)
-            .replace("{date}", date)
-            .replace("{index}", &format!("{:03}", result.success_count + 1))
-            .replace("{original}", &image.original_filename);
-
-        // Ensure extension
         let ext = std::path::Path::new(&image.filename)
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("png");
-        let new_filename = if new_filename.contains('.') {
-            new_filename
-        } else {
-            format!("{}.{}", new_filename, ext)
-        };
 
-        let target_path = target_dir.join(&new_filename);
+        let mut index = result.success_count + 1;
+        let mut suffix_counter = 1;
+
+        let (target_path, new_filename) = loop {
+            let filename_candidate = template
+                .replace("{vendor}", &vendor_path)
+                .replace("{model}", &model_path)
+                .replace("{date}", date)
+                .replace("{index}", &format!("{:03}", index))
+                .replace("{original}", &image.original_filename);
+
+            let mut path_file = std::path::PathBuf::from(&filename_candidate);
+            if path_file.extension().is_none() {
+                path_file.set_extension(ext);
+            }
+
+            let stem = path_file.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&filename_candidate)
+                .to_string();
+            let current_ext = path_file.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or(ext)
+                .to_string();
+
+            let final_candidate = if !template.contains("{index}") && suffix_counter > 1 {
+                format!("{}_{}.{}", stem, suffix_counter - 1, current_ext)
+            } else {
+                format!("{}.{}", stem, current_ext)
+            };
+
+            let path_candidate = target_dir.join(&final_candidate);
+            if !path_candidate.exists() {
+                break (path_candidate, final_candidate);
+            }
+
+            if template.contains("{index}") {
+                index += 1;
+            } else {
+                suffix_counter += 1;
+            }
+        };
 
         // Move file
         let source = std::path::Path::new(&image.absolute_path);
@@ -791,10 +835,28 @@ pub async fn unarchive_images(
         let new_filename = format!("{}_{}", timestamp, image.original_filename);
         let target_path = inbox_dir.join(&new_filename);
 
+        let mut final_path = target_path.clone();
+        let mut final_filename = new_filename.clone();
+        let mut counter = 1;
+
+        while final_path.exists() {
+            let stem = std::path::Path::new(&new_filename)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&new_filename);
+            let ext = std::path::Path::new(&new_filename)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("png");
+            final_filename = format!("{}_{}.{}", stem, counter, ext);
+            final_path = inbox_dir.join(&final_filename);
+            counter += 1;
+        }
+
         // Move file back to inbox
         let source = std::path::Path::new(&image.absolute_path);
         if source.exists() {
-            if let Err(e) = std::fs::rename(source, &target_path) {
+            if let Err(e) = std::fs::rename(source, &final_path) {
                 result.failed_count += 1;
                 result.errors.push(format!("{}: Failed to move file: {}", image_id, e));
                 continue;
@@ -802,16 +864,16 @@ pub async fn unarchive_images(
         }
 
         // Update database
-        let new_relative = std::path::Path::new("inbox").join(&new_filename);
+        let new_relative = std::path::Path::new("inbox").join(&final_filename);
         let new_relative_str = new_relative.to_string_lossy().to_string();
-        let new_absolute = target_path.to_string_lossy().to_string();
+        let new_absolute = final_path.to_string_lossy().to_string();
 
         if let Err(e) = conn.execute(
             "UPDATE images SET 
                 filename = ?, relative_path = ?, absolute_path = ?,
                 status = 'tagged', archived_at = NULL
             WHERE id = ?",
-            (&new_filename, &new_relative_str, &new_absolute, image_id),
+            (&final_filename, &new_relative_str, &new_absolute, image_id),
         ) {
             result.failed_count += 1;
             result.errors.push(format!("{}: Failed to update database: {}", image_id, e));
@@ -997,7 +1059,9 @@ fn fetch_image_prompt_groups(conn: &Connection, image_id: &str) -> Result<Vec<Pr
             pg.id,
             pg.prompt,
             pg.negative_prompt,
+            pg.name,
             pg.description,
+            pg.template_schema,
             (
                 SELECT COUNT(*)
                 FROM image_prompt_group_relations ipgr2
@@ -1016,10 +1080,12 @@ fn fetch_image_prompt_groups(conn: &Connection, image_id: &str) -> Result<Vec<Pr
             id: row.get(0)?,
             prompt: row.get(1)?,
             negative_prompt: row.get(2)?,
-            description: row.get(3)?,
-            image_count: row.get(4)?,
-            created_at: row.get(5)?,
-            updated_at: row.get(6)?,
+            name: row.get(3)?,
+            description: row.get(4)?,
+            template_schema: row.get(5)?,
+            image_count: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
         })
     })?;
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useImageStore, type ImageWithRelations, type PromptGroup } from "@/stores";
+import { useUIStore, useImageStore, type ImageWithRelations, type PromptGroup } from "@/stores";
 import { promptApi, imageApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check } from "lucide-react";
+import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search } from "lucide-react";
 import { toast } from "@/hooks/useToast";
+import { TemplateVariableEditor } from "./TemplateVariableEditor";
+import { SmartPromptRenderer } from "./SmartPromptRenderer";
 
 interface PromptGroupWithImages {
   group: PromptGroup;
@@ -31,18 +33,24 @@ interface PromptFormState {
   id?: string;
   prompt: string;
   negative_prompt: string;
+  name: string;
   description: string;
+  template_schema: string;
   imageIds: string[];
 }
 
 const EMPTY_FORM: PromptFormState = {
   prompt: "",
   negative_prompt: "",
+  name: "",
   description: "",
+  template_schema: "",
   imageIds: [],
 };
 
 export function PromptGroupsView() {
+  const { settings } = useUIStore();
+  const showFullImage = settings.showFullImage ?? false;
   const { inboxImages, archivedImages, setInboxImages, setArchivedImages } = useImageStore();
   const allImages = useMemo(() => [...inboxImages, ...archivedImages], [inboxImages, archivedImages]);
 
@@ -52,10 +60,36 @@ export function PromptGroupsView() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formTab, setFormTab] = useState<"base" | "template">("base");
   const [form, setForm] = useState<PromptFormState>(EMPTY_FORM);
   const [imageSearch, setImageSearch] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "linked" | "unlinked">("all");
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [groupFilterMode, setGroupFilterMode] = useState<"all" | "linked" | "unlinked">("all");
+
+  const filteredGroups = useMemo(() => {
+    let result = groups;
+
+    // Filter by association status
+    if (groupFilterMode === "linked") {
+      result = result.filter((group) => group.image_count > 0);
+    } else if (groupFilterMode === "unlinked") {
+      result = result.filter((group) => group.image_count === 0);
+    }
+
+    // Filter by search query
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return result;
+
+    return result.filter((group) => {
+      return (
+        group.prompt.toLowerCase().includes(query) ||
+        (group.description && group.description.toLowerCase().includes(query)) ||
+        (group.negative_prompt && group.negative_prompt.toLowerCase().includes(query))
+      );
+    });
+  }, [groups, searchQuery, groupFilterMode]);
 
   useEffect(() => {
     void loadGroups();
@@ -121,6 +155,7 @@ export function PromptGroupsView() {
   const openCreateDialog = () => {
     setForm(EMPTY_FORM);
     setImageSearch("");
+    setFormTab("base");
     setIsFormOpen(true);
   };
 
@@ -132,10 +167,13 @@ export function PromptGroupsView() {
         id: result.group.id,
         prompt: result.group.prompt,
         negative_prompt: result.group.negative_prompt || "",
+        name: result.group.name || "",
         description: result.group.description || "",
+        template_schema: result.group.template_schema || "",
         imageIds: result.images.map((image) => image.id),
       });
       setImageSearch("");
+      setFormTab("base");
       setIsFormOpen(true);
     } catch (error) {
       console.error("加载 Prompt 编辑信息失败:", error);
@@ -144,11 +182,85 @@ export function PromptGroupsView() {
     }
   };
 
+  const handleFieldChange = (field: keyof PromptFormState, value: string) => {
+    setForm((current) => {
+      let newSchema = current.template_schema;
+      if (newSchema) {
+        try {
+          const parsed = JSON.parse(newSchema);
+          if (field === "prompt") parsed.raw_prompt = value;
+          if (field === "negative_prompt") parsed.negative_prompt = value;
+          if (field === "description") parsed.description = value;
+        if (field === "name") parsed.name = value;
+          newSchema = JSON.stringify(parsed, null, 2);
+        } catch (e) {
+          // ignore parsing error during typing
+        }
+      }
+      return { ...current, [field]: value, template_schema: newSchema };
+    });
+  };
+
+  const handleSchemaChange = (value: string) => {
+    setForm((current) => {
+      let newPrompt = current.prompt;
+      let newNegative = current.negative_prompt;
+      let newName = current.name;
+      let newDesc = current.description;
+
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed.raw_prompt !== undefined) newPrompt = parsed.raw_prompt;
+        if (parsed.negative_prompt !== undefined) newNegative = parsed.negative_prompt;
+        if (parsed.description !== undefined) newDesc = parsed.description;
+        if (parsed.name !== undefined) newName = parsed.name;
+      } catch (e) {
+        // ignore
+      }
+
+      return {
+        ...current,
+        template_schema: value,
+        prompt: newPrompt,
+        negative_prompt: newNegative,
+        name: newName,
+        description: newDesc,
+      };
+    });
+  };
+
   const savePrompt = async () => {
-    const prompt = form.prompt.trim();
+    let prompt = form.prompt.trim();
+    let negativePrompt = form.negative_prompt.trim();
+    let name = form.name.trim();
+    let description = form.description.trim();
+    const templateSchema = form.template_schema.trim() || undefined;
+
+    // 如果用户没有填某些字段，但填了 Template JSON，尝试从 JSON 中提取
+    if (templateSchema) {
+      try {
+        const parsed = JSON.parse(templateSchema);
+        if (!prompt && parsed.raw_prompt) {
+          prompt = parsed.raw_prompt.trim();
+        }
+        if (!negativePrompt && parsed.negative_prompt) {
+          negativePrompt = parsed.negative_prompt.trim();
+        }
+        if (!name && parsed.name) {
+          name = parsed.name.trim();
+        }
+        if (!description && parsed.description) {
+          description = parsed.description.trim();
+        }
+      } catch (e) {
+        console.warn("解析 Template JSON 失败", e);
+      }
+    }
+
     if (!prompt) {
       toast({
         title: "✗ Prompt 不能为空",
+        description: "如果您使用了模板，请确保 JSON 中包含 raw_prompt 字段。",
         variant: "destructive",
       });
       return;
@@ -164,8 +276,10 @@ export function PromptGroupsView() {
 
         await promptApi.update(form.id, {
           prompt,
-          negativePrompt: form.negative_prompt.trim() || undefined,
-          description: form.description.trim() || undefined,
+          negativePrompt: negativePrompt || undefined,
+          name: name || undefined,
+          description: description || undefined,
+          templateSchema: templateSchema,
         });
 
         const toAdd = form.imageIds.filter((id) => !previousIds.has(id));
@@ -182,8 +296,10 @@ export function PromptGroupsView() {
       } else {
         await promptApi.create({
           prompt,
-          negativePrompt: form.negative_prompt.trim() || undefined,
-          description: form.description.trim() || undefined,
+          negativePrompt: negativePrompt || undefined,
+          name: name || undefined,
+          description: description || undefined,
+          templateSchema: templateSchema,
           imageIds: form.imageIds,
         });
       }
@@ -253,6 +369,23 @@ export function PromptGroupsView() {
       console.error("复制完整 Prompt 失败:", error);
       toast({
         title: "✗ 复制失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCopyText = async (text: string, fieldName: string) => {
+    if (!text.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text.trim());
+      toast({
+        title: `✓ 已复制${fieldName}`,
+      });
+    } catch (error) {
+      console.error(`复制${fieldName}失败:`, error);
+      toast({
+        title: `✗ 复制${fieldName}失败`,
         description: String(error),
         variant: "destructive",
       });
@@ -354,11 +487,11 @@ export function PromptGroupsView() {
                   }`}
                 >
                   <div className="flex items-start gap-3 px-3 py-2">
-                    <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted">
+                    <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center">
                       <img
                         src={convertFileSrc(image.absolute_path)}
                         alt={image.filename}
-                        className="h-full w-full object-cover"
+                        className={`h-full w-full ${showFullImage ? "object-contain" : "object-cover"}`}
                       />
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
@@ -417,11 +550,35 @@ export function PromptGroupsView() {
       <div className="flex items-center justify-between border-b p-4 bg-card shadow-sm z-10">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-amber-500" />
-          <h2 className="text-lg font-semibold">Prompt 管理</h2>
-          <Badge variant="secondary">{groups.length} 个 Prompt</Badge>
+          <h2 className="text-lg font-semibold">Prompt 模板管理</h2>
+          <Badge variant="secondary">
+            {searchQuery || groupFilterMode !== "all" 
+              ? `${filteredGroups.length} / ${groups.length}` 
+              : groups.length} 个 Prompt
+          </Badge>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="搜索 Prompt/描述/负面提示..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-64 h-9"
+            />
+          </div>
+
+          <select
+            value={groupFilterMode}
+            onChange={(e) => setGroupFilterMode(e.target.value as "all" | "linked" | "unlinked")}
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+          >
+            <option value="all">全部关联状态</option>
+            <option value="linked">已关联图片</option>
+            <option value="unlinked">未关联图片</option>
+          </select>
+
           <Button variant="outline" size="sm" onClick={() => void loadGroups()} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             刷新
@@ -435,21 +592,44 @@ export function PromptGroupsView() {
 
       <ScrollArea className="flex-1">
         <div className="space-y-3 p-4">
-          {groups.length === 0 ? (
+          {filteredGroups.length === 0 ? (
             <Card>
               <CardContent className="pt-6 text-center text-muted-foreground">
                 <Sparkles className="mx-auto mb-3 h-12 w-12 opacity-50" />
-                <p>还没有 Prompt</p>
-                <p className="mt-2 text-sm">创建一个 Prompt，并直接关联已有图片。</p>
+                <p>
+                  {searchQuery 
+                    ? "没有找到匹配的 Prompt" 
+                    : groupFilterMode === "linked"
+                    ? "没有已关联图片的 Prompt"
+                    : groupFilterMode === "unlinked"
+                    ? "没有未关联图片的 Prompt"
+                    : "还没有 Prompt"}
+                </p>
+                <p className="mt-2 text-sm">
+                  {searchQuery 
+                    ? "请尝试更改搜索关键词" 
+                    : groupFilterMode !== "all"
+                    ? "请尝试更改筛选条件"
+                    : "创建一个 Prompt，并直接关联已有图片。"}
+                </p>
               </CardContent>
             </Card>
           ) : (
-            groups.map((group) => (
-              <Card key={group.id} className="transition-shadow hover:shadow-md">
+            filteredGroups.map((group) => (
+              <Card 
+                key={group.id} 
+                className="transition-shadow hover:shadow-md cursor-pointer select-none"
+                onDoubleClick={() => void openEditDialog(group.id)}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <CardTitle className="line-clamp-2 text-sm font-medium">{group.prompt}</CardTitle>
+                      <CardTitle className="line-clamp-2 text-sm font-medium">
+                        {group.name ? (
+                          <span className="font-bold text-primary mr-2">{group.name}</span>
+                        ) : null}
+                        {group.prompt}
+                      </CardTitle>
                       {group.description && (
                         <CardDescription className="mt-1 text-xs">{group.description}</CardDescription>
                       )}
@@ -470,11 +650,11 @@ export function PromptGroupsView() {
                   {groupImages.get(group.id) && groupImages.get(group.id)!.length > 0 && (
                     <div className="flex gap-2">
                       {groupImages.get(group.id)!.map((img) => (
-                        <div key={img.id} className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted">
+                        <div key={img.id} className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center">
                           <img
-                            src={convertFileSrc(img.absolute_path)}
+                             src={convertFileSrc(img.absolute_path)}
                             alt=""
-                            className="h-full w-full object-cover"
+                            className={`h-full w-full ${showFullImage ? "object-contain" : "object-cover"}`}
                           />
                         </div>
                       ))}
@@ -491,7 +671,7 @@ export function PromptGroupsView() {
                       更新于 {new Date(group.updated_at).toLocaleDateString("zh-CN")}
                     </span>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2" onDoubleClick={(e) => e.stopPropagation()}>
                       <Button variant="outline" size="sm" onClick={() => void handleCopyFullPrompt(group)}>
                         {copiedGroupId === group.id ? (
                           <Check className="mr-1 h-3 w-3" />
@@ -523,23 +703,32 @@ export function PromptGroupsView() {
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-h-[90vh] max-w-6xl">
           <DialogHeader>
-            <DialogTitle>Prompt 详情</DialogTitle>
+            <DialogTitle>{selectedGroup?.group.name || "Prompt 详情"}</DialogTitle>
           </DialogHeader>
 
           {selectedGroup && (
             <ScrollArea className="max-h-[70vh]">
               <div className="space-y-6">
-                <div>
-                  <span className="text-sm font-medium">提示词：</span>
-                  <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
-                    {selectedGroup.group.prompt}
-                  </p>
-                </div>
+                <SmartPromptRenderer 
+                  templateSchemaStr={selectedGroup.group.template_schema || ""} 
+                  basePrompt={selectedGroup.group.prompt} 
+                />
 
                 {selectedGroup.group.negative_prompt && (
                   <div>
-                    <span className="text-sm font-medium">负面提示词：</span>
-                    <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">负面提示词：</span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 px-2 text-xs" 
+                        onClick={() => void handleCopyText(selectedGroup.group.negative_prompt || "", "负面提示词")}
+                      >
+                        <Copy className="mr-1 h-3 w-3" />
+                        复制
+                      </Button>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap bg-muted/40 p-2.5 rounded border">
                       {selectedGroup.group.negative_prompt}
                     </p>
                   </div>
@@ -547,8 +736,21 @@ export function PromptGroupsView() {
 
                 {selectedGroup.group.description && (
                   <div>
-                    <span className="text-sm font-medium">说明：</span>
-                    <p className="mt-1 text-sm text-muted-foreground">{selectedGroup.group.description}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">说明：</span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 px-2 text-xs" 
+                        onClick={() => void handleCopyText(selectedGroup.group.description || "", "说明")}
+                      >
+                        <Copy className="mr-1 h-3 w-3" />
+                        复制
+                      </Button>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground bg-muted/40 p-2.5 rounded border">
+                      {selectedGroup.group.description}
+                    </p>
                   </div>
                 )}
 
@@ -564,11 +766,11 @@ export function PromptGroupsView() {
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                       {images.map((image) => (
                         <Card key={image.id} className="overflow-hidden">
-                          <div className="relative aspect-square">
+                          <div className="relative aspect-square bg-muted/40 flex items-center justify-center">
                             <img
                               src={convertFileSrc(image.absolute_path)}
                               alt={image.filename}
-                              className="h-full w-full object-cover"
+                              className={`h-full w-full ${showFullImage ? "object-contain" : "object-cover"}`}
                             />
                           </div>
                           <CardContent className="p-2">
@@ -591,7 +793,7 @@ export function PromptGroupsView() {
       </Dialog>
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-h-[90vh] max-w-4xl">
+        <DialogContent className="max-h-[90vh] max-w-4xl flex flex-col">
           <DialogHeader>
             <DialogTitle>{form.id ? "编辑 Prompt" : "添加 Prompt"}</DialogTitle>
             <DialogDescription>
@@ -599,46 +801,155 @@ export function PromptGroupsView() {
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[70vh] pr-4">
+          <div className="flex space-x-4 border-b mb-4 mt-2">
+            <button
+              type="button"
+              className={`pb-2 text-sm font-medium transition-colors border-b-2 ${
+                formTab === "base" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setFormTab("base")}
+            >
+              基础信息编辑
+            </button>
+            <button
+              type="button"
+              className={`pb-2 text-sm font-medium transition-colors border-b-2 ${
+                formTab === "template" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setFormTab("template")}
+            >
+              Template JSON & 变量
+            </button>
+          </div>
+
+          <div className="flex-1 pr-4 overflow-y-auto min-h-0">
             <div className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Prompt</label>
-                <textarea
-                  value={form.prompt}
-                  onChange={(event) => setForm((current) => ({ ...current, prompt: event.target.value }))}
-                  className="min-h-[120px] w-full rounded-md border px-3 py-2 text-sm"
-                  placeholder="输入 Prompt..."
-                />
-              </div>
+              {formTab === "base" && (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">Prompt</label>
+                      {form.prompt && (
+                        <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" 
+                          onClick={() => void handleCopyText(form.prompt, "Prompt")}
+                        >
+                          <Copy className="mr-1 h-3 w-3" />
+                          复制
+                        </Button>
+                      )}
+                    </div>
+                    <textarea
+                      value={form.prompt}
+                      onChange={(e) => handleFieldChange("prompt", e.target.value)}
+                      className="min-h-[120px] w-full rounded-md border px-3 py-2 text-sm"
+                      placeholder="输入 Prompt..."
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">负面提示词</label>
-                <textarea
-                  value={form.negative_prompt}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, negative_prompt: event.target.value }))
-                  }
-                  className="min-h-[90px] w-full rounded-md border px-3 py-2 text-sm"
-                  placeholder="可选"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">负面提示词</label>
+                      {form.negative_prompt && (
+                        <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" 
+                          onClick={() => void handleCopyText(form.negative_prompt, "负面提示词")}
+                        >
+                          <Copy className="mr-1 h-3 w-3" />
+                          复制
+                        </Button>
+                      )}
+                    </div>
+                    <textarea
+                      value={form.negative_prompt}
+                      onChange={(e) => handleFieldChange("negative_prompt", e.target.value)}
+                      className="min-h-[90px] w-full rounded-md border px-3 py-2 text-sm"
+                      placeholder="可选"
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">说明</label>
-                <Input
-                  value={form.description}
-                  onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                  placeholder="可选"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">模板名称</label>
+                    </div>
+                    <Input
+                      value={form.name}
+                      onChange={(e) => handleFieldChange("name" as any, e.target.value)}
+                      placeholder="可选，例如: 极简摄影"
+                    />
+                  </div>
 
-              <Separator />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">说明</label>
+                      {form.description && (
+                        <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" 
+                          onClick={() => void handleCopyText(form.description, "说明")}
+                        >
+                          <Copy className="mr-1 h-3 w-3" />
+                          复制
+                        </Button>
+                      )}
+                    </div>
+                    <Input
+                      value={form.description}
+                      onChange={(e) => handleFieldChange("description", e.target.value)}
+                      placeholder="可选"
+                    />
+                  </div>
 
-              {renderImageSelector(filteredImages)}
+                  <Separator />
+
+                  {renderImageSelector(filteredImages)}
+                </>
+              )}
+
+              {formTab === "template" && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">Template JSON 代码</label>
+                      {form.template_schema && (
+                        <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" 
+                          onClick={() => void handleCopyText(form.template_schema, "Template JSON")}
+                        >
+                          <Copy className="mr-1 h-3 w-3" />
+                          复制
+                        </Button>
+                      )}
+                    </div>
+                    <textarea
+                      value={form.template_schema}
+                      onChange={(e) => handleSchemaChange(e.target.value)}
+                      className="min-h-[250px] w-full rounded-md border px-3 py-2 text-xs font-mono"
+                      placeholder='可选，用于智能表单渲染。示例：{"variables": [...]}'
+                    ></textarea>
+                  </div>
+                  
+                  <TemplateVariableEditor 
+                    value={form.template_schema} 
+                    onChange={handleSchemaChange} 
+                  />
+                </div>
+              )}
             </div>
-          </ScrollArea>
+          </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-4 mt-auto">
             <Button variant="outline" onClick={() => setIsFormOpen(false)}>
               取消
             </Button>

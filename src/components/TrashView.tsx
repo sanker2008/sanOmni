@@ -85,8 +85,6 @@ export default function TrashView() {
 
   const handleRestore = async (item: TrashItem) => {
     try {
-      // 从回收站文件名中提取原始文件名（去掉时间戳）
-      const originalFilename = item.filename.replace(/_\d+\./, ".");
       setRestoreItem(item);
     } catch (error) {
       console.error("Failed to restore:", error);

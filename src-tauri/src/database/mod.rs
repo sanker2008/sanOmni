@@ -7,6 +7,18 @@ pub fn init_database(db_path: &Path) -> Result<()> {
     // Create tables
     conn.execute_batch(SCHEMA)?;
     
+    // Add template_schema column if not exists
+    let _ = conn.execute(
+        "ALTER TABLE prompt_groups ADD COLUMN template_schema TEXT",
+        [],
+    );
+
+    // Add name column if not exists
+    let _ = conn.execute(
+        "ALTER TABLE prompt_groups ADD COLUMN name TEXT",
+        [],
+    );
+    
     // Insert default vendors and models
     insert_defaults(&conn)?;
     
@@ -137,7 +149,9 @@ CREATE TABLE IF NOT EXISTS prompt_groups (
     id                  TEXT PRIMARY KEY,
     prompt              TEXT NOT NULL,
     negative_prompt     TEXT,
+    name                TEXT,
     description         TEXT,
+    template_schema     TEXT,
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL
 );

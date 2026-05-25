@@ -56,13 +56,27 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
 
   const toggleModel = (modelId: string) => {
     if (selectedModels.includes(modelId)) {
-      const next = selectedModels.filter((id) => id !== modelId);
+      let next = selectedModels.filter((id) => id !== modelId);
+      if (next.length === 0) {
+        next = ["unknown"];
+      }
       setSelectedModels(next);
-      if (primaryModel === modelId) setPrimaryModel(next[0] ?? null);
+      if (primaryModel === modelId) {
+        setPrimaryModel(next[0] ?? null);
+      } else if (next.length === 1) {
+        setPrimaryModel(next[0]);
+      }
     } else {
-      const next = [...selectedModels, modelId];
+      let next: string[];
+      if (modelId === "unknown") {
+        next = ["unknown"];
+      } else {
+        next = [...selectedModels.filter((id) => id !== "unknown"), modelId];
+      }
       setSelectedModels(next);
-      if (!primaryModel) setPrimaryModel(modelId);
+      if (next.length === 1 || !primaryModel || primaryModel === "unknown") {
+        setPrimaryModel(modelId);
+      }
     }
   };
 

@@ -37,7 +37,9 @@ export interface PromptGroup {
   id: string;
   prompt: string;
   negative_prompt?: string;
+  name?: string;
   description?: string;
+  template_schema?: string;
   image_count: number;
   created_at: string;
   updated_at: string;

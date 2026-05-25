@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
 import { imageApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
@@ -56,6 +56,8 @@ export default function ArchivedView() {
   const [showBatchEdit, setShowBatchEdit] = useState(false);
   const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
   const [batchDeleteStep, setBatchDeleteStep] = useState(0);
+  const [sortBy, setSortBy] = useState<"time" | "size">("time");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const handleBatchSetWatermark = async (hasWatermark: boolean) => {
     if (selectedImages.length === 0) return;
@@ -181,6 +183,24 @@ export default function ArchivedView() {
     return true;
   });
 
+  const sortedImages = useMemo(() => {
+    const result = [...filteredImages];
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "time") {
+        const dateA = a.created_at || "";
+        const dateB = b.created_at || "";
+        comparison = dateA.localeCompare(dateB);
+      } else if (sortBy === "size") {
+        const sizeA = a.file_size || 0;
+        const sizeB = b.file_size || 0;
+        comparison = sizeA - sizeB;
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+    return result;
+  }, [filteredImages, sortBy, sortOrder]);
+
   // Count by vendor/model
   const getVendorCount = (vendorId: string) =>
     archivedImages.filter((img) => img.storage_vendor_id === vendorId).length;
@@ -188,8 +208,8 @@ export default function ArchivedView() {
   const getModelCount = (modelId: string) =>
     archivedImages.filter((img) => img.primary_model_id === modelId).length;
 
-  const isAllSelected = filteredImages.length > 0 &&
-    filteredImages.every((img) => selectedImages.includes(img.id));
+  const isAllSelected = sortedImages.length > 0 &&
+    sortedImages.every((img) => selectedImages.includes(img.id));
 
   const handleUnarchive = async () => {
     if (selectedImages.length === 0) return;
@@ -333,7 +353,7 @@ export default function ArchivedView() {
   return (
     <div className="flex h-full">
       {/* Sidebar - Vendor Tree */}
-      <div className="w-56 border-r bg-card flex flex-col z-10 shadow-[1px_0_2px_rgba(0,0,0,0.02)]">
+      <div className="w-56 border-r bg-muted/50 flex flex-col z-10 shadow-[1px_0_2px_rgba(0,0,0,0.02)]">
         <div className="p-3 border-b flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FolderTree className="w-4 h-4" />
@@ -463,6 +483,22 @@ export default function ArchivedView() {
               )}
             </Button>
 
+            {/* 排序 */}
+            <select
+              value={`${sortBy}-${sortOrder}`}
+              onChange={(e) => {
+                const [by, order] = e.target.value.split("-") as [("time" | "size"), ("asc" | "desc")];
+                setSortBy(by);
+                setSortOrder(order);
+              }}
+              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+            >
+              <option value="time-desc">时间降序 (最新)</option>
+              <option value="time-asc">时间升序 (最早)</option>
+              <option value="size-desc">大小降序 (从大到小)</option>
+              <option value="size-asc">大小升序 (从小到大)</option>
+            </select>
+
             {/* 视图切换 */}
             <div className="flex items-center border rounded-md overflow-hidden">
               <button
@@ -588,7 +624,7 @@ export default function ArchivedView() {
             <div className="flex items-center gap-4">
               <button
                 onClick={() =>
-                  isAllSelected ? clearSelection() : selectAll(filteredImages.map((img) => img.id))
+                  isAllSelected ? clearSelection() : selectAll(sortedImages.map((img) => img.id))
                 }
                 className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
               >
@@ -692,7 +728,7 @@ export default function ArchivedView() {
             <ScrollArea className="h-full">
               {viewMode === "grid" ? (
                 <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {filteredImages.map((image) => (
+                  {sortedImages.map((image) => (
                     <ImageCard 
                       key={image.id} 
                       image={image}
@@ -703,7 +739,7 @@ export default function ArchivedView() {
                 </div>
               ) : (
                 <div className="p-4 space-y-2">
-                  {filteredImages.map((image) => (
+                  {sortedImages.map((image) => (
                     <ImageCard
                       key={image.id}
                       image={image}
@@ -726,10 +762,16 @@ export default function ArchivedView() {
         open={batchDeleteStep === 1}
         title="确认批量删除"
         description={`确定要删除选中的 ${selectedImages.length} 张图片吗？此操作不可恢复。`}
-        confirmText="继续"
+        confirmText={selectedImages.length > 10 ? "继续" : "确认删除"}
         cancelText="取消"
         variant="destructive"
-        onConfirm={() => setBatchDeleteStep(2)}
+        onConfirm={() => {
+          if (selectedImages.length > 10) {
+            setBatchDeleteStep(2);
+          } else {
+            void executeBatchDelete();
+          }
+        }}
         onCancel={() => setBatchDeleteStep(0)}
       />
 

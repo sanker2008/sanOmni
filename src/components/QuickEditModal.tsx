@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useUIStore, useVendorStore, type PromptGroup } from "@/stores";
 import { imageApi, promptApi } from "@/services/tauri";
 import { appDataDir } from "@tauri-apps/api/path";
+import { toast } from "@/hooks/useToast";
 import {
   Dialog,
   DialogContent,
@@ -26,7 +27,9 @@ import {
   Archive,
   Copy,
   Check,
+  Pencil,
 } from "lucide-react";
+import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { cn } from "@/lib/utils";
 
 export default function QuickEditModal() {
@@ -42,13 +45,29 @@ export default function QuickEditModal() {
   const [selectedPromptGroupIds, setSelectedPromptGroupIds] = useState<string[]>([]);
   const [newPromptText, setNewPromptText] = useState("");
   const [newNegativePrompt, setNewNegativePrompt] = useState("");
+  const [newPromptName, setNewPromptName] = useState("");
   const [newPromptDescription, setNewPromptDescription] = useState("");
+  const [newTemplateSchema, setNewTemplateSchema] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingAndArchiving, setIsSavingAndArchiving] = useState(false);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
   const [hasWatermark, setHasWatermark] = useState<boolean>(false);
   const [watermarkPlatform, setWatermarkPlatform] = useState<string>("");
+
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editPromptText, setEditPromptText] = useState("");
+  const [editNegativePrompt, setEditNegativePrompt] = useState("");
+  const [editPromptName, setEditPromptName] = useState("");
+  const [editPromptDescription, setEditPromptDescription] = useState("");
+  const [editTemplateSchema, setEditTemplateSchema] = useState("");
+
+  const [searchPromptQuery, setSearchPromptQuery] = useState("");
+  const [isAddingNewPrompt, setIsAddingNewPrompt] = useState(false);
+  const [isAddPromptOpen, setIsAddPromptOpen] = useState(false);
+  
+  const [editPromptTab, setEditPromptTab] = useState<"base" | "template">("base");
+  const [addPromptTab, setAddPromptTab] = useState<"base" | "template">("base");
 
   const image =
     inboxImages.find((img) => img.id === editingImageId) ||
@@ -66,8 +85,18 @@ export default function QuickEditModal() {
     setWatermarkPlatform(image.watermark_platform || "");
     setNewPromptText("");
     setNewNegativePrompt("");
+    setNewPromptName("");
     setNewPromptDescription("");
+    setNewTemplateSchema("");
     setLoadedDimensions(null);
+    setEditingGroupId(null);
+    setEditPromptText("");
+    setEditNegativePrompt("");
+    setEditPromptName("");
+    setEditPromptDescription("");
+    setEditTemplateSchema("");
+    setSearchPromptQuery("");
+    setIsAddPromptOpen(false);
 
     let cancelled = false;
     void (async () => {
@@ -94,18 +123,7 @@ export default function QuickEditModal() {
   const persistChanges = async (archiveAfterSave: boolean) => {
     if (!image) return;
 
-    const createdPrompt = newPromptText.trim()
-      ? await promptApi.create({
-          prompt: newPromptText.trim(),
-          negativePrompt: newNegativePrompt.trim() || undefined,
-          description: newPromptDescription.trim() || undefined,
-          imageIds: [image.id],
-        })
-      : null;
-
-    const nextPromptGroupIds = createdPrompt
-      ? Array.from(new Set([...selectedPromptGroupIds, createdPrompt.id]))
-      : selectedPromptGroupIds;
+    const nextPromptGroupIds = selectedPromptGroupIds;
 
     const updated = await imageApi.update({
       image_id: image.id,
@@ -118,7 +136,15 @@ export default function QuickEditModal() {
 
     await promptApi.setForImage(image.id, nextPromptGroupIds);
 
-    updateImage(image.id, updated);
+    const finalImage = { ...updated };
+    try {
+      const finalPrompts = await promptApi.getForImage(image.id);
+      finalImage.prompt_groups = finalPrompts;
+    } catch (error) {
+      console.error("加载关联 Prompt 失败:", error);
+    }
+
+    updateImage(image.id, finalImage);
 
     if (archiveAfterSave) {
       const customPath = useUIStore.getState().settings.customArchivedPath;
@@ -172,13 +198,25 @@ export default function QuickEditModal() {
 
   const toggleModel = (modelId: string) => {
     if (selectedModels.includes(modelId)) {
-      setSelectedModels(selectedModels.filter((id) => id !== modelId));
+      let nextModels = selectedModels.filter((id) => id !== modelId);
+      if (nextModels.length === 0) {
+        nextModels = ["unknown"];
+      }
+      setSelectedModels(nextModels);
       if (primaryModel === modelId) {
-        setPrimaryModel(selectedModels[0] || null);
+        setPrimaryModel(nextModels[0] || null);
+      } else if (nextModels.length === 1) {
+        setPrimaryModel(nextModels[0]);
       }
     } else {
-      setSelectedModels([...selectedModels, modelId]);
-      if (!primaryModel) {
+      let nextModels: string[];
+      if (modelId === "unknown") {
+        nextModels = ["unknown"];
+      } else {
+        nextModels = [...selectedModels.filter((id) => id !== "unknown"), modelId];
+      }
+      setSelectedModels(nextModels);
+      if (nextModels.length === 1 || !primaryModel || primaryModel === "unknown") {
         setPrimaryModel(modelId);
       }
     }
@@ -192,7 +230,7 @@ export default function QuickEditModal() {
 
   const togglePromptGroup = (groupId: string) => {
     setSelectedPromptGroupIds((current) =>
-      current.includes(groupId) ? current.filter((id) => id !== groupId) : [...current, groupId]
+      current.includes(groupId) ? [] : [groupId]
     );
   };
 
@@ -211,13 +249,253 @@ export default function QuickEditModal() {
     }
   };
 
+  const handleStartEdit = (group: PromptGroup) => {
+    setEditingGroupId(group.id);
+    setEditPromptText(group.prompt);
+    setEditNegativePrompt(group.negative_prompt || "");
+    setEditPromptName(group.name || "");
+    setEditPromptDescription(group.description || "");
+    setEditTemplateSchema(group.template_schema || "");
+    setEditPromptTab("base");
+  };
+
+  const handleEditFieldChange = (field: "prompt" | "negative_prompt" | "description", value: string) => {
+    if (field === "prompt") setEditPromptText(value);
+    if (field === "negative_prompt") setEditNegativePrompt(value);
+    if (field === "description") setEditPromptDescription(value);
+    if (field === "name") setEditPromptName(value);
+
+    let newSchema = editTemplateSchema;
+    if (newSchema) {
+      try {
+        const parsed = JSON.parse(newSchema);
+        if (field === "prompt") parsed.raw_prompt = value;
+        if (field === "negative_prompt") parsed.negative_prompt = value;
+        if (field === "description") parsed.description = value;
+        if (field === "name") parsed.name = value;
+        newSchema = JSON.stringify(parsed, null, 2);
+        setEditTemplateSchema(newSchema);
+      } catch (e) {}
+    }
+  };
+
+  const handleEditSchemaChange = (value: string) => {
+    setEditTemplateSchema(value);
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed.raw_prompt !== undefined) setEditPromptText(parsed.raw_prompt);
+      if (parsed.negative_prompt !== undefined) setEditNegativePrompt(parsed.negative_prompt);
+      if (parsed.description !== undefined) setEditPromptDescription(parsed.description);
+      if (parsed.name !== undefined) setEditPromptName(parsed.name);
+    } catch (e) {}
+  };
+
+  const handleAddFieldChange = (field: "prompt" | "negative_prompt" | "description", value: string) => {
+    if (field === "prompt") setNewPromptText(value);
+    if (field === "negative_prompt") setNewNegativePrompt(value);
+    if (field === "description") setNewPromptDescription(value);
+    if (field === "name") setNewPromptName(value);
+
+    let newSchema = newTemplateSchema;
+    if (newSchema) {
+      try {
+        const parsed = JSON.parse(newSchema);
+        if (field === "prompt") parsed.raw_prompt = value;
+        if (field === "negative_prompt") parsed.negative_prompt = value;
+        if (field === "description") parsed.description = value;
+        if (field === "name") parsed.name = value;
+        newSchema = JSON.stringify(parsed, null, 2);
+        setNewTemplateSchema(newSchema);
+      } catch (e) {}
+    }
+  };
+
+  const handleAddSchemaChange = (value: string) => {
+    setNewTemplateSchema(value);
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed.raw_prompt !== undefined) setNewPromptText(parsed.raw_prompt);
+      if (parsed.negative_prompt !== undefined) setNewNegativePrompt(parsed.negative_prompt);
+      if (parsed.description !== undefined) setNewPromptDescription(parsed.description);
+      if (parsed.name !== undefined) setNewPromptName(parsed.name);
+    } catch (e) {}
+  };
+
+  const handleSaveEditedPrompt = async (groupId: string) => {
+    let finalPromptText = editPromptText.trim();
+    let finalNegativePrompt = editNegativePrompt.trim();
+    let finalDescription = editPromptDescription.trim();
+    const finalTemplateSchema = editTemplateSchema.trim() || undefined;
+
+    if (finalTemplateSchema) {
+      try {
+        const parsed = JSON.parse(finalTemplateSchema);
+        if (!finalPromptText && parsed.raw_prompt) {
+          finalPromptText = parsed.raw_prompt.trim();
+        }
+        if (!finalNegativePrompt && parsed.negative_prompt) {
+          finalNegativePrompt = parsed.negative_prompt.trim();
+        }
+        let finalName = editPromptName.trim();
+        if (!finalName && parsed.name) {
+          finalName = parsed.name.trim();
+        }
+        if (!finalDescription && parsed.description) {
+          finalDescription = parsed.description.trim();
+        }
+      } catch (e) {
+        console.warn("解析 Template JSON 失败", e);
+      }
+    }
+
+    if (!finalPromptText) {
+      toast({
+        title: "✗ Prompt 不能为空",
+        description: "如果您使用了模板，请确保 JSON 中包含 raw_prompt 字段。",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await promptApi.update(groupId, {
+        prompt: finalPromptText,
+        negativePrompt: finalNegativePrompt || undefined,
+        name: finalName || undefined,
+        description: finalDescription || undefined,
+        templateSchema: finalTemplateSchema,
+      });
+
+      setAvailablePromptGroups((current) =>
+        current.map((g) =>
+          g.id === groupId
+            ? {
+                ...g,
+                prompt: finalPromptText,
+                negative_prompt: finalNegativePrompt || undefined,
+                name: finalName || undefined,
+                description: finalDescription || undefined,
+                template_schema: finalTemplateSchema,
+              }
+            : g
+        )
+      );
+
+      toast({
+        title: "✓ Prompt 已更新",
+      });
+
+      setEditingGroupId(null);
+    } catch (error) {
+      console.error("更新 Prompt 失败:", error);
+      toast({
+        title: "✗ 更新 Prompt 失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddNewPrompt = async () => {
+    if (!image) return;
+
+    let finalPromptText = newPromptText.trim();
+    let finalNegativePrompt = newNegativePrompt.trim();
+    let finalDescription = newPromptDescription.trim();
+    const finalTemplateSchema = newTemplateSchema.trim() || undefined;
+
+    if (finalTemplateSchema) {
+      try {
+        const parsed = JSON.parse(finalTemplateSchema);
+        if (!finalPromptText && parsed.raw_prompt) {
+          finalPromptText = parsed.raw_prompt.trim();
+        }
+        if (!finalNegativePrompt && parsed.negative_prompt) {
+          finalNegativePrompt = parsed.negative_prompt.trim();
+        }
+        let finalName = newPromptName.trim();
+        if (!finalName && parsed.name) {
+          finalName = parsed.name.trim();
+        }
+        if (!finalDescription && parsed.description) {
+          finalDescription = parsed.description.trim();
+        }
+      } catch (e) {
+        console.warn("解析 Template JSON 失败", e);
+      }
+    }
+
+    if (!finalPromptText) {
+      toast({
+        title: "✗ Prompt 不能为空",
+        description: "如果您使用了模板，请确保 JSON 中包含 raw_prompt 字段。",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAddingNewPrompt(true);
+    try {
+      const created = await promptApi.create({
+        prompt: finalPromptText,
+        negativePrompt: finalNegativePrompt || undefined,
+        name: finalName || undefined,
+        description: finalDescription || undefined,
+        templateSchema: finalTemplateSchema,
+        imageIds: [],
+      });
+
+      // Add to available prompt groups
+      setAvailablePromptGroups((current) => [created, ...current]);
+      
+      // Auto-select/associate (single-selection)
+      setSelectedPromptGroupIds([created.id]);
+
+      // Clear inputs
+      setNewPromptText("");
+      setNewNegativePrompt("");
+      setNewPromptDescription("");
+      setNewTemplateSchema("");
+
+      toast({
+        title: "✓ 新增并关联成功",
+      });
+
+      setIsAddPromptOpen(false);
+    } catch (error) {
+      console.error("创建 Prompt 失败:", error);
+      toast({
+        title: "✗ 创建 Prompt 失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingNewPrompt(false);
+    }
+  };
+
+  const selectedGroupId = selectedPromptGroupIds[0];
+  const selectedPromptGroup = availablePromptGroups.find((g) => g.id === selectedGroupId);
+
+  const filteredPromptGroups = availablePromptGroups.filter((group) => {
+    if (group.id === selectedGroupId) return false;
+    
+    const query = searchPromptQuery.toLowerCase().trim();
+    if (!query) return true;
+    return (
+      group.prompt.toLowerCase().includes(query) ||
+      group.negative_prompt?.toLowerCase().includes(query) ||
+      group.description?.toLowerCase().includes(query)
+    );
+  });
+
   if (!image) return null;
 
   const displayWidth = image.width || loadedDimensions?.width;
   const displayHeight = image.height || loadedDimensions?.height;
 
   return (
-    <Dialog open={isQuickEditOpen} onOpenChange={(open) => !open && closeQuickEdit()}>
+    <>
+      <Dialog open={isQuickEditOpen} onOpenChange={(open) => !open && closeQuickEdit()}>
       <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>编辑图片信息</DialogTitle>
@@ -317,81 +595,373 @@ export default function QuickEditModal() {
                     关联已有 Prompt
                   </label>
                   <span className="text-xs text-muted-foreground">
-                    已选 {selectedPromptGroupIds.length} 个
+                    {selectedPromptGroup ? "已关联" : "未关联"}
                   </span>
                 </div>
-                <div className="space-y-2">
-                  {availablePromptGroups.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">还没有可关联的 Prompt</p>
-                  ) : (
-                    availablePromptGroups.map((group) => {
-                      const selected = selectedPromptGroupIds.includes(group.id);
-                      return (
-                        <div
-                          key={group.id}
-                          className={cn(
-                            "rounded-md border p-3 transition-colors",
-                            selected ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted"
-                          )}
-                        >
-                          <div className="flex items-start gap-3">
+
+                {/* 当前已关联的 Prompt 置顶显示 */}
+                {selectedPromptGroup && (
+                  <div className="border border-primary bg-primary/5 rounded-md p-3 transition-all">
+                    {editingGroupId === selectedPromptGroup.id ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs font-semibold text-primary">编辑当前关联 Prompt</div>
+                          <div className="flex space-x-2 border-b">
                             <button
                               type="button"
-                              onClick={() => togglePromptGroup(group.id)}
-                              className="flex-1 text-left"
-                              title={group.prompt}
+                              className={`pb-1 px-1 text-[11px] font-medium transition-colors border-b-2 ${
+                                editPromptTab === "base" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                              }`}
+                              onClick={() => setEditPromptTab("base")}
                             >
-                              <div className="whitespace-pre-wrap break-words text-sm">{group.prompt}</div>
-                              {group.negative_prompt && (
-                                <div className="mt-2 whitespace-pre-wrap break-words text-xs text-muted-foreground">
-                                  负面提示词：{group.negative_prompt}
-                                </div>
-                              )}
-                              <div className="mt-2 text-xs text-muted-foreground">{group.image_count} 张图片</div>
+                              基础信息
                             </button>
+                            <button
+                              type="button"
+                              className={`pb-1 px-1 text-[11px] font-medium transition-colors border-b-2 ${
+                                editPromptTab === "template" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                              }`}
+                              onClick={() => setEditPromptTab("template")}
+                            >
+                              Template JSON
+                            </button>
+                          </div>
+                        </div>
+
+                        {editPromptTab === "base" && (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editPromptText}
+                              onChange={(e) => handleEditFieldChange("prompt", e.target.value)}
+                              className="w-full min-h-[80px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
+                              placeholder="Prompt"
+                            />
+                            <Input
+                              value={editNegativePrompt}
+                              onChange={(e) => handleEditFieldChange("negative_prompt", e.target.value)}
+                              placeholder="负面提示词，可选"
+                              className="h-8 text-xs bg-background text-foreground"
+                            />
+                            <Input
+                              value={editPromptName}
+                              onChange={(e) => handleEditFieldChange("name" as any, e.target.value)}
+                              placeholder="模板名称，可选"
+                              className="h-8 text-xs bg-background text-foreground"
+                            />
+                            <Input
+                              value={editPromptDescription}
+                              onChange={(e) => handleEditFieldChange("description", e.target.value)}
+                              placeholder="说明，可选"
+                              className="h-8 text-xs bg-background text-foreground"
+                            />
+                          </div>
+                        )}
+
+                        {editPromptTab === "template" && (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editTemplateSchema}
+                              onChange={(e) => handleEditSchemaChange(e.target.value)}
+                              className="w-full min-h-[100px] px-3 py-2 text-xs border rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground font-mono"
+                              placeholder="Template JSON 数据 (可选，用于前台渲染表单)"
+                            ></textarea>
+                            
+                            <TemplateVariableEditor 
+                              value={editTemplateSchema} 
+                              onChange={handleEditSchemaChange} 
+                            />
+                          </div>
+                        )}
+                        
+                        <div className="flex justify-end gap-2 mt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingGroupId(null)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            取消
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => handleSaveEditedPrompt(selectedPromptGroup.id)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            保存
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-xs font-semibold text-primary mb-2 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 fill-current animate-pulse" />
+                            当前已关联 Prompt
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setSelectedPromptGroupIds([])}
+                          >
+                            取消关联
+                          </Button>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 text-left">
+                            <div className="whitespace-pre-wrap break-words text-sm font-medium text-foreground">
+                              {selectedPromptGroup.name && <span className="font-bold text-primary mr-2">{selectedPromptGroup.name}</span>}
+                              {selectedPromptGroup.prompt}
+                            </div>
+                            {selectedPromptGroup.negative_prompt && (
+                              <div className="mt-2 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                                负面提示词：{selectedPromptGroup.negative_prompt}
+                              </div>
+                            )}
+                            {selectedPromptGroup.description && (
+                              <div className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground/80 italic">
+                                说明：{selectedPromptGroup.description}
+                              </div>
+                            )}
+                            <div className="mt-2 text-xs text-muted-foreground">{selectedPromptGroup.image_count} 张图片</div>
+                          </div>
+                          <div className="flex gap-1 flex-shrink-0">
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 flex-shrink-0"
+                              className="h-8 w-8 text-primary hover:bg-primary/5"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                void handleCopyPrompt(group.id, group.prompt, group.negative_prompt);
+                                void handleCopyPrompt(selectedPromptGroup.id, selectedPromptGroup.prompt, selectedPromptGroup.negative_prompt);
                               }}
-                              title={copiedPromptId === group.id ? "已复制" : "复制 Prompt"}
+                              title={copiedPromptId === selectedPromptGroup.id ? "已复制" : "复制 Prompt"}
                             >
-                              {copiedPromptId === group.id ? (
+                              {copiedPromptId === selectedPromptGroup.id ? (
                                 <Check className="h-4 w-4" />
                               ) : (
                                 <Copy className="h-4 w-4" />
                               )}
                             </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-primary hover:bg-primary/5"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleStartEdit(selectedPromptGroup);
+                              }}
+                              title="编辑 Prompt"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
                           </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {availablePromptGroups.length > 0 && (
+                  <div className="space-y-1.5 mt-2">
+                    <label className="text-xs text-muted-foreground">
+                      {selectedPromptGroup ? "切换关联其他已有 Prompt" : "选择关联已有 Prompt"}
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="搜索其他 Prompt..."
+                      value={searchPromptQuery}
+                      onChange={(e) => setSearchPromptQuery(e.target.value)}
+                      className="h-8 text-xs bg-background text-foreground"
+                    />
+                  </div>
+                )}
+
+                <div className="max-h-[200px] overflow-y-auto pr-1 space-y-2">
+                  {filteredPromptGroups.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2 text-center">
+                      {availablePromptGroups.length === 0 ? "还没有可关联的 Prompt" : "没有找到匹配的 Prompt"}
+                    </p>
+                  ) : (
+                    filteredPromptGroups.map((group, index) => {
+                      const selected = selectedPromptGroupIds.includes(group.id);
+                      const isEditing = editingGroupId === group.id;
+                      return (
+                        <div
+                          key={group.id}
+                          className={cn(
+                            "rounded-md border p-3 transition-colors",
+                            selected && !isEditing 
+                              ? "border-primary bg-primary/10 text-primary" 
+                              : cn(index % 2 === 0 ? "bg-background" : "bg-muted/30", "hover:bg-muted")
+                          )}
+                        >
+                          {isEditing ? (
+                            <div className="space-y-3 mt-3 border border-border bg-muted/20 rounded-md p-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-semibold">编辑 Prompt</div>
+                                <div className="flex space-x-2 border-b">
+                                  <button
+                                    type="button"
+                                    className={`pb-1 px-1 text-[11px] font-medium transition-colors border-b-2 ${
+                                      editPromptTab === "base" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                                    }`}
+                                    onClick={() => setEditPromptTab("base")}
+                                  >
+                                    基础信息
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`pb-1 px-1 text-[11px] font-medium transition-colors border-b-2 ${
+                                      editPromptTab === "template" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                                    }`}
+                                    onClick={() => setEditPromptTab("template")}
+                                  >
+                                    Template JSON
+                                  </button>
+                                </div>
+                              </div>
+                              {editPromptTab === "base" && (
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editPromptText}
+                                    onChange={(e) => handleEditFieldChange("prompt", e.target.value)}
+                                    className="w-full min-h-[80px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
+                                    placeholder="Prompt"
+                                  />
+                                  <Input
+                                    value={editNegativePrompt}
+                                    onChange={(e) => handleEditFieldChange("negative_prompt", e.target.value)}
+                                    placeholder="负面提示词，可选"
+                                    className="h-8 text-xs bg-background text-foreground"
+                                  />
+                                  <Input
+                                    value={editPromptDescription}
+                                    onChange={(e) => handleEditFieldChange("description", e.target.value)}
+                                    placeholder="说明，可选"
+                                    className="h-8 text-xs bg-background text-foreground"
+                                  />
+                                </div>
+                              )}
+                              {editPromptTab === "template" && (
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editTemplateSchema}
+                                    onChange={(e) => handleEditSchemaChange(e.target.value)}
+                                    className="w-full min-h-[100px] px-3 py-2 text-xs border rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground font-mono"
+                                    placeholder="Template JSON 数据 (可选)"
+                                  ></textarea>
+                                  
+                                  <TemplateVariableEditor 
+                                    value={editTemplateSchema} 
+                                    onChange={handleEditSchemaChange} 
+                                  />
+                                </div>
+                              )}
+                              <div className="flex justify-end gap-2 mt-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingGroupId(null)}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  取消
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => handleSaveEditedPrompt(group.id)}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  保存
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-3">
+                              <div className="mt-1 flex-shrink-0 cursor-pointer" onClick={() => togglePromptGroup(group.id)}>
+                                {selected ? (
+                                  <CheckCircle2 className="w-4 h-4 text-primary" />
+                                ) : (
+                                  <Circle className="w-4 h-4 text-muted-foreground" />
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => togglePromptGroup(group.id)}
+                                className="flex-1 text-left"
+                                title={group.prompt}
+                              >
+                                <div className="whitespace-pre-wrap break-words text-sm">
+                                  {group.name && <span className="font-bold text-primary mr-2">{group.name}</span>}
+                                  {group.prompt}
+                                </div>
+                                {group.negative_prompt && (
+                                  <div className="mt-2 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                                    负面提示词：{group.negative_prompt}
+                                  </div>
+                                )}
+                                {group.description && (
+                                  <div className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground/80 italic">
+                                    说明：{group.description}
+                                  </div>
+                                )}
+                                <div className="mt-2 text-xs text-muted-foreground">{group.image_count} 张图片</div>
+                              </button>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleCopyPrompt(group.id, group.prompt, group.negative_prompt);
+                                  }}
+                                  title={copiedPromptId === group.id ? "已复制" : "复制 Prompt"}
+                                >
+                                  {copiedPromptId === group.id ? (
+                                    <Check className="h-4 w-4" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleStartEdit(group);
+                                  }}
+                                  title="编辑 Prompt"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })
                   )}
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">新增并关联 Prompt</label>
-                <textarea
-                  value={newPromptText}
-                  onChange={(e) => setNewPromptText(e.target.value)}
-                  placeholder="如果需要，可在保存时顺手创建一个新的 Prompt"
-                  className="w-full min-h-[90px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <Input
-                  value={newNegativePrompt}
-                  onChange={(e) => setNewNegativePrompt(e.target.value)}
-                  placeholder="负面提示词，可选"
-                />
-                <Input
-                  value={newPromptDescription}
-                  onChange={(e) => setNewPromptDescription(e.target.value)}
-                  placeholder="说明，可选"
-                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-1.5 py-4 border-dashed text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setIsAddPromptOpen(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                  新增并关联 Prompt
+                </Button>
               </div>
 
               <Separator />
@@ -509,5 +1079,106 @@ export default function QuickEditModal() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={isAddPromptOpen} onOpenChange={setIsAddPromptOpen}>
+      <DialogContent className="max-w-xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>新增并关联 Prompt</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4 flex-1 overflow-y-auto min-h-0 pr-2">
+          <div className="flex space-x-4 border-b">
+            <button
+              type="button"
+              className={`pb-2 text-sm font-medium transition-colors border-b-2 ${
+                addPromptTab === "base" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setAddPromptTab("base")}
+            >
+              基础信息
+            </button>
+            <button
+              type="button"
+              className={`pb-2 text-sm font-medium transition-colors border-b-2 ${
+                addPromptTab === "template" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setAddPromptTab("template")}
+            >
+              Template JSON
+            </button>
+          </div>
+
+          {addPromptTab === "base" && (
+            <div className="space-y-3">
+              <textarea
+                value={newPromptText}
+                onChange={(e) => handleAddFieldChange("prompt", e.target.value)}
+                placeholder="在此输入新的 Prompt..."
+                className="w-full min-h-[120px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
+              />
+              <Input
+                value={newNegativePrompt}
+                onChange={(e) => handleAddFieldChange("negative_prompt", e.target.value)}
+                placeholder="负面提示词，可选"
+                className="bg-background text-foreground"
+              />
+              <Input
+                value={newPromptName}
+                onChange={(e) => handleAddFieldChange("name" as any, e.target.value)}
+                placeholder="模板名称，可选"
+                className="bg-background text-foreground"
+              />
+              <Input
+                value={newPromptDescription}
+                onChange={(e) => handleAddFieldChange("description", e.target.value)}
+                placeholder="简短说明（如：赛博朋克风格），可选"
+                className="bg-background text-foreground"
+              />
+            </div>
+          )}
+
+          {addPromptTab === "template" && (
+            <div className="space-y-3">
+              <textarea
+                value={newTemplateSchema}
+                onChange={(e) => handleAddSchemaChange(e.target.value)}
+                placeholder='提供 JSON 数据以支持智能表单填词。示例：{"variables": [...]}'
+                className="w-full min-h-[120px] px-3 py-2 text-xs border rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground font-mono"
+              ></textarea>
+              
+              <TemplateVariableEditor 
+                value={newTemplateSchema} 
+                onChange={handleAddSchemaChange} 
+              />
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setIsAddPromptOpen(false);
+              setNewPromptText("");
+              setNewNegativePrompt("");
+              setNewPromptDescription("");
+              setNewTemplateSchema("");
+            }}
+            disabled={isAddingNewPrompt}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            disabled={!newPromptText.trim() || isAddingNewPrompt}
+            onClick={handleAddNewPrompt}
+            className="flex items-center gap-1.5"
+          >
+            {isAddingNewPrompt && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            确认新增并关联
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }

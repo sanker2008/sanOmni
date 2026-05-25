@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useUIStore } from "@/stores";
+import { toast } from "@/hooks/useToast";
+import { imageApi } from "@/services/tauri";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +10,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   X,
   ChevronLeft,
@@ -17,6 +24,7 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Loader2,
 } from "lucide-react";
 
 export default function ImageViewer() {
@@ -36,6 +44,7 @@ export default function ImageViewer() {
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
   const [imageTimestamp, setImageTimestamp] = useState(Date.now());
+  const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
 
   // Update timestamp when image changes
   useEffect(() => {
@@ -57,6 +66,37 @@ export default function ImageViewer() {
     }
   };
 
+  const handleWatermarkToggle = async () => {
+    if (!image || isUpdatingWatermark) return;
+    setIsUpdatingWatermark(true);
+    const nextHasWatermark = !image.has_watermark;
+    try {
+      const updated = await imageApi.update({
+        image_id: image.id,
+        model_ids: image.models.map((m) => m.id),
+        primary_model_id: image.models.find((m) => m.is_primary)?.id || undefined,
+        tags: image.tags.map((t) => t.name),
+        has_watermark: nextHasWatermark,
+        watermark_platform: nextHasWatermark ? "unknown" : undefined,
+      });
+
+      useImageStore.getState().updateImage(image.id, updated);
+      toast({
+        title: "水印标记已更新",
+        description: nextHasWatermark ? "已标记为 [有水印]" : "已标记为 [无水印]",
+      });
+    } catch (error) {
+      console.error("Failed to toggle watermark:", error);
+      toast({
+        title: "标记水印失败",
+        description: "更新数据库时发生错误",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingWatermark(false);
+    }
+  };
+
   // Keyboard navigation
   useEffect(() => {
     if (!isImageViewerOpen) return;
@@ -71,12 +111,15 @@ export default function ImageViewer() {
       } else if (e.key === "Escape") {
         e.preventDefault();
         closeImageViewer();
+      } else if (e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        handleWatermarkToggle();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isImageViewerOpen, currentIndex, currentImages.length]);
+  }, [isImageViewerOpen, currentIndex, currentImages.length, image?.id, isUpdatingWatermark]);
 
   const handleEdit = () => {
     if (image) {
@@ -92,7 +135,7 @@ export default function ImageViewer() {
       
       // 根据操作系统打开图片
       if (navigator.platform.toLowerCase().includes('win')) {
-        await Command.create('cmd', ['/c', 'start', '', image.absolute_path]).execute();
+        await Command.create('explorer', [image.absolute_path]).execute();
       } else if (navigator.platform.toLowerCase().includes('mac')) {
         await Command.create('open', [image.absolute_path]).execute();
       } else {
@@ -100,6 +143,11 @@ export default function ImageViewer() {
       }
     } catch (error) {
       console.error("Failed to open image:", error);
+      toast({
+        title: "✗ 打开图片失败",
+        description: String(error),
+        variant: "destructive",
+      });
     }
   };
 
@@ -255,9 +303,9 @@ export default function ImageViewer() {
                 )}
 
                 {/* Tags */}
-                {image.tags.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-2">标签</h3>
+                <div>
+                  <h3 className="text-sm font-medium mb-2">标签</h3>
+                  {image.tags && image.tags.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {image.tags.map((tag) => (
                         <Badge key={tag.id} variant="outline" className="text-xs">
@@ -265,8 +313,10 @@ export default function ImageViewer() {
                         </Badge>
                       ))}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-xs text-muted-foreground">暂无标签</p>
+                  )}
+                </div>
 
                 {/* Prompt Groups */}
                 {image.prompt_groups.length > 0 && (
@@ -305,14 +355,58 @@ export default function ImageViewer() {
                 )}
 
                 {/* Watermark */}
-                {image.has_watermark && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-2">水印</h3>
-                    <Badge variant="destructive" className="text-xs">
-                      {image.watermark_platform || "未知"} 水印
-                    </Badge>
-                  </div>
-                )}
+                <div>
+                  <h3 className="text-sm font-medium mb-2">水印状态</h3>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleWatermarkToggle}
+                        disabled={isUpdatingWatermark}
+                        className="inline-flex items-center text-left"
+                      >
+                        {image.has_watermark ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200 cursor-pointer select-none transition-colors"
+                          >
+                            {isUpdatingWatermark ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                            ) : null}
+                            {(() => {
+                              const hasSpecificPlatform = image.watermark_platform && 
+                                image.watermark_platform !== "unknown" && 
+                                image.watermark_platform !== "未知";
+                              return `有水印${hasSpecificPlatform ? ` (${image.watermark_platform})` : ""}`;
+                            })()}
+                          </Badge>
+                        ) : image.has_watermark === false ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200 cursor-pointer select-none transition-colors"
+                          >
+                            {isUpdatingWatermark ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                            ) : null}
+                            无水印
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200 cursor-pointer select-none border-dashed transition-colors"
+                          >
+                            {isUpdatingWatermark ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                            ) : null}
+                            未标注水印
+                          </Badge>
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="start">
+                      <p>点击切换水印状态 (快捷键: W)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
 
                 {/* File Info */}
                 <div>
@@ -355,7 +449,7 @@ export default function ImageViewer() {
 
         {/* Footer Hint */}
         <div className="px-4 py-2 border-t bg-muted/30 text-xs text-muted-foreground text-center">
-          使用 ← → 键切换图片 · ESC 关闭 · 双击图片编辑
+          使用 ← → 键切换图片 · W 键切换水印 · ESC 关闭 · 双击图片编辑
         </div>
       </DialogContent>
     </Dialog>
