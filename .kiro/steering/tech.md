@@ -6,6 +6,7 @@
 - **Frontend**: React 18 + TypeScript running in WebView2
 - **Backend**: Rust for native system operations and performance
 - **IPC**: Tauri command system for frontend-backend communication
+- **Two-Domain Design**: The app combines two independent functional domains — Prompt Template Management (sanPromptBox) and IP Character Management (sanIPBox) — plus shared common features. These domains may be split into separate applications in the future.
 
 ## Frontend Stack
 
@@ -65,17 +66,24 @@ sanMediaBox/
 ├── src/                          # React frontend
 │   ├── components/              # React components
 │   │   ├── ui/                 # shadcn/ui components
-│   │   ├── InboxView.tsx       # Inbox view
-│   │   ├── ArchivedView.tsx    # Archive view
+│   │   ├── InboxView.tsx       # Inbox view (Prompt domain)
+│   │   ├── ArchivedView.tsx    # Archive view (Prompt domain)
+│   │   ├── PromptGroupsView.tsx # Prompt groups view (Prompt domain)
+│   │   ├── IPManagementView.tsx # IP management view (IP domain)
+│   │   ├── TrashView.tsx       # Trash view (Shared)
 │   │   ├── ImageCard.tsx       # Image card component
 │   │   ├── ImageViewer.tsx     # Full-screen viewer
 │   │   ├── DropZone.tsx        # Drag-drop upload
 │   │   ├── QuickEditModal.tsx  # Quick edit dialog
 │   │   ├── BatchEditModal.tsx  # Batch edit dialog
+│   │   ├── IPImagePickerModal.tsx # Image picker for IP assets
+│   │   ├── SmartPromptRenderer.tsx # Prompt template renderer
+│   │   ├── TemplateVariableEditor.tsx # Template variable editor
 │   │   └── SettingsView.tsx    # Settings panel
 │   ├── hooks/                  # Custom React hooks
 │   │   ├── useFolderWatcher.ts
-│   │   └── useKeyboardShortcuts.ts
+│   │   ├── useKeyboardShortcuts.ts
+│   │   └── useToast.ts
 │   ├── services/               # API layer
 │   │   └── tauri.ts           # Tauri command wrappers
 │   ├── stores/                 # Zustand stores
@@ -90,18 +98,23 @@ sanMediaBox/
 │   │   ├── lib.rs              # Tauri builder setup
 │   │   ├── commands/           # Tauri commands (IPC handlers)
 │   │   │   ├── mod.rs
-│   │   │   ├── images.rs       # Image CRUD + archive
-│   │   │   ├── vendors.rs      # Vendor management
-│   │   │   ├── tags.rs         # Tag management
-│   │   │   ├── watermark.rs    # Watermark detection
-│   │   │   ├── watermark_removal.rs
-│   │   │   ├── watcher.rs      # Folder monitoring
-│   │   │   ├── settings.rs     # Settings persistence
-│   │   │   └── classifier.rs   # Auto-classification
+│   │   │   ├── images.rs       # Image CRUD + archive (Prompt domain)
+│   │   │   ├── vendors.rs      # Vendor management (Prompt domain)
+│   │   │   ├── tags.rs         # Tag management (Prompt domain)
+│   │   │   ├── classifier.rs   # Auto-classification (Prompt domain)
+│   │   │   ├── prompt_groups.rs # Prompt groups (Prompt domain)
+│   │   │   ├── scanner.rs      # File system scanning (Prompt domain)
+│   │   │   ├── ip_assets.rs    # IP asset management (IP domain)
+│   │   │   ├── watermark.rs    # Watermark detection (Shared)
+│   │   │   ├── watermark_removal.rs # Watermark removal (Shared)
+│   │   │   ├── gemini_watermark_removal.rs # Gemini AI watermark removal (Shared)
+│   │   │   ├── watcher.rs      # Folder monitoring (Shared)
+│   │   │   └── settings.rs     # Settings persistence (Shared)
 │   │   ├── database/           # SQLite schema & operations
 │   │   │   └── mod.rs
 │   │   └── models/             # Data models
-│   │       └── mod.rs
+│   │       ├── mod.rs          # Shared data models
+│   │       └── ip_assets.rs    # IP asset models (IP domain)
 │   ├── capabilities/           # Tauri permissions
 │   └── icons/                  # Application icons
 └── docs/                        # Documentation
@@ -145,10 +158,17 @@ npm run tauri [command]
 - Commands are registered in `src-tauri/src/lib.rs`
 
 ### State Management Pattern
-- **Image Store**: Image data, selection state
+
+**Prompt Domain Stores:**
+- **Image Store**: Image data, selection state, inbox/archive workflow
 - **Vendor Store**: Vendor and model data
 - **Tag Store**: Tag data and popular tags
-- **UI Store**: UI state, filters, modals, theme, settings
+
+**IP Domain Stores:**
+- **IP Store** (planned): IP character data, sticker packs, creations
+
+**Shared Stores:**
+- **UI Store**: UI state, filters, modals, theme, settings, active view
 
 ### Styling Conventions
 - Use Tailwind utility classes

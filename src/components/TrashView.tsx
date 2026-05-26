@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Undo2, X, Loader2, FolderOpen } from "lucide-react";
+import { Trash2, Undo2, X, Loader2, FolderOpen, RefreshCw } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { toast } from "@/hooks/useToast";
 import { Command } from "@tauri-apps/plugin-shell";
@@ -309,6 +309,16 @@ export default function TrashView() {
             >
               <FolderOpen className="w-4 h-4 mr-1" />
               打开文件夹
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadTrashItems}
+              disabled={loading}
+              title="刷新回收站列表"
+            >
+              <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+              刷新
             </Button>
             {trashItems.length > 0 && (
               <Button

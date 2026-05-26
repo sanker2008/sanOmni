@@ -1,6 +1,6 @@
-mod commands;
-mod database;
-mod models;
+pub mod commands;
+pub mod database;
+pub mod models;
 
 use tauri::Manager;
 
@@ -35,6 +35,7 @@ pub fn run() {
             commands::images::archive_images,
             commands::images::unarchive_images,
             commands::images::update_missing_formats,
+            commands::images::get_all_images,
             commands::vendors::get_vendors,
             commands::vendors::add_vendor,
             commands::vendors::update_vendor,
@@ -42,6 +43,8 @@ pub fn run() {
             commands::vendors::add_model,
             commands::vendors::update_model,
             commands::vendors::delete_model,
+            commands::vendors::check_model_usage,
+            commands::vendors::delete_model_cascade,
             commands::tags::get_tags,
             commands::tags::add_tag,
             commands::watermark::detect_watermark,
@@ -70,6 +73,27 @@ pub fn run() {
             commands::prompt_groups::update_prompt_group,
             commands::prompt_groups::delete_prompt_group,
             commands::prompt_groups::auto_group_by_prompt,
+            commands::ip_assets::get_ip_assets,
+            commands::ip_assets::get_ip_asset_detail,
+            commands::ip_assets::create_ip_asset,
+            commands::ip_assets::update_ip_asset,
+            commands::ip_assets::delete_ip_asset,
+            commands::ip_assets::add_ip_character_sheets,
+            commands::ip_assets::remove_ip_character_sheets,
+            commands::ip_assets::add_ip_creations,
+            commands::ip_assets::remove_ip_creations,
+            commands::ip_assets::add_ip_relation,
+            commands::ip_assets::remove_ip_relation,
+            commands::ip_assets::create_ip_sticker_pack,
+            commands::ip_assets::update_ip_sticker_pack,
+            commands::ip_assets::delete_ip_sticker_pack,
+            commands::ip_assets::add_ip_sticker_pack_platform,
+            commands::ip_assets::update_ip_sticker_pack_platform,
+            commands::ip_assets::delete_ip_sticker_pack_platform,
+            commands::ip_assets::add_ip_emojis,
+            commands::ip_assets::update_ip_emoji_trigger_word,
+            commands::ip_assets::delete_ip_emojis,
+            commands::ip_assets::move_ip_emojis_to_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

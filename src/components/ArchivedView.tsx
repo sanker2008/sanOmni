@@ -25,6 +25,7 @@ import {
   Trash2,
   Check,
   AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import BatchEditModal from "./BatchEditModal";
@@ -449,6 +450,10 @@ export default function ArchivedView() {
               已归档
             </h2>
             <Badge variant="secondary">{filteredImages.length} 张图片</Badge>
+            <Button variant="outline" size="sm" className="gap-2" onClick={loadArchivedImages} disabled={isLoading}>
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+              刷新
+            </Button>
             {selectedVendor && (
               <Button variant="ghost" size="sm" onClick={() => { setSelectedVendor(null); setSelectedModel(null); }}>
                 清除筛选

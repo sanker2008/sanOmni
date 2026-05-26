@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ImageWithRelations, Vendor, Model, Tag, PromptGroup } from "@/stores";
+import type { ImageWithRelations, Vendor, Model, Tag, PromptGroup, IpAsset, IpAssetDetail, IpStickerPack, IpStickerPackPlatform } from "@/stores";
 
 // Types for API requests
 interface ImportImageRequest {
@@ -203,6 +203,20 @@ export const vendorApi = {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<boolean>>("delete_model", { dbPath, modelId });
     if (!result.success) throw new Error(result.error || "Failed to delete model");
+    return result.data || false;
+  },
+
+  async checkModelUsage(modelId: string): Promise<number> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<number>>("check_model_usage", { dbPath, modelId });
+    if (!result.success) throw new Error(result.error || "Failed to check model usage");
+    return result.data || 0;
+  },
+
+  async deleteModelCascade(modelId: string, action: "delete_images" | "move_to_unknown" | "none"): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("delete_model_cascade", { dbPath, modelId, action });
+    if (!result.success) throw new Error(result.error || "Failed to delete model cascade");
     return result.data || false;
   },
 };
@@ -592,3 +606,298 @@ export const settingsApi = {
     return result.data || false;
   },
 };
+
+// ==================== IP Asset API ====================
+
+export const ipApi = {
+  async getAll(): Promise<IpAsset[]> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpAsset[]>>("get_ip_assets", { dbPath });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "获取 IP 列表失败");
+    }
+    return result.data;
+  },
+
+  async getDetail(ipId: string): Promise<IpAssetDetail> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpAssetDetail>>("get_ip_asset_detail", { dbPath, ipId });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "获取 IP 详情失败");
+    }
+    return result.data;
+  },
+
+  async create(name: string, inspiration?: string, description?: string, avatarPath?: string): Promise<IpAsset> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpAsset>>("create_ip_asset", {
+      dbPath,
+      name,
+      inspiration,
+      description,
+      avatarPath,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "创建 IP 失败");
+    }
+    return result.data;
+  },
+
+  async update(ipId: string, name: string, inspiration?: string, description?: string, avatarPath?: string): Promise<IpAsset> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpAsset>>("update_ip_asset", {
+      dbPath,
+      ipId,
+      name,
+      inspiration,
+      description,
+      avatarPath,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "更新 IP 失败");
+    }
+    return result.data;
+  },
+
+  async delete(ipId: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("delete_ip_asset", { dbPath, ipId });
+    if (!result.success) {
+      throw new Error(result.error || "删除 IP 失败");
+    }
+    return result.data || false;
+  },
+
+  async addCharacterSheets(ipId: string, imagePaths: string[], sheetType: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("add_ip_character_sheets", {
+      dbPath,
+      ipId,
+      imagePaths,
+      sheetType,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "添加三视图失败");
+    }
+    return result.data || false;
+  },
+
+  async removeCharacterSheets(ipId: string, imagePaths: string[]): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("remove_ip_character_sheets", {
+      dbPath,
+      ipId,
+      imagePaths,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "移除三视图失败");
+    }
+    return result.data || false;
+  },
+
+  async addCreations(ipId: string, imagePaths: string[], creationNames: Array<string | null>): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("add_ip_creations", {
+      dbPath,
+      ipId,
+      imagePaths,
+      creationNames,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "添加创作关联失败");
+    }
+    return result.data || false;
+  },
+
+  async removeCreations(ipId: string, imagePaths: string[]): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("remove_ip_creations", {
+      dbPath,
+      ipId,
+      imagePaths,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "移除创作关联失败");
+    }
+    return result.data || false;
+  },
+
+  async addRelation(ipAId: string, ipBId: string, relationType: string, description?: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("add_ip_relation", {
+      dbPath,
+      ipAId,
+      ipBId,
+      relationType,
+      description,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "添加关系失败");
+    }
+    return result.data || false;
+  },
+
+  async removeRelation(ipAId: string, ipBId: string, relationType: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("remove_ip_relation", {
+      dbPath,
+      ipAId,
+      ipBId,
+      relationType,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "解除关系失败");
+    }
+    return result.data || false;
+  },
+
+  async createStickerPack(ipId: string, name: string, description?: string): Promise<IpStickerPack> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpStickerPack>>("create_ip_sticker_pack", {
+      dbPath,
+      ipId,
+      name,
+      description,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "创建表情包套件失败");
+    }
+    return result.data;
+  },
+
+  async updateStickerPack(packId: string, name: string, description?: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("update_ip_sticker_pack", {
+      dbPath,
+      packId,
+      name,
+      description,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "修改表情包套件失败");
+    }
+    return result.data || false;
+  },
+
+  async deleteStickerPack(packId: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("delete_ip_sticker_pack", { dbPath, packId });
+    if (!result.success) {
+      throw new Error(result.error || "删除表情包套件失败");
+    }
+    return result.data || false;
+  },
+
+  async addStickerPackPlatform(
+    packId: string,
+    platformName: string,
+    packNameOnPlatform?: string,
+    emojiSizeSpec?: string,
+    status: string = "Draft",
+    publishUrl?: string
+  ): Promise<IpStickerPackPlatform> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpStickerPackPlatform>>("add_ip_sticker_pack_platform", {
+      dbPath,
+      packId,
+      platformName,
+      packNameOnPlatform,
+      emojiSizeSpec,
+      status,
+      publishUrl,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "添加发布渠道失败");
+    }
+    return result.data;
+  },
+
+  async updateStickerPackPlatform(
+    platformId: string,
+    platformName: string,
+    packNameOnPlatform?: string,
+    emojiSizeSpec?: string,
+    status: string = "Draft",
+    publishUrl?: string,
+    downloadsCount: number = 0
+  ): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("update_ip_sticker_pack_platform", {
+      dbPath,
+      platformId,
+      platformName,
+      packNameOnPlatform,
+      emojiSizeSpec,
+      status,
+      publishUrl,
+      downloadsCount,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "更新发布渠道失败");
+    }
+    return result.data || false;
+  },
+
+  async deleteStickerPackPlatform(platformId: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("delete_ip_sticker_pack_platform", { dbPath, platformId });
+    if (!result.success) {
+      throw new Error(result.error || "删除发布渠道记录失败");
+    }
+    return result.data || false;
+  },
+
+  async addEmojis(ipId: string, packId: string | null, imagePaths: string[], triggerWords: Array<string | null>): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("add_ip_emojis", {
+      dbPath,
+      ipId,
+      packId,
+      imagePaths,
+      triggerWords,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "添加表情图片失败");
+    }
+    return result.data || false;
+  },
+
+  async updateEmojiTriggerWord(emojiId: string, triggerWord?: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("update_ip_emoji_trigger_word", {
+      dbPath,
+      emojiId,
+      triggerWord,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "更新表情快捷词失败");
+    }
+    return result.data || false;
+  },
+
+  async deleteEmojis(emojiIds: string[]): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("delete_ip_emojis", {
+      dbPath,
+      emojiIds,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "彻底删除表情图片失败");
+    }
+    return result.data || false;
+  },
+
+  async moveEmojisToPack(emojiIds: string[], packId: string | null): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("move_ip_emojis_to_pack", {
+      dbPath,
+      emojiIds,
+      packId,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "移动表情套件失败");
+    }
+    return result.data || false;
+  },
+};
+

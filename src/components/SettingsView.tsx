@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useUIStore, useVendorStore, useImageStore } from "@/stores";
+import { useUIStore, useImageStore } from "@/stores";
 import { settingsApi, scannerApi } from "@/services/tauri";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -45,20 +45,18 @@ const SHORTCUTS = [
   { key: "Ctrl + ,", description: "打开设置" },
 ];
 
-type SettingsTab = "general" | "monitor" | "vendors" | "shortcuts" | "trash";
+type SettingsTab = "general" | "prompt" | "ip" | "shortcuts" | "trash";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "通用设置" },
-
-  { key: "monitor", label: "监控设置" },
-  { key: "vendors", label: "厂商管理" },
+  { key: "prompt", label: "Prompt 模板管理" },
+  { key: "ip", label: "IP 形象管理" },
   { key: "shortcuts", label: "快捷键" },
   { key: "trash", label: "回收站" },
 ];
 
 function SettingsView() {
   const { settingsOpen, closeSettings, settings, updateSetting, settingsTab, setSettingsTab } = useUIStore();
-  const { vendors, setVendors } = useVendorStore();
   const { setArchivedImages, setInboxImages } = useImageStore();
   const activeSettingsTab = (settingsTab as SettingsTab) || "general";
   const setActiveSettingsTab = (tab: SettingsTab) => setSettingsTab(tab);
@@ -87,12 +85,6 @@ function SettingsView() {
   } | null>(null);
   
   // Vendor management state
-  const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
-  const [editingVendor, setEditingVendor] = useState<string | null>(null);
-  const [editingModel, setEditingModel] = useState<string | null>(null);
-  const [vendorForm, setVendorForm] = useState({ name: "", path: "" });
-  const [modelForm, setModelForm] = useState({ name: "", path: "", description: "" });
-  const [addingModelForVendor, setAddingModelForVendor] = useState<string | null>(null);
   const [resetDbStep, setResetDbStep] = useState(0);
 
   // 初始化本地设置
@@ -311,7 +303,35 @@ function SettingsView() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="w-4 h-4" />
+                    重置数据库
+                  </CardTitle>
+                  <CardDescription>
+                    删除所有数据并重新初始化数据库。此操作不可恢复！
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={() => setResetDbStep(1)}
+                  >
+                    重置数据库
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          
+          {/* Prompt 模板相关 */}
+          {activeSettingsTab === "prompt" && (
+            <div className="space-y-6">
+              <div className="text-lg font-semibold mb-4 border-b pb-2">归档与路径配置</div>
+<Card>
                 <CardHeader>
                   <CardTitle className="text-base">命名模板</CardTitle>
                   <CardDescription>
@@ -596,33 +616,9 @@ function SettingsView() {
                 </CardContent>
               </Card>
 
-              <Card className="border-destructive/50">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2 text-destructive">
-                    <AlertTriangle className="w-4 h-4" />
-                    重置数据库
-                  </CardTitle>
-                  <CardDescription>
-                    删除所有数据并重新初始化数据库。此操作不可恢复！
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button 
-                    variant="destructive" 
-                    size="sm"
-                    onClick={() => setResetDbStep(1)}
-                  >
-                    重置数据库
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-
-          {/* 监控设置 */}
-          {activeSettingsTab === "monitor" && (
-            <div className="space-y-6">
+              
+{/* 监控设置 */}
+              <div className="text-lg font-semibold mt-8 mb-4 border-b pb-2">文件夹监控与自动分类</div>
               {/* 活跃的监控器 */}
               {activeWatchers.length > 0 && (
                 <Card>
@@ -772,403 +768,29 @@ function SettingsView() {
                   </div>
                 </CardContent>
               </Card>
+                      
             </div>
           )}
 
-          {/* 厂商管理 */}
-          {activeSettingsTab === "vendors" && (
+          {/* IP 形象相关 */}
+          {activeSettingsTab === "ip" && (
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">厂商和模型管理</CardTitle>
+                  <CardTitle className="text-base">IP 形象相关设置</CardTitle>
                   <CardDescription>
-                    管理所有 AI 图片生成厂商和对应的模型
+                    关于 IP 角色、设定图、表情包的管理设置
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {vendors.map((vendor) => {
-                      const isExpanded = expandedVendors.has(vendor.id);
-                      const isEditing = editingVendor === vendor.id;
-
-                      return (
-                        <div key={vendor.id} className="border rounded-lg p-3">
-                          {/* Vendor Header */}
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                const next = new Set(expandedVendors);
-                                if (next.has(vendor.id)) {
-                                  next.delete(vendor.id);
-                                } else {
-                                  next.add(vendor.id);
-                                }
-                                setExpandedVendors(next);
-                              }}
-                              className="p-1 hover:bg-muted rounded"
-                            >
-                              {isExpanded ? (
-                                <ChevronDown className="w-4 h-4" />
-                              ) : (
-                                <ChevronRight className="w-4 h-4" />
-                              )}
-                            </button>
-
-                            {isEditing ? (
-                              <div className="flex-1 flex items-center gap-2">
-                                <Input
-                                  value={vendorForm.name}
-                                  onChange={(e) =>
-                                    setVendorForm({ ...vendorForm, name: e.target.value })
-                                  }
-                                  placeholder="厂商名称"
-                                  className="flex-1"
-                                />
-                                <Input
-                                  value={vendorForm.path}
-                                  onChange={(e) =>
-                                    setVendorForm({ ...vendorForm, path: e.target.value })
-                                  }
-                                  placeholder="路径标识"
-                                  className="flex-1"
-                                />
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={async () => {
-                                    try {
-                                      const { vendorApi } = await import("@/services/tauri");
-                                      await vendorApi.update(vendor.id, vendorForm.name, vendorForm.path);
-                                      // Reload vendors
-                                      const updatedVendors = await vendorApi.getAll();
-                                      setVendors(updatedVendors);
-                                      setEditingVendor(null);
-                                    } catch (error) {
-                                      toast({
-                                        title: "✗ 更新失败",
-                                        description: String(error),
-                                        variant: "destructive",
-                                      });
-                                    }
-                                  }}
-                                >
-                                  <Save className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setEditingVendor(null)}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <>
-                                <span className="font-medium flex-1">{vendor.name}</span>
-                                <Badge variant="secondary" className="text-xs">
-                                  {vendor.models.length} 个模型
-                                </Badge>
-                                {vendor.id !== "unknown" && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => {
-                                        setEditingVendor(vendor.id);
-                                        setVendorForm({ name: vendor.name, path: vendor.path });
-                                      }}
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={async () => {
-                                        if (confirm(`确定要删除厂商 "${vendor.name}" 吗？`)) {
-                                          try {
-                                            const { vendorApi } = await import("@/services/tauri");
-                                            await vendorApi.delete(vendor.id);
-                                            const updatedVendors = await vendorApi.getAll();
-                                            setVendors(updatedVendors);
-                                          } catch (error) {
-                                            toast({
-                                              title: "✗ 删除失败",
-                                              description: String(error),
-                                              variant: "destructive",
-                                            });
-                                          }
-                                        }
-                                      }}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </>
-                                )}
-                              </>
-                            )}
-                          </div>
-
-                          {/* Models List */}
-                          {isExpanded && (
-                            <div className="ml-8 mt-3 space-y-2">
-                              {vendor.models.map((model) => {
-                                const isEditingModel = editingModel === model.id;
-
-                                return (
-                                  <div
-                                    key={model.id}
-                                    className="flex items-center gap-2 p-2 rounded-md border bg-muted/30"
-                                  >
-                                    {isEditingModel ? (
-                                      <>
-                                        <Input
-                                          value={modelForm.name}
-                                          onChange={(e) =>
-                                            setModelForm({ ...modelForm, name: e.target.value })
-                                          }
-                                          placeholder="模型名称"
-                                          className="flex-1"
-                                        />
-                                        <Input
-                                          value={modelForm.path}
-                                          onChange={(e) =>
-                                            setModelForm({ ...modelForm, path: e.target.value })
-                                          }
-                                          placeholder="路径标识"
-                                          className="flex-1"
-                                        />
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={async () => {
-                                            try {
-                                              const { vendorApi } = await import("@/services/tauri");
-                                              await vendorApi.updateModel(
-                                                model.id,
-                                                modelForm.name,
-                                                modelForm.path,
-                                                modelForm.description
-                                              );
-                                              const updatedVendors = await vendorApi.getAll();
-                                              setVendors(updatedVendors);
-                                              setEditingModel(null);
-                                            } catch (error) {
-                                              toast({
-                                                title: "✗ 更新失败",
-                                                description: String(error),
-                                                variant: "destructive",
-                                              });
-                                            }
-                                          }}
-                                        >
-                                          <Save className="w-4 h-4" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => setEditingModel(null)}
-                                        >
-                                          <X className="w-4 h-4" />
-                                        </Button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span className="text-sm flex-1">{model.name}</span>
-                                        {model.id !== "unknown" && (
-                                          <>
-                                            <Button
-                                              size="sm"
-                                              variant="ghost"
-                                              onClick={() => {
-                                                setEditingModel(model.id);
-                                                setModelForm({
-                                                  name: model.name,
-                                                  path: model.path,
-                                                  description: model.description || "",
-                                                });
-                                              }}
-                                            >
-                                              <Edit2 className="w-3 h-3" />
-                                            </Button>
-                                            <Button
-                                              size="sm"
-                                              variant="ghost"
-                                              onClick={async () => {
-                                                if (confirm(`确定要删除模型 "${model.name}" 吗？`)) {
-                                                  try {
-                                                    const { vendorApi } = await import("@/services/tauri");
-                                                    await vendorApi.deleteModel(model.id);
-                                                    const updatedVendors = await vendorApi.getAll();
-                                                    setVendors(updatedVendors);
-                                                  } catch (error) {
-                                                    toast({
-                                                      title: "✗ 删除失败",
-                                                      description: String(error),
-                                                      variant: "destructive",
-                                                    });
-                                                  }
-                                                }
-                                              }}
-                                            >
-                                              <Trash2 className="w-3 h-3" />
-                                            </Button>
-                                          </>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-                                );
-                              })}
-
-                              {/* Add Model Form */}
-                              {addingModelForVendor === vendor.id ? (
-                                <div className="flex items-center gap-2 p-2 rounded-md border bg-blue-50 dark:bg-blue-950">
-                                  <Input
-                                    value={modelForm.name}
-                                    onChange={(e) =>
-                                      setModelForm({ ...modelForm, name: e.target.value })
-                                    }
-                                    placeholder="模型名称"
-                                    className="flex-1"
-                                  />
-                                  <Input
-                                    value={modelForm.path}
-                                    onChange={(e) =>
-                                      setModelForm({ ...modelForm, path: e.target.value })
-                                    }
-                                    placeholder="路径标识"
-                                    className="flex-1"
-                                  />
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={async () => {
-                                      try {
-                                        const { vendorApi } = await import("@/services/tauri");
-                                        await vendorApi.addModel(
-                                          vendor.id,
-                                          modelForm.name,
-                                          modelForm.path,
-                                          modelForm.description
-                                        );
-                                        const updatedVendors = await vendorApi.getAll();
-                                        setVendors(updatedVendors);
-                                        setAddingModelForVendor(null);
-                                        setModelForm({ name: "", path: "", description: "" });
-                                      } catch (error) {
-                                        toast({
-                                          title: "✗ 添加失败",
-                                          description: String(error),
-                                          variant: "destructive",
-                                        });
-                                      }
-                                    }}
-                                  >
-                                    <Save className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setAddingModelForVendor(null);
-                                      setModelForm({ name: "", path: "", description: "" });
-                                    }}
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="w-full"
-                                  onClick={() => {
-                                    setAddingModelForVendor(vendor.id);
-                                    setModelForm({ name: "", path: "", description: "" });
-                                  }}
-                                >
-                                  <Plus className="w-3.5 h-3.5 mr-1" />
-                                  添加模型
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Add Vendor Button */}
-                    <Separator />
-                    {editingVendor === "new" ? (
-                      <div className="flex items-center gap-2 p-3 rounded-lg border bg-blue-50 dark:bg-blue-950">
-                        <Input
-                          value={vendorForm.name}
-                          onChange={(e) =>
-                            setVendorForm({ ...vendorForm, name: e.target.value })
-                          }
-                          placeholder="厂商名称（如：OpenAI）"
-                          className="flex-1"
-                        />
-                        <Input
-                          value={vendorForm.path}
-                          onChange={(e) =>
-                            setVendorForm({ ...vendorForm, path: e.target.value })
-                          }
-                          placeholder="路径标识（如：openai）"
-                          className="flex-1"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              const { vendorApi } = await import("@/services/tauri");
-                              await vendorApi.add(vendorForm.name, vendorForm.path);
-                              const updatedVendors = await vendorApi.getAll();
-                              setVendors(updatedVendors);
-                              setEditingVendor(null);
-                              setVendorForm({ name: "", path: "" });
-                            } catch (error) {
-                              toast({
-                                title: "✗ 添加失败",
-                                description: String(error),
-                                variant: "destructive",
-                              });
-                            }
-                          }}
-                        >
-                          <Save className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingVendor(null);
-                            setVendorForm({ name: "", path: "" });
-                          }}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => {
-                          setEditingVendor("new");
-                          setVendorForm({ name: "", path: "" });
-                        }}
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        添加新厂商
-                      </Button>
-                    )}
-                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    目前 IP 模块采用独立存储架构，暂无需要特殊配置的项。未来的默认发布平台、表情包尺寸预设等设置将在此处扩展。
+                  </p>
                 </CardContent>
               </Card>
             </div>
           )}
-
-          {/* 快捷键 */}
+{/* 快捷键 */}
           {activeSettingsTab === "shortcuts" && (
             <div className="space-y-6">
               <Card>

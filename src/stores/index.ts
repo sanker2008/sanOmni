@@ -52,6 +52,83 @@ export interface Tag {
   color?: string;
 }
 
+export interface IpAsset {
+  id: string;
+  name: string;
+  avatar_path?: string;
+  inspiration?: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpCharacterSheet {
+  id: string;
+  ip_id: string;
+  image_path: string;
+  sheet_type: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface IpCreation {
+  ip_id: string;
+  image_path: string;
+  creation_name?: string;
+  created_at: string;
+}
+
+export interface IpStickerPack {
+  id: string;
+  ip_id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpEmoji {
+  id: string;
+  pack_id: string;
+  image_path: string;
+  trigger_word?: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface IpStickerPackPlatform {
+  id: string;
+  pack_id: string;
+  platform_name: string;
+  pack_name_on_platform?: string;
+  emoji_size_spec?: string;
+  status: string;
+  publish_url?: string;
+  downloads_count: number;
+  updated_at: string;
+}
+
+export interface IpRelation {
+  ip_a_id: string;
+  ip_b_id: string;
+  relation_type: string;
+  description?: string;
+  created_at: string;
+  ip_b_name?: string;
+  ip_b_avatar_path?: string;
+}
+
+export interface IpAssetDetail {
+  ip: IpAsset;
+  character_sheets: IpCharacterSheet[];
+  creations: IpCreation[];
+  sticker_packs: IpStickerPack[];
+  emojis: IpEmoji[];
+  platforms: IpStickerPackPlatform[];
+  relations: IpRelation[];
+}
+
+
 export interface ImageWithRelations extends Image {
   models: ModelInfo[];
   tags: Tag[];
@@ -306,7 +383,8 @@ applyThemeColors(loadSettings());
 applyTheme(loadTheme());
 
 interface UIStore {
-  activeTab: "inbox" | "archived" | "prompt-management";
+  activeTab: "prompt" | "ip";
+  promptTab: "inbox" | "archived" | "templates" | "vendors";
   searchQuery: string;
   selectedVendorFilter: string | null;
   selectedModelFilter: string | null;
@@ -320,8 +398,10 @@ interface UIStore {
   settings: Record<string, any>;
   theme: Theme;
   viewMode: ViewMode;
+  selectedIpId: string | null;
 
-  setActiveTab: (tab: "inbox" | "archived" | "prompt-management") => void;
+  setActiveTab: (tab: "prompt" | "ip") => void;
+  setPromptTab: (tab: "inbox" | "archived" | "templates" | "vendors") => void;
   setSearchQuery: (query: string) => void;
   setVendorFilter: (vendorId: string | null) => void;
   setModelFilter: (modelId: string | null) => void;
@@ -337,10 +417,12 @@ interface UIStore {
   updateSetting: (key: string, value: any) => void;
   setTheme: (theme: Theme) => void;
   setViewMode: (mode: ViewMode) => void;
+  setSelectedIpId: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set, get) => ({
-  activeTab: "inbox",
+  activeTab: "prompt",
+  promptTab: "inbox",
   searchQuery: "",
   selectedVendorFilter: null,
   selectedModelFilter: null,
@@ -354,10 +436,18 @@ export const useUIStore = create<UIStore>((set, get) => ({
   settings: loadSettings(),
   theme: loadTheme(),
   viewMode: loadViewMode(),
+  selectedIpId: null,
 
   setActiveTab: (tab) => {
-    useImageStore.getState().clearSelection();
+    // Only clear image selection if we're actually changing domains
+    if (get().activeTab !== tab) {
+      useImageStore.getState().clearSelection();
+    }
     set({ activeTab: tab });
+  },
+  setPromptTab: (tab) => {
+    useImageStore.getState().clearSelection();
+    set({ promptTab: tab });
   },
   setSearchQuery: (query) => set({ searchQuery: query }),
   setVendorFilter: (vendorId) => set({ selectedVendorFilter: vendorId }),
@@ -400,4 +490,5 @@ export const useUIStore = create<UIStore>((set, get) => ({
       localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
     } catch {}
   },
+  setSelectedIpId: (id) => set({ selectedIpId: id }),
 }));

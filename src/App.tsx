@@ -1,23 +1,21 @@
 import { useUIStore } from "@/stores";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useFolderWatcher } from "@/hooks/useFolderWatcher";
-import InboxView from "@/components/InboxView";
-import ArchivedView from "@/components/ArchivedView";
-import { PromptGroupsView } from "@/components/PromptGroupsView";
+import PromptDomainView from "@/components/PromptDomainView";
 import QuickEditModal from "@/components/QuickEditModal";
 import ImageViewer from "@/components/ImageViewer";
 import SettingsView from "@/components/SettingsView";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
+
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Inbox, Archive, Settings, Search, Sun, Moon, Monitor, Sparkles } from "lucide-react";
+import { Settings, Sun, Moon, Monitor, LayoutTemplate, Users } from "lucide-react";
+import IPManagementView from "@/components/IPManagementView";
 import type { Theme } from "@/stores";
 
 const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
@@ -57,44 +55,28 @@ function App() {
 
             <nav className="flex items-center gap-1">
               <Button
-                variant={activeTab === "inbox" ? "default" : "ghost"}
+                variant={activeTab === "prompt" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setActiveTab("inbox")}
+                onClick={() => setActiveTab("prompt")}
                 className="gap-2"
               >
-                <Inbox className="w-4 h-4" />
-                待整理
-              </Button>
-              <Button
-                variant={activeTab === "archived" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setActiveTab("archived")}
-                className="gap-2"
-              >
-                <Archive className="w-4 h-4" />
-                已归档
-              </Button>
-              <Button
-                variant={activeTab === "prompt-management" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setActiveTab("prompt-management")}
-                className="gap-2"
-              >
-                <Sparkles className="w-4 h-4" />
+                <LayoutTemplate className="w-4 h-4" />
                 Prompt 模板管理
+              </Button>
+              <Button
+                variant={activeTab === "ip" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTab("ip")}
+                className="gap-2"
+              >
+                <Users className="w-4 h-4" />
+                IP 形象管理
               </Button>
             </nav>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="全局搜索..."
-                className="pl-9 w-72"
-              />
-            </div>
-            <Separator orientation="vertical" className="h-6" />
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" onClick={cycleTheme}>
@@ -120,12 +102,10 @@ function App() {
 
         {/* Main Content */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {activeTab === "inbox" ? (
-            <InboxView />
-          ) : activeTab === "archived" ? (
-            <ArchivedView />
-          ) : activeTab === "prompt-management" ? (
-            <PromptGroupsView />
+          {activeTab === "prompt" ? (
+            <PromptDomainView />
+          ) : activeTab === "ip" ? (
+            <IPManagementView />
           ) : null}
         </main>
 

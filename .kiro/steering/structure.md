@@ -31,15 +31,24 @@ src/
 │   │   ├── skeleton.tsx
 │   │   ├── slider.tsx
 │   │   ├── switch.tsx
+│   │   ├── toast.tsx
+│   │   ├── toaster.tsx
+│   │   ├── dropdown-menu.tsx
 │   │   └── tooltip.tsx
 │   ├── InboxView.tsx           # Main inbox view (unarchived images)
 │   ├── ArchivedView.tsx        # Archive view (archived images)
+│   ├── PromptGroupsView.tsx    # Prompt template groups view
+│   ├── IPManagementView.tsx    # IP character management view
+│   ├── TrashView.tsx           # Trash / recycle bin view
 │   ├── ImageCard.tsx           # Individual image card component
 │   ├── ImageViewer.tsx         # Full-screen image viewer with navigation
 │   ├── DropZone.tsx            # Drag-and-drop upload area
 │   ├── QuickEditModal.tsx      # Quick edit dialog for single image
 │   ├── BatchEditModal.tsx      # Batch edit dialog for multiple images
+│   ├── IPImagePickerModal.tsx  # Image picker modal for IP assets
 │   ├── ConfirmDialog.tsx       # Confirmation dialog component
+│   ├── SmartPromptRenderer.tsx # Intelligent prompt template renderer
+│   ├── TemplateVariableEditor.tsx # Template variable editing component
 │   └── SettingsView.tsx        # Settings panel with tabs
 ```
 
@@ -55,7 +64,8 @@ src/
 src/
 ├── hooks/                      # Custom React hooks
 │   ├── useFolderWatcher.ts    # Folder monitoring hook
-│   └── useKeyboardShortcuts.ts # Global keyboard shortcuts
+│   ├── useKeyboardShortcuts.ts # Global keyboard shortcuts
+│   └── useToast.ts            # Toast notification hook
 ├── services/                   # API abstraction layer
 │   └── tauri.ts               # Tauri command wrappers
 ├── stores/                     # Zustand state management
@@ -84,13 +94,18 @@ src-tauri/
 │   │   ├── tags.rs            # Tag operations
 │   │   ├── watermark.rs       # Watermark detection
 │   │   ├── watermark_removal.rs # Watermark removal
+│   │   ├── gemini_watermark_removal.rs # Gemini AI-powered watermark removal
 │   │   ├── watcher.rs         # File system monitoring
 │   │   ├── settings.rs        # Settings persistence
-│   │   └── classifier.rs      # Auto-classification logic
+│   │   ├── classifier.rs      # Auto-classification logic
+│   │   ├── ip_assets.rs       # IP character asset management
+│   │   ├── prompt_groups.rs   # Prompt template groups
+│   │   └── scanner.rs         # File system scanning
 │   ├── database/               # Database layer
 │   │   └── mod.rs             # SQLite schema and operations
 │   └── models/                 # Data structures
-│       └── mod.rs             # Shared data models
+│       ├── mod.rs             # Shared data models
+│       └── ip_assets.rs       # IP asset data models
 ├── capabilities/               # Tauri permission definitions
 │   └── default.json
 ├── icons/                      # Application icons
@@ -142,6 +157,61 @@ docs/
 ├── .gitignore                  # Git ignore rules
 └── README.md                   # Project overview
 ```
+
+## Module Domains
+
+The project is organized into two independent functional domains plus shared common features:
+
+### Domain 1: Prompt Template Management (sanPromptBox)
+
+Manages AI-generated images as visual references for prompt templates.
+
+| Layer | Files |
+|-------|-------|
+| **Frontend Views** | `InboxView.tsx`, `ArchivedView.tsx`, `PromptGroupsView.tsx` |
+| **Frontend Components** | `ImageCard.tsx`, `QuickEditModal.tsx`, `BatchEditModal.tsx`, `SmartPromptRenderer.tsx`, `TemplateVariableEditor.tsx`, `DropZone.tsx` |
+| **Backend Commands** | `images.rs`, `vendors.rs`, `tags.rs`, `classifier.rs`, `prompt_groups.rs`, `scanner.rs` |
+| **State** | `useImageStore`, `useVendorStore`, `useTagStore` |
+
+### Domain 2: IP Character Management (sanIPBox)
+
+Manages IP characters, sticker packs, emojis, character sheets, creations, and platform publishing.
+
+| Layer | Files |
+|-------|-------|
+| **Frontend Views** | `IPManagementView.tsx` |
+| **Frontend Components** | `IPImagePickerModal.tsx` |
+| **Backend Commands** | `ip_assets.rs` |
+| **Backend Models** | `models/ip_assets.rs` |
+| **State** | (planned: `useIPStore`) |
+
+### Shared Common Features
+
+Features used by both domains.
+
+| Layer | Files |
+|-------|-------|
+| **Frontend Views** | `SettingsView.tsx`, `TrashView.tsx` |
+| **Frontend Components** | `ImageViewer.tsx`, `ConfirmDialog.tsx`, `ui/*` |
+| **Frontend Hooks** | `useFolderWatcher.ts`, `useKeyboardShortcuts.ts`, `useToast.ts` |
+| **Frontend Services** | `tauri.ts` |
+| **Backend Commands** | `settings.rs`, `watcher.rs`, `watermark.rs`, `watermark_removal.rs`, `gemini_watermark_removal.rs` |
+| **State** | `useUIStore` |
+
+## Future Modular Structure
+
+The two domains are architecturally independent and may be split into separate standalone applications in the future:
+
+- **sanPromptBox**: Standalone prompt template management app
+- **sanIPBox**: Standalone IP character management app
+- **sanMediaBox**: Remains as the unified shell or is retired
+
+To facilitate this potential split, the following guidelines apply:
+
+1. **Minimize cross-domain dependencies**: Prompt and IP modules should not import from each other
+2. **Shared code in common locations**: Shared utilities, UI components, and services should remain in domain-neutral locations (`ui/`, `services/`, `hooks/`, shared commands)
+3. **Independent database tables**: Each domain's database tables should be logically separable
+4. **Domain-specific stores**: Each domain should have its own Zustand store(s)
 
 ## File Naming Conventions
 

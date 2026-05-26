@@ -259,7 +259,7 @@ export default function QuickEditModal() {
     setEditPromptTab("base");
   };
 
-  const handleEditFieldChange = (field: "prompt" | "negative_prompt" | "description", value: string) => {
+  const handleEditFieldChange = (field: "prompt" | "negative_prompt" | "description" | "name", value: string) => {
     if (field === "prompt") setEditPromptText(value);
     if (field === "negative_prompt") setEditNegativePrompt(value);
     if (field === "description") setEditPromptDescription(value);
@@ -290,7 +290,7 @@ export default function QuickEditModal() {
     } catch (e) {}
   };
 
-  const handleAddFieldChange = (field: "prompt" | "negative_prompt" | "description", value: string) => {
+  const handleAddFieldChange = (field: "prompt" | "negative_prompt" | "description" | "name", value: string) => {
     if (field === "prompt") setNewPromptText(value);
     if (field === "negative_prompt") setNewNegativePrompt(value);
     if (field === "description") setNewPromptDescription(value);
@@ -324,6 +324,7 @@ export default function QuickEditModal() {
   const handleSaveEditedPrompt = async (groupId: string) => {
     let finalPromptText = editPromptText.trim();
     let finalNegativePrompt = editNegativePrompt.trim();
+    let finalName = editPromptName.trim();
     let finalDescription = editPromptDescription.trim();
     const finalTemplateSchema = editTemplateSchema.trim() || undefined;
 
@@ -336,7 +337,6 @@ export default function QuickEditModal() {
         if (!finalNegativePrompt && parsed.negative_prompt) {
           finalNegativePrompt = parsed.negative_prompt.trim();
         }
-        let finalName = editPromptName.trim();
         if (!finalName && parsed.name) {
           finalName = parsed.name.trim();
         }
@@ -400,6 +400,7 @@ export default function QuickEditModal() {
 
     let finalPromptText = newPromptText.trim();
     let finalNegativePrompt = newNegativePrompt.trim();
+    let finalName = newPromptName.trim();
     let finalDescription = newPromptDescription.trim();
     const finalTemplateSchema = newTemplateSchema.trim() || undefined;
 
@@ -412,7 +413,6 @@ export default function QuickEditModal() {
         if (!finalNegativePrompt && parsed.negative_prompt) {
           finalNegativePrompt = parsed.negative_prompt.trim();
         }
-        let finalName = newPromptName.trim();
         if (!finalName && parsed.name) {
           finalName = parsed.name.trim();
         }

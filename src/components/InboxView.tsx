@@ -22,6 +22,7 @@ import {
   Filter,
   Check,
   AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import DropZone from "./DropZone";
@@ -376,6 +377,10 @@ export default function InboxView() {
           <Button variant="default" size="sm" className="gap-2" onClick={handleImportClick}>
             <Upload className="w-4 h-4" />
             导入
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={loadInboxImages} disabled={isLoading}>
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            刷新
           </Button>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Badge variant="secondary">{inboxCount} 张图片</Badge>

@@ -345,7 +345,37 @@ export function PromptGroupsView() {
   };
 
   const buildFullPromptText = (group: PromptGroup) => {
-    const sections = [`Prompt:\n${group.prompt.trim()}`];
+    let finalPrompt = group.prompt.trim();
+
+    if (group.template_schema) {
+      try {
+        const parsed = JSON.parse(group.template_schema);
+        if (parsed && Array.isArray(parsed.variables)) {
+          let result = parsed.raw_prompt || finalPrompt;
+          parsed.variables.forEach((v: any) => {
+            let val = "";
+            if (v.default !== undefined) {
+              val = v.default;
+            } else if (v.options && v.options.length > 0) {
+              val = v.options[0].value;
+            }
+            const regex = new RegExp(`\\{\\{${v.key}\\}\\}`, "g");
+            result = result.replace(regex, val);
+          });
+          finalPrompt = result.trim();
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const sections = [];
+
+    if (group.name?.trim()) {
+      sections.push(`名称:\n${group.name.trim()}`);
+    }
+
+    sections.push(`Prompt:\n${finalPrompt}`);
 
     if (group.negative_prompt?.trim()) {
       sections.push(`反向提示词:\n${group.negative_prompt.trim()}`);

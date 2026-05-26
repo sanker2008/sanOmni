@@ -90,3 +90,6 @@ pub struct PromptGroupWithImages {
     pub group: PromptGroup,
     pub images: Vec<serde_json::Value>,
 }
+
+pub mod ip_assets;
+pub use ip_assets::*;

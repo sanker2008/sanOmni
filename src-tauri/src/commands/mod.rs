@@ -36,3 +36,4 @@ pub mod classifier;
 pub mod settings;
 pub mod scanner;
 pub mod prompt_groups;
+pub mod ip_assets;

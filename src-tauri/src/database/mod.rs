@@ -4,6 +4,15 @@ use std::path::Path;
 pub fn init_database(db_path: &Path) -> Result<()> {
     let conn = Connection::open(db_path)?;
     
+    // 清理旧开发版本的临时结构，确保重新以 path 为基础创建表
+    let _ = conn.execute("DROP TABLE IF EXISTS ip_character_sheets", []);
+    let _ = conn.execute("DROP TABLE IF EXISTS ip_emojis", []);
+    let _ = conn.execute("DROP TABLE IF EXISTS ip_creations", []);
+    let _ = conn.execute("DROP TABLE IF EXISTS ip_sticker_pack_platforms", []);
+    let _ = conn.execute("DROP TABLE IF EXISTS ip_sticker_packs", []);
+    let _ = conn.execute("DROP TABLE IF EXISTS ip_relations", []);
+    let _ = conn.execute("DROP TABLE IF EXISTS ip_assets", []);
+
     // Create tables
     conn.execute_batch(SCHEMA)?;
     
@@ -174,6 +183,94 @@ CREATE INDEX IF NOT EXISTS idx_images_prompt ON images(prompt);
 CREATE INDEX IF NOT EXISTS idx_imr_model ON image_model_relations(model_id);
 CREATE INDEX IF NOT EXISTS idx_itr_tag ON image_tag_relations(tag_id);
 CREATE INDEX IF NOT EXISTS idx_ipgr_group ON image_prompt_group_relations(prompt_group_id);
+
+-- AI IP Assets table
+CREATE TABLE IF NOT EXISTS ip_assets (
+    id                  TEXT PRIMARY KEY,
+    name                TEXT NOT NULL,
+    avatar_path         TEXT,
+    inspiration         TEXT,
+    description         TEXT,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL
+);
+
+-- IP Character Sheets
+CREATE TABLE IF NOT EXISTS ip_character_sheets (
+    id                  TEXT PRIMARY KEY,
+    ip_id               TEXT NOT NULL,
+    image_path          TEXT NOT NULL,
+    sheet_type          TEXT NOT NULL,
+    sort_order          INTEGER DEFAULT 0,
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE
+);
+
+-- IP Creations mapping
+CREATE TABLE IF NOT EXISTS ip_creations (
+    ip_id               TEXT NOT NULL,
+    image_path          TEXT NOT NULL,
+    creation_name       TEXT,
+    created_at          TEXT NOT NULL,
+    PRIMARY KEY (ip_id, image_path),
+    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE
+);
+
+-- IP Sticker Packs table
+CREATE TABLE IF NOT EXISTS ip_sticker_packs (
+    id                  TEXT PRIMARY KEY,
+    ip_id               TEXT NOT NULL,
+    name                TEXT NOT NULL,
+    description         TEXT,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE
+);
+
+-- IP Emojis table
+CREATE TABLE IF NOT EXISTS ip_emojis (
+    id                  TEXT PRIMARY KEY,
+    ip_id               TEXT NOT NULL,
+    pack_id             TEXT,
+    image_path          TEXT NOT NULL,
+    trigger_word        TEXT,
+    sort_order          INTEGER DEFAULT 0,
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE,
+    FOREIGN KEY (pack_id) REFERENCES ip_sticker_packs(id) ON DELETE SET NULL
+);
+
+-- IP Sticker Pack Platforms table
+CREATE TABLE IF NOT EXISTS ip_sticker_pack_platforms (
+    id                      TEXT PRIMARY KEY,
+    pack_id                 TEXT NOT NULL,
+    platform_name           TEXT NOT NULL,
+    pack_name_on_platform   TEXT,
+    emoji_size_spec         TEXT,
+    status                  TEXT DEFAULT 'Draft',
+    publish_url             TEXT,
+    downloads_count         INTEGER DEFAULT 0,
+    updated_at              TEXT NOT NULL,
+    FOREIGN KEY (pack_id) REFERENCES ip_sticker_packs(id) ON DELETE CASCADE
+);
+
+-- IP Relations table
+CREATE TABLE IF NOT EXISTS ip_relations (
+    ip_a_id             TEXT NOT NULL,
+    ip_b_id             TEXT NOT NULL,
+    relation_type       TEXT NOT NULL,
+    description         TEXT,
+    created_at          TEXT NOT NULL,
+    PRIMARY KEY (ip_a_id, ip_b_id, relation_type),
+    FOREIGN KEY (ip_a_id) REFERENCES ip_assets(id) ON DELETE CASCADE,
+    FOREIGN KEY (ip_b_id) REFERENCES ip_assets(id) ON DELETE CASCADE
+);
+
+-- Indexes for IP assets
+CREATE INDEX IF NOT EXISTS idx_ip_character_sheets_ip ON ip_character_sheets(ip_id);
+CREATE INDEX IF NOT EXISTS idx_ip_sticker_packs_ip ON ip_sticker_packs(ip_id);
+CREATE INDEX IF NOT EXISTS idx_ip_emojis_pack ON ip_emojis(pack_id);
+CREATE INDEX IF NOT EXISTS idx_ip_spp_pack ON ip_sticker_pack_platforms(pack_id);
 "#;
 
 fn insert_defaults(conn: &Connection) -> Result<()> {

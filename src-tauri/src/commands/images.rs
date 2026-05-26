@@ -1115,3 +1115,97 @@ fn fetch_image_tags(conn: &Connection, image_id: &str) -> Result<Vec<Tag>> {
     
     tags.collect()
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SimpleImageInfo {
+    pub filename: String,
+    pub absolute_path: String,
+}
+
+#[tauri::command]
+pub fn get_all_images(db_path: String) -> CommandResult<Vec<SimpleImageInfo>> {
+    let conn = match Connection::open(std::path::Path::new(&db_path)) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+
+    let mut all_images = Vec::new();
+
+    // 1. 查询 images 表
+    if let Ok(mut stmt) = conn.prepare("SELECT filename, absolute_path FROM images") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok(SimpleImageInfo {
+                filename: row.get(0)?,
+                absolute_path: row.get(1)?,
+            })
+        }) {
+            for row in rows {
+                if let Ok(info) = row {
+                    all_images.push(info);
+                }
+            }
+        }
+    }
+
+    // Helper closure to extract filename from absolute path
+    let get_filename = |path: &str| -> String {
+        std::path::Path::new(path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
+    // 2. 查询 ip_character_sheets 表
+    if let Ok(mut stmt) = conn.prepare("SELECT image_path FROM ip_character_sheets") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            let path: String = row.get(0)?;
+            Ok(SimpleImageInfo {
+                filename: get_filename(&path),
+                absolute_path: path,
+            })
+        }) {
+            for row in rows {
+                if let Ok(info) = row {
+                    all_images.push(info);
+                }
+            }
+        }
+    }
+
+    // 3. 查询 ip_creations 表
+    if let Ok(mut stmt) = conn.prepare("SELECT image_path FROM ip_creations") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            let path: String = row.get(0)?;
+            Ok(SimpleImageInfo {
+                filename: get_filename(&path),
+                absolute_path: path,
+            })
+        }) {
+            for row in rows {
+                if let Ok(info) = row {
+                    all_images.push(info);
+                }
+            }
+        }
+    }
+
+    // 4. 查询 ip_emojis 表
+    if let Ok(mut stmt) = conn.prepare("SELECT image_path FROM ip_emojis") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            let path: String = row.get(0)?;
+            Ok(SimpleImageInfo {
+                filename: get_filename(&path),
+                absolute_path: path,
+            })
+        }) {
+            for row in rows {
+                if let Ok(info) = row {
+                    all_images.push(info);
+                }
+            }
+        }
+    }
+
+    CommandResult::ok(all_images)
+}

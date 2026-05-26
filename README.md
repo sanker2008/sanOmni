@@ -1,26 +1,43 @@
-# sanMediaBox - AI 图片管理系统
+# sanMediaBox - AI 创意资产管理系统
 
-> 一个基于 Tauri 2.0 + React 的 AI 图片管理工具，帮助你高效管理和组织 AI 生成的图片。
+> 一个基于 Tauri 2.0 + React 的 AI 创意资产管理工具，包含 **Prompt 模板管理器** 和 **IP 形象管理器** 两大功能域，帮助你高效管理 AI 生成的图片、Prompt 模板和 IP 角色资产。
+>
+> 📐 两个功能域独立设计，未来可拆分为独立应用。
 
 ## ✨ 主要特性
 
+### 📝 Prompt 模板管理器
 - 🎨 **智能分类** - 按厂商和模型自动分类图片
-- 🏷️ **标签管理** - 灵活的标签系统,支持多标签
+- 🏷️ **标签管理** - 灵活的标签系统，支持多标签
 - 📝 **Prompt 管理** - 记录和管理图片生成提示词
-- ✨ **Prompt 对比** - 对比同一 prompt 在不同模型下的效果 🆕
+- ✨ **Prompt 对比** - 对比同一 prompt 在不同模型下的效果
+- 📦 **Prompt 分组** - 支持 template_schema 的 Prompt 模板分组管理
 - 🗂️ **归档系统** - 待整理 → 标记 → 归档的工作流程
-- 💧 **水印检测** - 自动检测和去除图片水印
+- 🔧 **厂商管理** - 自由管理 AI 厂商和模型
+
+### 🎭 IP 形象管理器
+- 🧑‍🎨 **IP 角色管理** - IP 角色的增删改查和详情管理
+- 🖼️ **角色设定图** - 管理 IP 角色的 character sheet
+- 🎨 **创作管理** - 管理基于 IP 角色创作的图片作品
+- 📱 **表情包管理** - 制作和管理表情包，支持触发词
+- 🚀 **平台发布** - 支持微信、Telegram 等平台的表情包发布
+- 🔗 **IP 关系** - 管理 IP 角色之间的关联关系
+
+### 🔧 通用功能
+- 💧 **水印检测** - 自动检测和去除图片水印（标准 + Gemini）
 - 👀 **文件夹监控** - 自动监控文件夹并导入新图片
 - 🎯 **快速编辑** - 双击图片快速编辑信息
 - 🔍 **搜索筛选** - 按厂商、模型、标签快速筛选
 - 🌓 **主题切换** - 支持浅色/深色/跟随系统，并可分别设置普通模式和暗黑模式主题色
 - ⌨️ **快捷键** - 丰富的键盘快捷键支持
-- 🔧 **厂商管理** - 自由管理 AI 厂商和模型
 - 💾 **自定义路径** - 自定义存储位置
 
 ## 📚 文档导航
 
 > 💡 查看 [完整文档索引](./docs/INDEX.md) 了解所有可用文档
+
+### 🏗️ 架构设计
+- [架构文档](./docs/ARCHITECTURE.md) - 双域架构设计与模块划分
 
 ### 🎯 快速开始
 - [开发进度](./docs/PROGRESS.md) - 查看项目完成情况和功能列表
@@ -117,14 +134,27 @@ npm run tauri:build
 ## 📊 项目状态
 
 ### 已完成功能
+
+**Prompt 模板管理器：**
 - ✅ 图片导入和管理
 - ✅ 厂商和模型分类
 - ✅ 标签系统
 - ✅ Prompt 管理
-- ✅ Prompt 对比（同一 prompt 不同模型效果对比）🆕
+- ✅ Prompt 对比（同一 prompt 不同模型效果对比）
+- ✅ Prompt 分组与模板管理
 - ✅ 归档系统
-- ✅ 水印检测和去除
-- ✅ 文件夹监控
+
+**IP 形象管理器：**
+- ✅ IP 角色 CRUD
+- ✅ 角色设定图（Character Sheet）管理
+- ✅ 创作管理（基于 IP 的图片作品）
+- ✅ 表情包管理与平台发布（微信、Telegram 等）
+- ✅ 表情 Emoji 与触发词管理
+- ✅ IP 关系管理
+
+**通用功能：**
+- ✅ 水印检测和去除（标准 + Gemini）
+- ✅ 文件夹监控与扫描
 - ✅ 快速编辑
 - ✅ 搜索筛选
 - ✅ 暗色模式
@@ -146,33 +176,46 @@ npm run tauri:build
 
 ```
 sanMediaBox/
-├── src/                      # 前端代码
-│   ├── components/          # React 组件
-│   │   ├── ui/             # shadcn/ui 组件
-│   │   ├── InboxView.tsx   # 待整理视图
-│   │   ├── ArchivedView.tsx # 已归档视图
-│   │   ├── ImageCard.tsx   # 图片卡片
-│   │   ├── DropZone.tsx    # 拖拽上传
-│   │   ├── QuickEditModal.tsx # 快速编辑
-│   │   └── SettingsView.tsx # 设置页面
-│   ├── hooks/              # 自定义 Hooks
-│   ├── services/           # API 服务
-│   ├── stores/             # Zustand 状态管理
-│   └── styles/             # 样式文件
-├── src-tauri/              # 后端代码
+├── src/                          # 前端代码
+│   ├── components/              # React 组件
+│   │   ├── ui/                 # shadcn/ui 组件
+│   │   ├── InboxView.tsx       # 待整理视图
+│   │   ├── ArchivedView.tsx    # 已归档视图
+│   │   ├── PromptGroupsView.tsx # Prompt 分组管理
+│   │   ├── IPManagementView.tsx # IP 形象管理视图
+│   │   ├── IPImagePickerModal.tsx # IP 图片选择器
+│   │   ├── SmartPromptRenderer.tsx # 智能 Prompt 渲染
+│   │   ├── TemplateVariableEditor.tsx # 模板变量编辑
+│   │   ├── TrashView.tsx       # 回收站视图
+│   │   ├── ImageCard.tsx       # 图片卡片
+│   │   ├── DropZone.tsx        # 拖拽上传
+│   │   ├── QuickEditModal.tsx  # 快速编辑
+│   │   └── SettingsView.tsx    # 设置页面
+│   ├── hooks/                  # 自定义 Hooks
+│   ├── services/               # API 服务
+│   ├── stores/                 # Zustand 状态管理
+│   └── styles/                 # 样式文件
+├── src-tauri/                  # 后端代码
 │   ├── src/
-│   │   ├── commands/       # Tauri 命令
-│   │   │   ├── images.rs   # 图片管理
-│   │   │   ├── vendors.rs  # 厂商管理
-│   │   │   ├── tags.rs     # 标签管理
-│   │   │   ├── watermark.rs # 水印检测
-│   │   │   ├── watcher.rs  # 文件夹监控
+│   │   ├── commands/           # Tauri 命令
+│   │   │   ├── images.rs       # 图片管理
+│   │   │   ├── vendors.rs      # 厂商管理
+│   │   │   ├── tags.rs         # 标签管理
+│   │   │   ├── prompt_groups.rs # Prompt 分组管理
+│   │   │   ├── ip_assets.rs    # IP 形象管理
+│   │   │   ├── scanner.rs      # 文件扫描
+│   │   │   ├── watermark.rs    # 水印检测
+│   │   │   ├── gemini_watermark_removal.rs # Gemini 水印去除
+│   │   │   ├── watcher.rs      # 文件夹监控
 │   │   │   └── ...
-│   │   ├── database/       # 数据库操作
-│   │   └── models/         # 数据模型
-│   └── capabilities/       # 权限配置
-└── docs/                   # 文档目录
+│   │   ├── database/           # 数据库操作
+│   │   └── models/             # 数据模型
+│   │       └── ip_assets.rs    # IP 资产数据模型
+│   └── capabilities/           # 权限配置
+└── docs/                       # 文档目录
 ```
+
+> 📐 **架构说明：** 项目采用双域架构，Prompt 模板管理和 IP 形象管理两个功能域在数据库、命令和前端组件层面相互独立，便于未来拆分为独立应用。详见 [架构文档](./docs/ARCHITECTURE.md)。
 
 ## 🤝 贡献指南
 
@@ -199,6 +242,6 @@ sanMediaBox/
 
 ---
 
-**最后更新：** 2026-05-21  
-**版本：** 1.1.0  
-**最新功能：** 设置页支持分别配置普通模式和暗黑模式主题色，保存成功后自动关闭弹窗 ✨
+**最后更新：** 2026-05-26  
+**版本：** 2.0.0  
+**最新功能：** 双域架构（Prompt 模板管理器 + IP 形象管理器），IP 角色管理、表情包发布、Prompt 分组模板 🆕
