@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useIpImageStore, useUIStore } from "@/stores";
+import type { ImageWithRelations, IpImageWithRelations } from "@/stores";
 import { toast } from "@/hooks/useToast";
-import { imageApi } from "@/services/tauri";
+import { imageApi, ipImageApi } from "@/services/tauri";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +46,9 @@ export default function ImageViewer() {
     ? (promptTab === "inbox" ? promptInbox : promptArchived)
     : (ipTab === "inbox" ? ipInbox : ipArchived);
   const currentIndex = currentImages.findIndex((img) => img.id === viewingImageId);
-  const image = currentImages[currentIndex];
+  const image = currentImages[currentIndex] as ImageWithRelations | IpImageWithRelations | undefined;
+  const isIpImage = (img: ImageWithRelations | IpImageWithRelations): img is IpImageWithRelations =>
+    !("models" in img);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
   const [imageTimestamp, setImageTimestamp] = useState(Date.now());
@@ -76,16 +79,26 @@ export default function ImageViewer() {
     setIsUpdatingWatermark(true);
     const nextHasWatermark = !image.has_watermark;
     try {
-      const updated = await imageApi.update({
-        image_id: image.id,
-        model_ids: image.models.map((m) => m.id),
-        primary_model_id: image.models.find((m) => m.is_primary)?.id || undefined,
-        tags: image.tags.map((t) => t.name),
-        has_watermark: nextHasWatermark,
-        watermark_platform: nextHasWatermark ? "unknown" : undefined,
-      });
-
-      useImageStore.getState().updateImage(image.id, updated);
+      if (isIpImage(image)) {
+        const updated = await ipImageApi.update({
+          ip_image_id: image.id,
+          ip_id: image.ip_id,
+          tags: image.tags.map((t) => t.name),
+          has_watermark: nextHasWatermark,
+          watermark_platform: nextHasWatermark ? "unknown" : undefined,
+        });
+        useIpImageStore.getState().updateImage(image.id, updated);
+      } else {
+        const updated = await imageApi.update({
+          image_id: image.id,
+          model_ids: image.models.map((m) => m.id),
+          primary_model_id: image.models.find((m) => m.is_primary)?.id || undefined,
+          tags: image.tags.map((t) => t.name),
+          has_watermark: nextHasWatermark,
+          watermark_platform: nextHasWatermark ? "unknown" : undefined,
+        });
+        useImageStore.getState().updateImage(image.id, updated);
+      }
       toast({
         title: "水印标记已更新",
         description: nextHasWatermark ? "已标记为 [有水印]" : "已标记为 [无水印]",
@@ -292,8 +305,8 @@ export default function ImageViewer() {
           <div className="w-80 border-l bg-card flex flex-col z-10 shadow-[-1px_0_2px_rgba(0,0,0,0.02)]">
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
-                {/* Models */}
-                {image.models.length > 0 && (
+                {/* Models — Prompt 域专属 */}
+                {"models" in image && image.models.length > 0 && (
                   <div>
                     <h3 className="text-sm font-medium mb-2">模型</h3>
                     <div className="flex flex-wrap gap-1">
@@ -323,8 +336,8 @@ export default function ImageViewer() {
                   )}
                 </div>
 
-                {/* Prompt Groups */}
-                {image.prompt_groups.length > 0 && (
+                {/* Prompt Groups — Prompt 域专属 */}
+                {"prompt_groups" in image && image.prompt_groups.length > 0 && (
                   <div>
                     <h3 className="text-sm font-medium mb-2">关联 Prompt</h3>
                     <div className="space-y-3">

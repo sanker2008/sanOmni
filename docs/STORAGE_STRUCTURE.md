@@ -10,65 +10,89 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 
 ### 完整目录结构
 ```
-C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
-├── data\
+{AppDataDir}/
+├── data/
 │   └── database.sqlite          # 数据库文件
-├── inbox\                        # 待整理图片（复制的副本）
+├── inbox/                        # Prompt 图片待整理（复制的副本）
 │   ├── 1234567890_image1.png
-│   ├── 1234567891_image2.jpg
 │   └── ...
-└── archived\                     # 归档图片（按厂商/模型组织）
-    ├── midjourney\
-    │   ├── v6\
-    │   │   ├── midjourney-v6-2024-01-15-001.png
-    │   │   └── ...
-    │   └── v5\
-    │       └── ...
-    ├── stable-diffusion\
-    │   ├── sdxl\
-    │   │   └── ...
-    │   └── sd15\
-    │       └── ...
-    └── unknown\
-        └── unknown\
-            └── ...
+├── archived/                     # Prompt 图片归档（按厂商/模型组织）
+│   ├── midjourney/
+│   │   └── midjourney-v6/
+│   │       ├── midjourney-v6-2024-01-15-001.png
+│   │       └── ...
+│   ├── openai/
+│   │   └── gpt-image-2/
+│   │       └── ...
+│   └── unknown/
+│       └── unknown/
+│           └── ...
+├── ip_inbox/                     # IP 图片待整理
+│   ├── {ip_id}/
+│   │   ├── 1234567890_sticker.png
+│   │   └── ...
+│   └── ...
+├── ip_archived/                  # IP 图片归档（按 IP path 字段组织）
+│   ├── luna/                     # ip_assets.path = "luna"
+│   │   ├── luna-20240115-001.png
+│   │   └── ...
+│   └── ...
+└── ip_assets/                    # IP 角色私有资源（头像、设定图、表情等）
+    ├── {ip_id}/
+    │   ├── avatar/
+    │   ├── sheets/
+    │   ├── emojis/
+    │   └── creations/
+    └── ...
 ```
 
 ## 工作流程
 
-### 1. 导入阶段
+### Prompt 图片工作流
+
+#### 1. 导入阶段
 ```
-原始位置: D:\Pictures\my-image.png  (保持不变)
+原始位置: ~/Pictures/my-image.png  (保持不变)
          ↓ 复制
-待整理: C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\inbox\1234567890_my-image.png
+待整理: {AppDataDir}/inbox/1234567890_my-image.png
 ```
 
-**关键点：**
-- 原始文件**不会被移动或删除**
-- 在 inbox 目录中创建一个副本
-- 文件名前加时间戳避免冲突：`{timestamp}_{原文件名}`
-
-### 2. 待整理阶段
-- 所有操作（查看、编辑标签、检测水印等）都针对 inbox 中的副本
-- 原始文件完全不受影响
-
-### 3. 归档阶段
+#### 2. 归档阶段
 ```
-待整理: C:\...\inbox\1234567890_my-image.png
-         ↓ 移动（不是复制）
-归档: C:\...\archived\midjourney\v6\midjourney-v6-2024-01-15-001.png
+待整理: {AppDataDir}/inbox/1234567890_my-image.png
+         ↓ 移动 + 重命名
+归档: {AppDataDir}/archived/midjourney/midjourney-v6/midjourney-v6-2024-01-15-001.png
 ```
 
-**关键点：**
-- 文件从 inbox **移动**到 archived 目录
-- 按照 `厂商/模型` 的层级结构组织
-- 根据命名模板重命名文件
-- 更新数据库中的路径信息
+### IP 图片工作流
 
-### 4. 删除操作
-- 只删除数据库记录
-- **不删除磁盘上的文件**
-- 文件仍然保留在 inbox 或 archived 目录中
+#### 1. 导入阶段
+```
+原始位置: ~/Pictures/sticker.png  (保持不变)
+         ↓ 复制
+待整理: {AppDataDir}/ip_inbox/{ip_id}/1234567890_sticker.png
+```
+
+#### 2. 归档阶段
+```
+待整理: {AppDataDir}/ip_inbox/{ip_id}/1234567890_sticker.png
+         ↓ 移动 + 重命名（按 ip_assets.path 字段）
+归档: {AppDataDir}/ip_archived/luna/luna-20240115-001.png
+```
+
+归档命名模板默认为 `{ip}-{date}-{index}`，其中 `{ip}` 取 `ip_assets.name`。
+
+### IP 角色私有资源（设定图/表情/创作）
+
+这类图片通过 `ip_assets.rs` 管理，存储在独立目录，**不经过 inbox/archived 流程**：
+
+```
+{AppDataDir}/ip_assets/{ip_id}/
+├── avatar/     # 头像
+├── sheets/     # 角色设定图（三视图等）
+├── emojis/     # 表情包图片
+└── creations/  # 衍生创作图片
+```
 
 ## 磁盘空间考虑
 

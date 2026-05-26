@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useImageStore, useIpImageStore, useVendorStore } from "@/stores";
 import type { IpAsset } from "@/stores";
-import { imageApi } from "@/services/tauri";
+import { imageApi, ipImageApi } from "@/services/tauri";
 import {
   Dialog,
   DialogContent,
@@ -129,26 +129,6 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
       if (!image) continue;
 
       try {
-        // Compute final model list
-        let finalModelIds: string[];
-        let finalPrimaryModel: string | undefined;
-
-        if (modelAction === "replace") {
-          finalModelIds = selectedModels;
-          finalPrimaryModel = primaryModel ?? undefined;
-        } else if (modelAction === "append") {
-          const existing = image.models.map((m) => m.id);
-          finalModelIds = [...new Set([...existing, ...selectedModels])];
-          // keep existing primary unless we set a new one
-          finalPrimaryModel =
-            primaryModel ??
-            image.models.find((m) => m.is_primary)?.id ??
-            undefined;
-        } else {
-          finalModelIds = image.models.map((m) => m.id);
-          finalPrimaryModel = image.models.find((m) => m.is_primary)?.id ?? undefined;
-        }
-
         // Compute final tag list
         let finalTags: string[];
         if (tagAction === "replace") {
@@ -162,7 +142,6 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
 
         let finalHasWatermark: boolean | undefined;
         let finalWatermarkPlatform: string | undefined;
-
         if (watermarkAction === "no_watermark") {
           finalHasWatermark = false;
         } else if (watermarkAction === "has_watermark") {
@@ -170,32 +149,53 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
           finalWatermarkPlatform = watermarkPlatform;
         }
 
-        let finalIpIds: string[] | undefined = undefined;
         if (isIpMode) {
-          if (ipAction === "replace") {
-            finalIpIds = selectedIps;
-          } else if (ipAction === "append") {
-            const existing = image.ips?.map((i) => i.id) || [];
-            finalIpIds = [...new Set([...existing, ...selectedIps])];
+          // IP 图片：使用 ipImageApi.update
+          const ipImg = image as import("@/stores").IpImageWithRelations;
+          let newIpId = ipImg.ip_id;
+          if (ipAction === "replace" && selectedIps.length > 0) {
+            newIpId = selectedIps[0];
           }
+          const updated = await ipImageApi.update({
+            ip_image_id: imageId,
+            ip_id: newIpId,
+            tags: finalTags,
+            has_watermark: finalHasWatermark,
+            watermark_platform: finalWatermarkPlatform,
+          });
+          updateImage(imageId, updated as any);
+        } else {
+          // Prompt 图片：使用 imageApi.update
+          const promptImg = image as import("@/stores").ImageWithRelations;
+          let finalModelIds: string[];
+          let finalPrimaryModel: string | undefined;
+
+          if (modelAction === "replace") {
+            finalModelIds = selectedModels;
+            finalPrimaryModel = primaryModel ?? undefined;
+          } else if (modelAction === "append") {
+            const existing = promptImg.models.map((m) => m.id);
+            finalModelIds = [...new Set([...existing, ...selectedModels])];
+            finalPrimaryModel =
+              primaryModel ??
+              promptImg.models.find((m) => m.is_primary)?.id ??
+              undefined;
+          } else {
+            finalModelIds = promptImg.models.map((m) => m.id);
+            finalPrimaryModel = promptImg.models.find((m) => m.is_primary)?.id ?? undefined;
+          }
+
+          const updated = await imageApi.update({
+            image_id: imageId,
+            model_ids: finalModelIds,
+            primary_model_id: finalPrimaryModel,
+            tags: finalTags,
+            has_watermark: finalHasWatermark,
+            watermark_platform: finalWatermarkPlatform,
+          });
+          updateImage(imageId, updated as any);
         }
 
-        const updated = await imageApi.update({
-          image_id: imageId,
-          model_ids: isIpMode ? [] : finalModelIds,
-          primary_model_id: isIpMode ? undefined : finalPrimaryModel,
-          tags: finalTags,
-          has_watermark: finalHasWatermark,
-          watermark_platform: finalWatermarkPlatform,
-        });
-
-        if (isIpMode && finalIpIds) {
-          const { ipApi } = await import("@/services/tauri");
-          await ipApi.setCharactersForImage(imageId, finalIpIds);
-          updated.ips = availableIps.filter(ip => finalIpIds!.includes(ip.id));
-        }
-
-        updateImage(imageId, updated);
         successCount++;
       } catch (err) {
         console.error(`Failed to update image ${imageId}:`, err);

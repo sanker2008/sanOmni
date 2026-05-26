@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct IpAsset {
     pub id: String,
     pub name: String,
+    pub path: String,
     pub avatar_path: Option<String>,
     pub inspiration: Option<String>,
     pub description: Option<String>,

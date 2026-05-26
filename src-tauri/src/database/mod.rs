@@ -28,9 +28,17 @@ pub fn init_database(db_path: &Path) -> Result<()> {
         [],
     );
     
-    // Add image_type column if not exists
+    // Migration: Move IP images from images table to ip_images table
+    migrate_ip_images(&conn)?;
+
+    // Add path column to ip_assets if not exists (migration for existing DBs)
     let _ = conn.execute(
-        "ALTER TABLE images ADD COLUMN image_type TEXT DEFAULT 'prompt'",
+        "ALTER TABLE ip_assets ADD COLUMN path TEXT",
+        [],
+    );
+    // Backfill path from name for existing rows that have no path
+    let _ = conn.execute(
+        "UPDATE ip_assets SET path = id WHERE path IS NULL OR path = ''",
         [],
     );
     
@@ -79,7 +87,7 @@ CREATE TABLE IF NOT EXISTS models (
     FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
 );
 
--- Images table
+-- Images table (Prompt Template Domain)
 CREATE TABLE IF NOT EXISTS images (
     id                  TEXT PRIMARY KEY,
     filename            TEXT NOT NULL,
@@ -107,6 +115,30 @@ CREATE TABLE IF NOT EXISTS images (
     FOREIGN KEY (storage_vendor_id) REFERENCES vendors(id),
     FOREIGN KEY (storage_model_id) REFERENCES models(id),
     FOREIGN KEY (primary_model_id) REFERENCES models(id)
+);
+
+-- IP Images table (IP Character Domain)
+CREATE TABLE IF NOT EXISTS ip_images (
+    id                  TEXT PRIMARY KEY,
+    filename            TEXT NOT NULL,
+    original_filename   TEXT NOT NULL,
+    ip_id               TEXT NOT NULL,
+    relative_path       TEXT NOT NULL,
+    absolute_path       TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'inbox',
+    file_size           INTEGER,
+    width               INTEGER,
+    height              INTEGER,
+    file_hash           TEXT,
+    format              TEXT,
+    has_watermark       INTEGER DEFAULT 0,
+    watermark_platform  TEXT,
+    watermark_detected  INTEGER DEFAULT 0,
+    watermark_removed   INTEGER DEFAULT 0,
+    created_at          TEXT NOT NULL,
+    imported_at         TEXT NOT NULL,
+    archived_at         TEXT,
+    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE
 );
 
 -- Image-Model relations
@@ -180,7 +212,7 @@ CREATE TABLE IF NOT EXISTS image_prompt_group_relations (
     FOREIGN KEY (prompt_group_id) REFERENCES prompt_groups(id) ON DELETE CASCADE
 );
 
--- Indexes
+-- Indexes for Prompt Domain
 CREATE INDEX IF NOT EXISTS idx_images_status ON images(status);
 CREATE INDEX IF NOT EXISTS idx_images_storage ON images(storage_vendor_id, storage_model_id);
 CREATE INDEX IF NOT EXISTS idx_images_primary_model ON images(primary_model_id);
@@ -190,10 +222,17 @@ CREATE INDEX IF NOT EXISTS idx_imr_model ON image_model_relations(model_id);
 CREATE INDEX IF NOT EXISTS idx_itr_tag ON image_tag_relations(tag_id);
 CREATE INDEX IF NOT EXISTS idx_ipgr_group ON image_prompt_group_relations(prompt_group_id);
 
+-- Indexes for IP Domain
+CREATE INDEX IF NOT EXISTS idx_ip_images_status ON ip_images(status);
+CREATE INDEX IF NOT EXISTS idx_ip_images_ip ON ip_images(ip_id);
+CREATE INDEX IF NOT EXISTS idx_ip_images_imported ON ip_images(imported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ip_itr_tag ON ip_image_tag_relations(tag_id);
+
 -- AI IP Assets table
 CREATE TABLE IF NOT EXISTS ip_assets (
     id                  TEXT PRIMARY KEY,
     name                TEXT NOT NULL,
+    path                TEXT NOT NULL UNIQUE,
     avatar_path         TEXT,
     inspiration         TEXT,
     description         TEXT,
@@ -272,13 +311,13 @@ CREATE TABLE IF NOT EXISTS ip_relations (
     FOREIGN KEY (ip_b_id) REFERENCES ip_assets(id) ON DELETE CASCADE
 );
 
--- Image-IP relations
-CREATE TABLE IF NOT EXISTS image_ip_relations (
-    image_id     TEXT NOT NULL,
-    ip_id        TEXT NOT NULL,
-    PRIMARY KEY (image_id, ip_id),
-    FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
-    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE
+-- IP Image-Tag relations
+CREATE TABLE IF NOT EXISTS ip_image_tag_relations (
+    ip_image_id  TEXT NOT NULL,
+    tag_id       TEXT NOT NULL,
+    PRIMARY KEY (ip_image_id, tag_id),
+    FOREIGN KEY (ip_image_id) REFERENCES ip_images(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
 -- Indexes for IP assets
@@ -287,6 +326,104 @@ CREATE INDEX IF NOT EXISTS idx_ip_sticker_packs_ip ON ip_sticker_packs(ip_id);
 CREATE INDEX IF NOT EXISTS idx_ip_emojis_pack ON ip_emojis(pack_id);
 CREATE INDEX IF NOT EXISTS idx_ip_spp_pack ON ip_sticker_pack_platforms(pack_id);
 "#;
+
+fn migrate_ip_images(conn: &Connection) -> Result<()> {
+    // Check if image_type column exists in images table
+    let has_image_type: bool = conn
+        .prepare("SELECT image_type FROM images LIMIT 1")
+        .is_ok();
+    
+    if !has_image_type {
+        // No migration needed - fresh install
+        return Ok(());
+    }
+    
+    // Check if image_ip_relations table exists
+    let has_ip_relations: bool = conn
+        .prepare("SELECT * FROM image_ip_relations LIMIT 1")
+        .is_ok();
+    
+    if !has_ip_relations {
+        // No migration needed
+        return Ok(());
+    }
+    
+    // Migrate images with image_type = 'ip' to ip_images table
+    let mut stmt = conn.prepare(
+        "SELECT i.id, i.filename, i.original_filename, i.relative_path, i.absolute_path,
+                i.status, i.file_size, i.width, i.height, i.file_hash, i.format,
+                i.has_watermark, i.watermark_platform, i.watermark_detected, i.watermark_removed,
+                i.created_at, i.imported_at, i.archived_at, r.ip_id
+         FROM images i
+         LEFT JOIN image_ip_relations r ON i.id = r.image_id
+         WHERE i.image_type = 'ip'"
+    )?;
+    
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,  // id
+            row.get::<_, String>(1)?,  // filename
+            row.get::<_, String>(2)?,  // original_filename
+            row.get::<_, String>(3)?,  // relative_path
+            row.get::<_, String>(4)?,  // absolute_path
+            row.get::<_, String>(5)?,  // status
+            row.get::<_, Option<i64>>(6)?,  // file_size
+            row.get::<_, Option<i32>>(7)?,  // width
+            row.get::<_, Option<i32>>(8)?,  // height
+            row.get::<_, Option<String>>(9)?,  // file_hash
+            row.get::<_, Option<String>>(10)?,  // format
+            row.get::<_, i32>(11)?,  // has_watermark
+            row.get::<_, Option<String>>(12)?,  // watermark_platform
+            row.get::<_, i32>(13)?,  // watermark_detected
+            row.get::<_, i32>(14)?,  // watermark_removed
+            row.get::<_, String>(15)?,  // created_at
+            row.get::<_, String>(16)?,  // imported_at
+            row.get::<_, Option<String>>(17)?,  // archived_at
+            row.get::<_, Option<String>>(18)?,  // ip_id
+        ))
+    })?;
+    
+    for row_result in rows {
+        if let Ok((id, filename, original_filename, relative_path, absolute_path,
+                   status, file_size, width, height, file_hash, format,
+                   has_watermark, watermark_platform, watermark_detected, watermark_removed,
+                   created_at, imported_at, archived_at, ip_id)) = row_result {
+            
+            let ip_id = ip_id.unwrap_or_else(|| "unknown".to_string());
+            
+            // Insert into ip_images
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO ip_images 
+                 (id, filename, original_filename, ip_id, relative_path, absolute_path,
+                  status, file_size, width, height, file_hash, format,
+                  has_watermark, watermark_platform, watermark_detected, watermark_removed,
+                  created_at, imported_at, archived_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rusqlite::params![
+                    id, filename, original_filename, ip_id, relative_path, absolute_path,
+                    status, file_size, width, height, file_hash, format,
+                    has_watermark, watermark_platform, watermark_detected, watermark_removed,
+                    created_at, imported_at, archived_at
+                ],
+            );
+            
+            // Migrate tags
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO ip_image_tag_relations (ip_image_id, tag_id)
+                 SELECT image_id, tag_id FROM image_tag_relations WHERE image_id = ?",
+                [&id],
+            );
+        }
+    }
+    
+    // Delete migrated images from images table
+    let _ = conn.execute("DELETE FROM images WHERE image_type = 'ip'", []);
+    
+    // Drop old tables and columns
+    let _ = conn.execute("DROP TABLE IF EXISTS image_ip_relations", []);
+    
+    Ok(())
+}
 
 fn insert_defaults(conn: &Connection) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
@@ -300,9 +437,9 @@ fn insert_defaults(conn: &Connection) -> Result<()> {
     
     if ip_count == 0 {
         conn.execute(
-            "INSERT INTO ip_assets (id, name, description, created_at, updated_at) 
-             VALUES (?, ?, ?, ?, ?)",
-            ("unknown", "Unknown", "Default unknown IP character", &now, &now),
+            "INSERT INTO ip_assets (id, name, path, description, created_at, updated_at) 
+             VALUES (?, ?, ?, ?, ?, ?)",
+            ("unknown", "Unknown", "unknown", "Default unknown IP character", &now, &now),
         )?;
     }
     

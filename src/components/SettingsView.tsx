@@ -913,8 +913,8 @@ function SettingsView() {
                         setInboxCleanupResult(result);
 
                         if (result.removed_count > 0) {
-                          const { imageApi } = await import("@/services/tauri");
-                          const inbox = await imageApi.getIpInboxImages();
+                          const { ipImageApi } = await import("@/services/tauri");
+                          const inbox = await ipImageApi.getInboxImages();
                           const { useIpImageStore } = await import("@/stores");
                           useIpImageStore.getState().setInboxImages(inbox);
                         }
@@ -982,8 +982,8 @@ function SettingsView() {
                         setScanResult(result);
                         
                         if (result.imported_count > 0) {
-                          const { imageApi } = await import("@/services/tauri");
-                          const archived = await imageApi.getIpArchivedImages();
+                          const { ipImageApi } = await import("@/services/tauri");
+                          const archived = await ipImageApi.getArchivedImages();
                           const { useIpImageStore } = await import("@/stores");
                           useIpImageStore.getState().setArchivedImages(archived);
                         }

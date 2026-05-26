@@ -10,7 +10,6 @@ interface ImportImageRequest {
   model_ids: string[];
   primary_model_id?: string;
   tags: string[];
-  image_type?: string;
 }
 
 interface UpdateImageRequest {
@@ -27,7 +26,6 @@ interface UpdateImageRequest {
 interface ArchiveRequest {
   image_ids: string[];
   naming_template?: string;
-  image_type?: string;
 }
 
 interface ArchiveResult {
@@ -88,20 +86,6 @@ export const imageApi = {
     return result.data || [];
   },
 
-  async getIpInboxImages(): Promise<ImageWithRelations[]> {
-    const dbPath = await getDbPath();
-    const result = await invoke<CommandResult<ImageWithRelations[]>>("get_ip_inbox_images", { dbPath });
-    if (!result.success) throw new Error(result.error || "Failed to get IP inbox images");
-    return result.data || [];
-  },
-
-  async getIpArchivedImages(): Promise<ImageWithRelations[]> {
-    const dbPath = await getDbPath();
-    const result = await invoke<CommandResult<ImageWithRelations[]>>("get_ip_archived_images", { dbPath });
-    if (!result.success) throw new Error(result.error || "Failed to get IP archived images");
-    return result.data || [];
-  },
-
   async update(request: UpdateImageRequest): Promise<ImageWithRelations> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<ImageWithRelations>>("update_image", {
@@ -121,9 +105,9 @@ export const imageApi = {
     return result.data || false;
   },
 
-  async archive(imageIds: string[], libraryPath: string, template?: string, image_type?: string): Promise<ArchiveResult> {
+  async archive(imageIds: string[], libraryPath: string, template?: string): Promise<ArchiveResult> {
     const dbPath = await getDbPath();
-    const request: ArchiveRequest = { image_ids: imageIds, naming_template: template, image_type };
+    const request: ArchiveRequest = { image_ids: imageIds, naming_template: template };
     const result = await invoke<CommandResult<ArchiveResult>>("archive_images", {
       dbPath,
       libraryPath,
@@ -669,11 +653,12 @@ export const ipApi = {
     return result.data;
   },
 
-  async create(name: string, inspiration?: string, description?: string, avatarPath?: string): Promise<IpAsset> {
+  async create(name: string, path: string, inspiration?: string, description?: string, avatarPath?: string): Promise<IpAsset> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<IpAsset>>("create_ip_asset", {
       dbPath,
       name,
+      path,
       inspiration,
       description,
       avatarPath,
@@ -684,12 +669,13 @@ export const ipApi = {
     return result.data;
   },
 
-  async update(ipId: string, name: string, inspiration?: string, description?: string, avatarPath?: string): Promise<IpAsset> {
+  async update(ipId: string, name: string, path: string, inspiration?: string, description?: string, avatarPath?: string): Promise<IpAsset> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<IpAsset>>("update_ip_asset", {
       dbPath,
       ipId,
       name,
+      path,
       inspiration,
       description,
       avatarPath,
@@ -940,27 +926,96 @@ export const ipApi = {
     }
     return result.data || false;
   },
+};
 
-  async getCharactersForImage(imageId: string): Promise<IpAsset[]> {
+// ==================== IP Image API ====================
+
+export interface IpImageResponse {
+  id: string;
+  filename: string;
+  original_filename: string;
+  ip_id: string;
+  relative_path: string;
+  absolute_path: string;
+  status: "inbox" | "tagged" | "archived";
+  file_size?: number;
+  width?: number;
+  height?: number;
+  file_hash?: string;
+  format?: string;
+  has_watermark: boolean;
+  watermark_platform?: string;
+  watermark_detected: boolean;
+  watermark_removed: boolean;
+  created_at: string;
+  imported_at: string;
+  archived_at?: string;
+  tags: Array<{ id: string; name: string; color?: string }>;
+  ip_name: string;
+}
+
+interface ImportIpImageRequest {
+  file_path: string;
+  file_name: string;
+  file_size: number;
+  ip_id: string;
+  tags: string[];
+}
+
+interface UpdateIpImageRequest {
+  ip_image_id: string;
+  ip_id: string;
+  tags: string[];
+  has_watermark?: boolean;
+  watermark_platform?: string;
+}
+
+interface ArchiveIpImagesRequest {
+  ip_image_ids: string[];
+  naming_template?: string;
+}
+
+export const ipImageApi = {
+  async import(request: ImportIpImageRequest): Promise<IpImageResponse> {
     const dbPath = await getDbPath();
-    const result = await invoke<CommandResult<IpAsset[]>>("get_ip_characters_for_image", { dbPath, imageId });
-    if (!result.success || !result.data) {
-      throw new Error(result.error || "获取图片关联 IP 失败");
-    }
+    const result = await invoke<CommandResult<IpImageResponse>>("import_ip_image", { dbPath, request });
+    if (!result.success || !result.data) throw new Error(result.error || "导入 IP 图片失败");
     return result.data;
   },
 
-  async setCharactersForImage(imageId: string, ipIds: string[]): Promise<boolean> {
+  async getInboxImages(): Promise<IpImageResponse[]> {
     const dbPath = await getDbPath();
-    const result = await invoke<CommandResult<boolean>>("set_ip_characters_for_image", {
-      dbPath,
-      imageId,
-      ipIds,
-    });
-    if (!result.success) {
-      throw new Error(result.error || "设置图片关联 IP 失败");
-    }
+    const result = await invoke<CommandResult<IpImageResponse[]>>("get_ip_inbox_images", { dbPath });
+    if (!result.success) throw new Error(result.error || "获取 IP 收件箱失败");
+    return result.data || [];
+  },
+
+  async getArchivedImages(): Promise<IpImageResponse[]> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpImageResponse[]>>("get_ip_archived_images", { dbPath });
+    if (!result.success) throw new Error(result.error || "获取 IP 归档失败");
+    return result.data || [];
+  },
+
+  async update(request: UpdateIpImageRequest): Promise<IpImageResponse> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpImageResponse>>("update_ip_image", { dbPath, request });
+    if (!result.success || !result.data) throw new Error(result.error || "更新 IP 图片失败");
+    return result.data;
+  },
+
+  async delete(ipImageId: string): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("delete_ip_image", { dbPath, ipImageId });
+    if (!result.success) throw new Error(result.error || "删除 IP 图片失败");
     return result.data || false;
   },
-};
 
+  async archive(ipImageIds: string[], libraryPath: string, namingTemplate?: string): Promise<ArchiveResult> {
+    const dbPath = await getDbPath();
+    const request: ArchiveIpImagesRequest = { ip_image_ids: ipImageIds, naming_template: namingTemplate };
+    const result = await invoke<CommandResult<ArchiveResult>>("archive_ip_images", { dbPath, libraryPath, request });
+    if (!result.success || !result.data) throw new Error(result.error || "归档 IP 图片失败");
+    return result.data;
+  },
+};

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useIpImageStore, useUIStore } from "@/stores";
-import { imageApi } from "@/services/tauri";
+import { ipImageApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,10 +65,9 @@ export default function IpInboxView() {
       if (!image) continue;
 
       try {
-        const updated = await imageApi.update({
-          image_id: imageId,
-          model_ids: image.models.map((m) => m.id),
-          primary_model_id: image.models.find((m) => m.is_primary)?.id || undefined,
+        const updated = await ipImageApi.update({
+          ip_image_id: imageId,
+          ip_id: image.ip_id,
           tags: image.tags.map((t) => t.name),
           has_watermark: hasWatermark,
           watermark_platform: hasWatermark ? "unknown" : undefined,
@@ -108,7 +107,7 @@ export default function IpInboxView() {
   const loadInboxImages = async () => {
     setLoading(true);
     try {
-      const images = await imageApi.getIpInboxImages();
+      const images = await ipImageApi.getInboxImages();
       setInboxImages(images);
     } catch (error) {
       console.error("Failed to load inbox images:", error);
@@ -141,7 +140,7 @@ export default function IpInboxView() {
       }
 
       const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
-      const result = await imageApi.archive(selectedImages, libraryPath, namingTemplate, "ip");
+      const result = await ipImageApi.archive(selectedImages, libraryPath, namingTemplate);
 
       if (result.success_count > 0) {
         // Remove archived images from inbox
@@ -186,7 +185,7 @@ export default function IpInboxView() {
   // Batch watermark detection
   const handleDeleteImage = async (imageId: string) => {
     try {
-      const success = await imageApi.delete(imageId);
+      const success = await ipImageApi.delete(imageId);
       if (success) {
         removeImage(imageId);
         // If the image was selected, deselect it
@@ -217,7 +216,7 @@ export default function IpInboxView() {
 
     for (const imageId of selectedImages) {
       try {
-        const success = await imageApi.delete(imageId);
+        const success = await ipImageApi.delete(imageId);
         if (success) {
           removeImage(imageId);
           successCount++;
@@ -259,7 +258,7 @@ export default function IpInboxView() {
       }
 
       const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
-      const result = await imageApi.archive([imageId], libraryPath, namingTemplate, "ip");
+      const result = await ipImageApi.archive([imageId], libraryPath, namingTemplate);
 
       if (result.success_count > 0) {
         removeImage(imageId);
@@ -295,17 +294,11 @@ export default function IpInboxView() {
           image.format?.toLowerCase().includes(keyword) ||
           image.watermark_platform?.toLowerCase().includes(keyword) ||
           image.tags.some((tag) => tag.name.toLowerCase().includes(keyword)) ||
-          image.prompt_groups.some((group) => group.prompt.toLowerCase().includes(keyword))
+          image.ip_name?.toLowerCase().includes(keyword)
         );
       });
       
       if (!matchesSearch) return false;
-    }
-    
-    // Prompt 筛选
-    if (filterHasPrompt !== null) {
-      const hasPrompt = image.prompt_groups.length > 0;
-      if (hasPrompt !== filterHasPrompt) return false;
     }
     
     // Tags 筛选

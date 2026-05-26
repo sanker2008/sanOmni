@@ -55,6 +55,7 @@ export interface Tag {
 export interface IpAsset {
   id: string;
   name: string;
+  path: string;
   avatar_path?: string;
   inspiration?: string;
   description?: string;
@@ -133,7 +134,31 @@ export interface ImageWithRelations extends Image {
   models: ModelInfo[];
   tags: Tag[];
   prompt_groups: PromptGroup[];
-  ips?: IpAsset[];
+}
+
+// IP 域专用图片类型
+export interface IpImageWithRelations {
+  id: string;
+  filename: string;
+  original_filename: string;
+  ip_id: string;
+  relative_path: string;
+  absolute_path: string;
+  status: "inbox" | "tagged" | "archived";
+  file_size?: number;
+  width?: number;
+  height?: number;
+  file_hash?: string;
+  format?: string;
+  has_watermark: boolean;
+  watermark_platform?: string;
+  watermark_detected: boolean;
+  watermark_removed: boolean;
+  created_at: string;
+  imported_at: string;
+  archived_at?: string;
+  tags: Tag[];
+  ip_name: string;
 }
 
 export interface Vendor {
@@ -170,6 +195,28 @@ interface ImageStore {
   setError: (error: string | null) => void;
   addImage: (image: ImageWithRelations) => void;
   updateImage: (imageId: string, updates: Partial<ImageWithRelations>) => void;
+  removeImage: (imageId: string) => void;
+}
+
+interface IpImageStore {
+  // State
+  inboxImages: IpImageWithRelations[];
+  archivedImages: IpImageWithRelations[];
+  selectedImages: string[];
+  isLoading: boolean;
+  error: string | null;
+
+  // Actions
+  setInboxImages: (images: IpImageWithRelations[]) => void;
+  setArchivedImages: (images: IpImageWithRelations[]) => void;
+  selectImage: (imageId: string) => void;
+  deselectImage: (imageId: string) => void;
+  selectAll: (imageIds: string[]) => void;
+  clearSelection: () => void;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  addImage: (image: IpImageWithRelations) => void;
+  updateImage: (imageId: string, updates: Partial<IpImageWithRelations>) => void;
   removeImage: (imageId: string) => void;
 }
 
@@ -224,7 +271,7 @@ export const useImageStore = create<ImageStore>((set) => ({
   })),
 }));
 
-export const useIpImageStore = create<ImageStore>((set) => ({
+export const useIpImageStore = create<IpImageStore>((set) => ({
   // Initial state
   inboxImages: [],
   archivedImages: [],

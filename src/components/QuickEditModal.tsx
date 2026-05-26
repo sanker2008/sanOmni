@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useIpImageStore, useUIStore, useVendorStore } from "@/stores";
 import type { PromptGroup, IpAsset } from "@/stores";
-import { imageApi, promptApi } from "@/services/tauri";
+import { imageApi, ipImageApi, promptApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
 import {
   Dialog,
@@ -73,21 +73,23 @@ export default function QuickEditModal() {
   const [addPromptTab, setAddPromptTab] = useState<"base" | "template">("base");
 
   const isIpImage = ipInboxImages.some(img => img.id === editingImageId) || ipArchivedImages.some(img => img.id === editingImageId);
-  const image =
+  const promptImage =
     inboxImages.find((img) => img.id === editingImageId) ||
-    archivedImages.find((img) => img.id === editingImageId) ||
+    archivedImages.find((img) => img.id === editingImageId);
+  const ipImage =
     ipInboxImages.find((img) => img.id === editingImageId) ||
     ipArchivedImages.find((img) => img.id === editingImageId);
+  const image = promptImage || ipImage;
 
   useEffect(() => {
     if (!image) {
       return;
     }
 
-    setSelectedModels(image.models?.map((model) => model.id) || []);
-    setPrimaryModel(image.models?.find((model) => model.is_primary)?.id || null);
+    setSelectedModels(promptImage?.models?.map((model) => model.id) || []);
+    setPrimaryModel(promptImage?.models?.find((model) => model.is_primary)?.id || null);
     setTags(image.tags?.map((tag) => tag.name) || []);
-    setSelectedIpIds(image.ips?.map((ip) => ip.id) || []);
+    setSelectedIpIds(ipImage ? [ipImage.ip_id] : []);
     setHasWatermark(image.has_watermark);
     setWatermarkPlatform(image.watermark_platform || "");
     setNewPromptText("");
@@ -138,52 +140,53 @@ export default function QuickEditModal() {
 
     const nextPromptGroupIds = selectedPromptGroupIds;
 
-    const updated = await imageApi.update({
-      image_id: image.id,
-      model_ids: isIpImage ? [] : selectedModels,
-      primary_model_id: isIpImage ? undefined : (primaryModel || undefined),
-      tags,
-      has_watermark: hasWatermark,
-      watermark_platform: watermarkPlatform || undefined,
-    });
+    if (isIpImage && ipImage) {
+      // IP 图片：使用 ipImageApi.update
+      const updatedIp = await ipImageApi.update({
+        ip_image_id: image.id,
+        ip_id: selectedIpIds[0] || ipImage.ip_id,
+        tags,
+        has_watermark: hasWatermark,
+        watermark_platform: watermarkPlatform || undefined,
+      });
+      updateIpImage(image.id, updatedIp);
 
-    const finalImage = { ...updated };
-    if (isIpImage) {
-      const { ipApi } = await import("@/services/tauri");
-      await ipApi.setCharactersForImage(image.id, selectedIpIds);
-      finalImage.ips = availableIps.filter(ip => selectedIpIds.includes(ip.id));
-    } else {
-      await promptApi.setForImage(image.id, nextPromptGroupIds);
-      try {
-        const finalPrompts = await promptApi.getForImage(image.id);
-        finalImage.prompt_groups = finalPrompts;
-      } catch (error) {
-        console.error("加载关联 Prompt 失败:", error);
-      }
-    }
-
-    if (isIpImage) {
-      updateIpImage(image.id, finalImage);
-    } else {
-      updatePromptImage(image.id, finalImage);
-    }
-
-    if (archiveAfterSave) {
-      const settings = useUIStore.getState().settings;
-      let libraryPath: string;
-      const { appDataDir } = await import("@tauri-apps/api/path");
-
-      if (isIpImage) {
+      if (archiveAfterSave) {
+        const settings = useUIStore.getState().settings;
+        const { appDataDir } = await import("@tauri-apps/api/path");
         const customPath = settings.customIpArchivedPath;
-        libraryPath = customPath || await appDataDir();
+        const libraryPath = customPath || await appDataDir();
         const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
-        const result = await imageApi.archive([image.id], libraryPath, namingTemplate, "ip");
+        const result = await ipImageApi.archive([image.id], libraryPath, namingTemplate);
         if (result.success_count > 0) {
           removeIpImage(image.id);
         }
-      } else {
+      }
+    } else if (promptImage) {
+      // Prompt 图片：使用 imageApi.update
+      const updated = await imageApi.update({
+        image_id: image.id,
+        model_ids: selectedModels,
+        primary_model_id: primaryModel || undefined,
+        tags,
+        has_watermark: hasWatermark,
+        watermark_platform: watermarkPlatform || undefined,
+      });
+
+      await promptApi.setForImage(image.id, nextPromptGroupIds);
+      try {
+        const finalPrompts = await promptApi.getForImage(image.id);
+        updated.prompt_groups = finalPrompts;
+      } catch (error) {
+        console.error("加载关联 Prompt 失败:", error);
+      }
+      updatePromptImage(image.id, updated);
+
+      if (archiveAfterSave) {
+        const settings = useUIStore.getState().settings;
+        const { appDataDir } = await import("@tauri-apps/api/path");
         const customPath = settings.customArchivedPath;
-        libraryPath = customPath || await appDataDir();
+        const libraryPath = customPath || await appDataDir();
         const result = await imageApi.archive([image.id], libraryPath);
         if (result.success_count > 0) {
           removePromptImage(image.id);

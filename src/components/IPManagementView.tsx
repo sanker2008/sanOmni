@@ -56,6 +56,7 @@ export default function IPManagementView() {
   const [isIpModalOpen, setIsIpModalOpen] = useState(false);
   const [editingIp, setEditingIp] = useState<IpAsset | null>(null);
   const [ipName, setIpName] = useState("");
+  const [ipPath, setIpPath] = useState("");
   const [ipInspiration, setIpInspiration] = useState("");
   const [ipDescription, setIpDescription] = useState("");
   const [ipAvatarPath, setIpAvatarPath] = useState<string | null>(null);
@@ -271,6 +272,7 @@ export default function IPManagementView() {
   const handleOpenCreateIp = () => {
     setEditingIp(null);
     setIpName("");
+    setIpPath("");
     setIpInspiration("");
     setIpDescription("");
     setIpAvatarPath(null);
@@ -281,6 +283,7 @@ export default function IPManagementView() {
   const handleOpenEditIp = (ip: IpAsset) => {
     setEditingIp(ip);
     setIpName(ip.name);
+    setIpPath(ip.path || "");
     setIpInspiration(ip.inspiration || "");
     setIpDescription(ip.description || "");
     setIpAvatarPath(ip.avatar_path || null);
@@ -293,11 +296,14 @@ export default function IPManagementView() {
       toast({ title: "请输入 IP 名字" });
       return;
     }
+    // 自动生成 path：如果用户没填，用 name 的小写+连字符形式
+    const finalPath = ipPath.trim() || ipName.trim().toLowerCase().replace(/\s+/g, "-");
     try {
       if (editingIp) {
         const updated = await ipApi.update(
           editingIp.id,
           ipName,
+          finalPath,
           ipInspiration || undefined,
           ipDescription || undefined,
           ipAvatarPath || undefined
@@ -307,6 +313,7 @@ export default function IPManagementView() {
       } else {
         const created = await ipApi.create(
           ipName,
+          finalPath,
           ipInspiration || undefined,
           ipDescription || undefined,
           ipAvatarPath || undefined
@@ -1613,6 +1620,16 @@ export default function IPManagementView() {
                 value={ipName}
                 onChange={(e) => setIpName(e.target.value)}
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">路径标识</label>
+              <Input
+                placeholder="例如: luna（留空则自动生成）"
+                value={ipPath}
+                onChange={(e) => setIpPath(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-"))}
+              />
+              <p className="text-xs text-muted-foreground">用于文件夹命名和目录匹配，只允许小写字母、数字、连字符和下划线</p>
             </div>
 
             <div className="flex flex-col gap-1.5">

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useIpImageStore, useUIStore } from "@/stores";
-import { imageApi } from "@/services/tauri";
+import { ipImageApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,10 +67,9 @@ export default function IpArchivedView() {
       if (!image) continue;
 
       try {
-        const updated = await imageApi.update({
-          image_id: imageId,
-          model_ids: image.models.map((m) => m.id),
-          primary_model_id: image.models.find((m) => m.is_primary)?.id || undefined,
+        const updated = await ipImageApi.update({
+          ip_image_id: imageId,
+          ip_id: image.ip_id,
           tags: image.tags.map((t) => t.name),
           has_watermark: hasWatermark,
           watermark_platform: hasWatermark ? "unknown" : undefined,
@@ -110,7 +109,7 @@ export default function IpArchivedView() {
   const loadArchivedImages = async () => {
     setLoading(true);
     try {
-      const images = await imageApi.getIpArchivedImages();
+      const images = await ipImageApi.getArchivedImages();
       setArchivedImages(images);
     } catch (error) {
       console.error("Failed to load archived images:", error);
@@ -134,29 +133,20 @@ export default function IpArchivedView() {
           image.format?.toLowerCase().includes(keyword) ||
           image.watermark_platform?.toLowerCase().includes(keyword) ||
           image.tags.some((tag) => tag.name.toLowerCase().includes(keyword)) ||
-          image.prompt_groups.some((group) => group.prompt.toLowerCase().includes(keyword))
+          image.ip_name?.toLowerCase().includes(keyword)
         );
       });
       
       if (!matchesSearch) return false;
     }
     
-    // IP 筛选
+    // IP 筛选（按 ip_id 过滤）
     if (selectedIpId) {
       if (selectedIpId === "unknown") {
-        const hasUnknown = image.ips?.some(ip => ip.id === "unknown");
-        const hasNoIps = !image.ips || image.ips.length === 0;
-        if (!hasUnknown && !hasNoIps) return false;
+        if (image.ip_id !== "unknown") return false;
       } else {
-        if (!image.ips || image.ips.length === 0) return false;
-        if (!image.ips.some((ip) => ip.id === selectedIpId)) return false;
+        if (image.ip_id !== selectedIpId) return false;
       }
-    }
-    
-    // Prompt 筛选
-    if (filterHasPrompt !== null) {
-      const hasPrompt = image.prompt_groups.length > 0;
-      if (hasPrompt !== filterHasPrompt) return false;
     }
     
     // Tags 筛选
@@ -214,7 +204,7 @@ export default function IpArchivedView() {
         inboxPath = await appDataDir();
       }
 
-      const result = await imageApi.unarchive(selectedImages, inboxPath);
+      const result = await ipImageApi.archive(selectedImages, inboxPath);
 
       if (result.success_count > 0) {
         // Remove unarchived images from archived view
@@ -258,7 +248,7 @@ export default function IpArchivedView() {
         inboxPath = await appDataDir();
       }
 
-      const result = await imageApi.unarchive([imageId], inboxPath);
+      const result = await ipImageApi.archive([imageId], inboxPath);
 
       if (result.success_count > 0) {
         removeImage(imageId);
@@ -281,7 +271,7 @@ export default function IpArchivedView() {
 
   const handleDeleteImage = async (imageId: string) => {
     try {
-      const success = await imageApi.delete(imageId);
+      const success = await ipImageApi.delete(imageId);
       if (success) {
         removeImage(imageId);
         if (selectedImages.includes(imageId)) {
@@ -311,7 +301,7 @@ export default function IpArchivedView() {
 
     for (const imageId of selectedImages) {
       try {
-        const success = await imageApi.delete(imageId);
+        const success = await ipImageApi.delete(imageId);
         if (success) {
           removeImage(imageId);
           successCount++;

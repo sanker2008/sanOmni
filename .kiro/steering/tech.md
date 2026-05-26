@@ -103,8 +103,9 @@ sanMediaBox/
 │   │   │   ├── tags.rs         # Tag management (Prompt domain)
 │   │   │   ├── classifier.rs   # Auto-classification (Prompt domain)
 │   │   │   ├── prompt_groups.rs # Prompt groups (Prompt domain)
-│   │   │   ├── scanner.rs      # File system scanning (Prompt domain)
+│   │   │   ├── scanner.rs      # File system scanning (Prompt + IP domain)
 │   │   │   ├── ip_assets.rs    # IP asset management (IP domain)
+│   │   │   ├── ip_images.rs    # IP image management (IP domain)
 │   │   │   ├── watermark.rs    # Watermark detection (Shared)
 │   │   │   ├── watermark_removal.rs # Watermark removal (Shared)
 │   │   │   ├── gemini_watermark_removal.rs # Gemini AI watermark removal (Shared)
@@ -160,15 +161,25 @@ npm run tauri [command]
 ### State Management Pattern
 
 **Prompt Domain Stores:**
-- **Image Store**: Image data, selection state, inbox/archive workflow
+- **Image Store** (`useImageStore`): `ImageWithRelations[]` — inbox/archive workflow, selection state
 - **Vendor Store**: Vendor and model data
 - **Tag Store**: Tag data and popular tags
 
 **IP Domain Stores:**
-- **IP Store** (planned): IP character data, sticker packs, creations
+- **IP Image Store** (`useIpImageStore`): `IpImageWithRelations[]` — IP image inbox/archive workflow
 
 **Shared Stores:**
-- **UI Store**: UI state, filters, modals, theme, settings, active view
+- **UI Store**: UI state, filters, modals, theme, settings, active view, `selectedIpId`
+
+### Key Type Distinction
+
+| Type | Domain | Fields |
+|------|--------|--------|
+| `ImageWithRelations` | Prompt | `models`, `tags`, `prompt_groups`, vendor/model IDs |
+| `IpImageWithRelations` | IP | `ip_id`, `ip_name`, `tags` — no vendor/model |
+| `IpAsset` | IP | `id`, `name`, `path` (unique slug), `avatar_path`, etc. |
+
+The `path` field on `IpAsset` is a unique slug (lowercase, hyphens/underscores only) used for directory naming in `ip_archived/{path}/` and folder scanning.
 
 ### Styling Conventions
 - Use Tailwind utility classes

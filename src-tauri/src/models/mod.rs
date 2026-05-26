@@ -26,6 +26,7 @@ pub struct Model {
     pub updated_at: String,
 }
 
+// Prompt Template Domain: Image with vendor/model metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Image {
     pub id: String,
@@ -51,7 +52,30 @@ pub struct Image {
     pub created_at: String,
     pub imported_at: String,
     pub archived_at: Option<String>,
-    pub image_type: String,
+}
+
+// IP Character Domain: Image associated with IP character
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpImage {
+    pub id: String,
+    pub filename: String,
+    pub original_filename: String,
+    pub ip_id: String,
+    pub relative_path: String,
+    pub absolute_path: String,
+    pub status: String,
+    pub file_size: Option<i64>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub file_hash: Option<String>,
+    pub format: Option<String>,
+    pub has_watermark: bool,
+    pub watermark_platform: Option<String>,
+    pub watermark_detected: bool,
+    pub watermark_removed: bool,
+    pub created_at: String,
+    pub imported_at: String,
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

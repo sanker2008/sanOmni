@@ -42,18 +42,29 @@
 
 ## 二、后端 API (60+ 个命令)
 
-### 2.1 图片管理命令
+### 2.1 Prompt 图片管理命令
 
 | 命令 | 状态 | 说明 |
 |------|------|------|
-| `import_image` | ✅ | 导入图片 |
+| `import_image` | ✅ | 导入 Prompt 图片 |
 | `get_inbox_images` | ✅ | 获取待整理图片 |
 | `get_archived_images` | ✅ | 获取已归档图片 |
-| `update_image` | ✅ | 更新图片 |
+| `update_image` | ✅ | 更新图片元数据 |
 | `delete_image` | ✅ | 删除图片 |
 | `archive_images` | ✅ | 批量归档 |
 | `unarchive_images` | ✅ | 撤销归档 |
 | `update_missing_formats` | ✅ | 更新缺失格式 |
+
+### 2.2 IP 图片管理命令（新增）
+
+| 命令 | 状态 | 说明 |
+|------|------|------|
+| `import_ip_image` | ✅ | 导入 IP 图片（独立于 Prompt 图片表） |
+| `get_ip_inbox_images` | ✅ | 获取 IP 待整理图片 |
+| `get_ip_archived_images` | ✅ | 获取 IP 已归档图片 |
+| `update_ip_image` | ✅ | 更新 IP 图片元数据 |
+| `delete_ip_image` | ✅ | 删除 IP 图片 |
+| `archive_ip_images` | ✅ | 归档 IP 图片 |
 
 ### 2.2 厂商和标签命令
 

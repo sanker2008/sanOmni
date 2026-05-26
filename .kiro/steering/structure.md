@@ -99,8 +99,9 @@ src-tauri/
 │   │   ├── settings.rs        # Settings persistence
 │   │   ├── classifier.rs      # Auto-classification logic
 │   │   ├── ip_assets.rs       # IP character asset management
+│   │   ├── ip_images.rs       # IP image management
 │   │   ├── prompt_groups.rs   # Prompt template groups
-│   │   └── scanner.rs         # File system scanning
+│   │   └── scanner.rs         # File system scanning (Prompt + IP)
 │   ├── database/               # Database layer
 │   │   └── mod.rs             # SQLite schema and operations
 │   └── models/                 # Data structures
@@ -179,11 +180,11 @@ Manages IP characters, sticker packs, emojis, character sheets, creations, and p
 
 | Layer | Files |
 |-------|-------|
-| **Frontend Views** | `IPManagementView.tsx` |
+| **Frontend Views** | `IPManagementView.tsx`, `IpInboxView.tsx`, `IpArchivedView.tsx` |
 | **Frontend Components** | `IPImagePickerModal.tsx` |
-| **Backend Commands** | `ip_assets.rs` |
-| **Backend Models** | `models/ip_assets.rs` |
-| **State** | (planned: `useIPStore`) |
+| **Backend Commands** | `ip_assets.rs`, `ip_images.rs` |
+| **Backend Models** | `models/ip_assets.rs` (含 `IpImage`) |
+| **State** | `useIpImageStore` (`IpImageWithRelations[]`) |
 
 ### Shared Common Features
 

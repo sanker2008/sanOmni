@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useImageStore, useUIStore, type ImageWithRelations } from "@/stores";
+import { useImageStore, useUIStore, type ImageWithRelations, type IpImageWithRelations } from "@/stores";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,10 +31,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { watermarkApi, geminiWatermarkApi, imageApi } from "@/services/tauri";
+import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi } from "@/services/tauri";
+
+type AnyImage = ImageWithRelations | IpImageWithRelations;
+const isPromptImage = (img: AnyImage): img is ImageWithRelations => "models" in img;
 
 interface ImageCardProps {
-  image: ImageWithRelations;
+  image: AnyImage;
   onWatermarkRemoved?: (imageId: string, outputPath: string) => void;
   onDelete?: (imageId: string) => void;
   onArchive?: (imageId: string) => void;
@@ -64,17 +67,30 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
     const nextHasWatermark = !currentHasWatermark; 
 
     try {
-      const updated = await imageApi.update({
-        image_id: image.id,
-        model_ids: image.models.map((m) => m.id),
-        primary_model_id: image.models.find((m) => m.is_primary)?.id || undefined,
-        tags: image.tags.map((t) => t.name),
-        has_watermark: nextHasWatermark,
-        watermark_platform: nextHasWatermark ? "unknown" : undefined,
-      });
+      const updated = isPromptImage(image)
+        ? await imageApi.update({
+            image_id: image.id,
+            model_ids: image.models.map((m) => m.id),
+            primary_model_id: image.models.find((m) => m.is_primary)?.id || undefined,
+            tags: image.tags.map((t) => t.name),
+            has_watermark: nextHasWatermark,
+            watermark_platform: nextHasWatermark ? "unknown" : undefined,
+          })
+        : await ipImageApi.update({
+            ip_image_id: image.id,
+            ip_id: image.ip_id,
+            tags: image.tags.map((t) => t.name),
+            has_watermark: nextHasWatermark,
+            watermark_platform: nextHasWatermark ? "unknown" : undefined,
+          });
 
-      // Update in our image store
-      useImageStore.getState().updateImage(image.id, updated);
+      // Update in the appropriate store
+      if (isPromptImage(image)) {
+        useImageStore.getState().updateImage(image.id, updated as ImageWithRelations);
+      } else {
+        const { useIpImageStore } = await import("@/stores");
+        useIpImageStore.getState().updateImage(image.id, updated as IpImageWithRelations);
+      }
       
       toast({
         title: `水印标记已更新`,
@@ -465,7 +481,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
                   {image.format}
                 </Badge>
               )}
-              {image.models.slice(0, 2).map((model) => (
+              {isPromptImage(image) && image.models.slice(0, 2).map((model) => (
                 <Badge key={model.id} variant="secondary" className="text-xs">
                   {model.name}{model.is_primary && " ★"}
                 </Badge>
@@ -694,13 +710,13 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
                 {image.format}
               </Badge>
             )}
-            {image.models.slice(0, 2).map((model) => (
+            {isPromptImage(image) && image.models.slice(0, 2).map((model) => (
               <Badge key={model.id} variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/70 text-white border-0 pointer-events-auto shadow-sm backdrop-blur-sm">
                 {model.name}
                 {model.is_primary && " ★"}
               </Badge>
             ))}
-            {image.models.length > 2 && (
+            {isPromptImage(image) && image.models.length > 2 && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/70 text-white border-0 cursor-help pointer-events-auto shadow-sm backdrop-blur-sm">

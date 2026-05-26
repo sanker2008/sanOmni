@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useImageStore, useIpImageStore, useUIStore } from "@/stores";
-import { imageApi, classifyApi } from "@/services/tauri";
+import { imageApi, ipImageApi, classifyApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Upload, Image as ImageIcon, FolderOpen, Loader2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -10,6 +10,7 @@ import { toast } from "@/hooks/useToast";
 interface DropZoneProps {
   onImportComplete?: () => void;
   imageType?: "prompt" | "ip";
+  ipId?: string; // required when imageType === "ip"
 }
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
@@ -19,7 +20,7 @@ function isImageFile(fileName: string): boolean {
   return IMAGE_EXTENSIONS.includes(ext);
 }
 
-export default function DropZone({ onImportComplete, imageType = "prompt" }: DropZoneProps) {
+export default function DropZone({ onImportComplete, imageType = "prompt", ipId }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const { addImage: addPromptImage } = useImageStore();
@@ -238,19 +239,24 @@ export default function DropZone({ onImportComplete, imageType = "prompt" }: Dro
         });
 
         try {
-          const result = await imageApi.import({
-            file_path: targetPath,
-            file_name: fileName,
-            file_size: fileSize,
-            vendor_id: vendorId,
-            model_ids: modelIds,
-            tags: [],
-            image_type: imageType,
-          });
-          console.log("Import result:", result);
           if (imageType === "ip") {
+            const result = await ipImageApi.import({
+              file_path: targetPath,
+              file_name: fileName,
+              file_size: fileSize,
+              ip_id: ipId || "unknown",
+              tags: [],
+            });
             addIpImage(result);
           } else {
+            const result = await imageApi.import({
+              file_path: targetPath,
+              file_name: fileName,
+              file_size: fileSize,
+              vendor_id: vendorId,
+              model_ids: modelIds,
+              tags: [],
+            });
             addPromptImage(result);
           }
         } catch (error) {
