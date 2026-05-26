@@ -94,6 +94,12 @@ function SettingsView() {
   // Vendor management state
   const [resetDbStep, setResetDbStep] = useState(0);
 
+  // Tab 切换时清空扫描结果
+  useEffect(() => {
+    setScanResult(null);
+    setInboxCleanupResult(null);
+  }, [activeSettingsTab]);
+
   // 初始化本地设置
   useEffect(() => {
     if (settingsOpen) {
@@ -942,6 +948,32 @@ function SettingsView() {
                       </>
                     )}
                   </Button>
+
+                  {inboxCleanupResult && (
+                    <div className="rounded-md border bg-muted/40 p-3 space-y-2 text-sm">
+                      <p className="font-medium">扫描完成</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+                        <span>检查记录数</span>
+                        <span className="text-foreground font-medium">{inboxCleanupResult.scanned_count}</span>
+                        <span>保留记录</span>
+                        <span>{inboxCleanupResult.kept_count}</span>
+                        <span>清理记录</span>
+                        <span className="text-green-600 font-medium">{inboxCleanupResult.removed_count}</span>
+                        <span>失败</span>
+                        <span className={inboxCleanupResult.failed_count > 0 ? "text-destructive font-medium" : ""}>
+                          {inboxCleanupResult.failed_count}
+                        </span>
+                      </div>
+                      {inboxCleanupResult.errors.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-destructive">错误详情：</p>
+                          {inboxCleanupResult.errors.map((err, i) => (
+                            <p key={i} className="text-xs text-destructive/80 break-all">{err}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -970,9 +1002,8 @@ function SettingsView() {
                         if (customPath) {
                           libraryPath = customPath;
                         } else {
-                          const { appDataDir, join } = await import("@tauri-apps/api/path");
-                          const appDir = await appDataDir();
-                          libraryPath = await join(appDir, "ip_archived");
+                          const { appDataDir } = await import("@tauri-apps/api/path");
+                          libraryPath = await appDataDir();
                         }
                         
                         const result = await scannerApi.scanIpArchived(
@@ -1010,6 +1041,34 @@ function SettingsView() {
                       </>
                     )}
                   </Button>
+
+                  {scanResult && (
+                    <div className="rounded-md border bg-muted/40 p-3 space-y-2 text-sm">
+                      <p className="font-medium">扫描完成</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+                        <span>扫描文件数</span>
+                        <span className="text-foreground font-medium">{scanResult.scanned_count}</span>
+                        <span>新增入库</span>
+                        <span className="text-green-600 font-medium">{scanResult.imported_count}</span>
+                        <span>已重命名</span>
+                        <span className="text-blue-600 font-medium">{scanResult.renamed_count}</span>
+                        <span>已跳过（已入库）</span>
+                        <span>{scanResult.skipped_count}</span>
+                        <span>失败</span>
+                        <span className={scanResult.failed_count > 0 ? "text-destructive font-medium" : ""}>
+                          {scanResult.failed_count}
+                        </span>
+                      </div>
+                      {scanResult.errors.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-destructive">错误详情：</p>
+                          {scanResult.errors.map((err, i) => (
+                            <p key={i} className="text-xs text-destructive/80 break-all">{err}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

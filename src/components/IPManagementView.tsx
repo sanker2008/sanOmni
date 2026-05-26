@@ -70,6 +70,7 @@ export default function IPManagementView() {
   const [isPackModalOpen, setIsPackModalOpen] = useState(false);
   const [editingPack, setEditingPack] = useState<IpStickerPack | null>(null);
   const [packName, setPackName] = useState("");
+  const [packPath, setPackPath] = useState("");
   const [packDescription, setPackDescription] = useState("");
 
   // 发布平台记录状态
@@ -502,18 +503,20 @@ export default function IPManagementView() {
   const handleSavePack = async () => {
     if (!packName.trim() || !selectedIpId) return;
     try {
+      const finalPath = packPath.trim() || packName.trim().toLowerCase().replace(/\s+/g, "-");
       if (editingPack) {
-        await ipApi.updateStickerPack(editingPack.id, packName, packDescription || undefined);
+        await ipApi.updateStickerPack(editingPack.id, packName, finalPath, packDescription || undefined);
         toast({ title: "更新成功", description: "表情包套件信息已更新" });
       } else {
-        const created = await ipApi.createStickerPack(selectedIpId, packName, packDescription || undefined);
+        const created = await ipApi.createStickerPack(selectedIpId, packName, finalPath, packDescription || undefined);
         toast({ title: "新建成功", description: "表情包套件已创建" });
         setSelectedPackId(created.id);
       }
       setIsPackModalOpen(false);
       loadDetail(selectedIpId);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      toast({ title: editingPack ? "更新失败" : "新建失败", description: e.message || "操作失败", variant: "destructive" });
     }
   };
 
@@ -1101,6 +1104,7 @@ export default function IPManagementView() {
                         onClick={() => {
                           setEditingPack(null);
                           setPackName("");
+                          setPackPath("");
                           setPackDescription("");
                           setIsPackModalOpen(true);
                         }}
@@ -1160,6 +1164,7 @@ export default function IPManagementView() {
                                         e.stopPropagation();
                                         setEditingPack(pack);
                                         setPackName(pack.name);
+                                        setPackPath(pack.path || "");
                                         setPackDescription(pack.description || "");
                                         setIsPackModalOpen(true);
                                       }}
@@ -1677,6 +1682,16 @@ export default function IPManagementView() {
                 value={packName}
                 onChange={(e) => setPackName(e.target.value)}
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">路径标识</label>
+              <Input
+                placeholder="例如: daily（留空则自动生成）"
+                value={packPath}
+                onChange={(e) => setPackPath(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-"))}
+              />
+              <p className="text-[10px] text-muted-foreground">用于目录命名和匹配，只允许小写字母、数字、连字符和下划线</p>
             </div>
 
             <div className="flex flex-col gap-1.5">

@@ -17,10 +17,12 @@ pub struct ImportIpImageRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateIpImageRequest {
     pub ip_image_id: String,
-    pub ip_id: String,
+    pub ip_ids: Vec<String>,
+    pub primary_ip_id: String,
     pub tags: Vec<String>,
     pub has_watermark: Option<bool>,
     pub watermark_platform: Option<String>,
+    pub naming_template: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,6 +45,8 @@ pub struct IpImageResponse {
     pub ip_image: IpImage,
     pub tags: Vec<Tag>,
     pub ip_name: String,
+    pub ip_ids: Vec<String>,
+    pub primary_ip_id: String,
 }
 
 // ==================== Import ====================
@@ -131,6 +135,14 @@ pub async fn import_ip_image(
         return CommandResult::err(format!("Failed to insert IP image: {}", e));
     }
 
+    // Insert primary relation to ip_image_relations
+    if let Err(e) = conn.execute(
+        "INSERT INTO ip_image_relations (ip_image_id, ip_id, is_primary) VALUES (?, ?, 1)",
+        rusqlite::params![&ip_image.id, &ip_image.ip_id],
+    ) {
+        return CommandResult::err(format!("Failed to insert IP image relation: {}", e));
+    }
+
     // Insert tags
     for tag_name in &request.tags {
         let tag_id = tag_name.to_lowercase().replace(" ", "-");
@@ -146,8 +158,16 @@ pub async fn import_ip_image(
 
     let tags = fetch_ip_image_tags(&conn, &ip_image_id).unwrap_or_default();
     let ip_name = fetch_ip_name(&conn, &request.ip_id).unwrap_or_else(|| "Unknown".to_string());
+    let ip_ids = vec![request.ip_id.clone()];
+    let primary_ip_id = request.ip_id.clone();
 
-    CommandResult::ok(IpImageResponse { ip_image, tags, ip_name })
+    CommandResult::ok(IpImageResponse { 
+        ip_image, 
+        tags, 
+        ip_name,
+        ip_ids,
+        primary_ip_id,
+    })
 }
 
 // ==================== Get Inbox ====================
@@ -197,6 +217,98 @@ pub async fn update_ip_image(
         None => return CommandResult::err("IP image not found".to_string()),
     };
 
+    // If the image is already archived and the primary IP has changed, move the physical file and update database paths
+    if current_image.status == "archived" && current_image.ip_id != request.primary_ip_id {
+        // Get library path by removing relative path suffix from absolute path
+        let library_path = if current_image.absolute_path.ends_with(&current_image.relative_path) {
+            let len = current_image.absolute_path.len() - current_image.relative_path.len();
+            current_image.absolute_path[..len].trim_end_matches('/').trim_end_matches('\\').to_string()
+        } else {
+            std::path::Path::new(&current_image.absolute_path)
+                .parent() // old_ip_path dir
+                .and_then(|p| p.parent()) // ip_archived dir
+                .and_then(|p| p.parent()) // library_path dir
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+        };
+
+        if !library_path.is_empty() {
+            let new_ip_path = fetch_ip_path(&conn, &request.primary_ip_id).unwrap_or_else(|| "unknown".to_string());
+            let target_dir = std::path::PathBuf::from(&library_path).join("ip_archived").join(&new_ip_path);
+
+            let default_template = "{ip}-{date}-{index}".to_string();
+            let template = request.naming_template.clone().unwrap_or(default_template);
+
+            let ext = std::path::Path::new(&current_image.filename)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("png");
+
+            let ip_name = fetch_ip_name(&conn, &request.primary_ip_id).unwrap_or_else(|| "Unknown".to_string());
+            let date = if current_image.created_at.len() >= 10 {
+                &current_image.created_at[..10]
+            } else {
+                "unknown"
+            };
+
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM ip_images WHERE ip_id = ? AND status = 'archived'",
+                [&request.primary_ip_id],
+                |row| row.get(0),
+            ).unwrap_or(0);
+            let index = count + 1;
+
+            let filename_candidate = template
+                .replace("{ip}", &ip_name)
+                .replace("{date}", date)
+                .replace("{index}", &format!("{:03}", index))
+                .replace("{original}", &current_image.original_filename);
+
+            let mut path_file = std::path::PathBuf::from(&filename_candidate);
+            if path_file.extension().is_none() {
+                path_file.set_extension(ext);
+            }
+            let filename = path_file.file_name().and_then(|f| f.to_str()).unwrap_or(&filename_candidate).to_string();
+
+            // Resolve name collision if any
+            let stem = std::path::Path::new(&filename)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&filename);
+
+            let mut unique_filename = filename.clone();
+            let mut target_path = target_dir.join(&unique_filename);
+            let mut counter = 1;
+
+            while target_path.exists() {
+                unique_filename = format!("{}_{}.{}", stem, counter, ext);
+                target_path = target_dir.join(&unique_filename);
+                counter += 1;
+            }
+
+            // Perform directory creation and file move
+            let source = std::path::Path::new(&current_image.absolute_path);
+            if source.exists() {
+                if let Ok(_) = std::fs::create_dir_all(&target_dir) {
+                    if let Ok(_) = std::fs::rename(source, &target_path) {
+                        // Update the database paths
+                        let new_relative = std::path::Path::new("ip_archived")
+                            .join(&new_ip_path)
+                            .join(&unique_filename)
+                            .to_string_lossy()
+                            .to_string();
+                        let new_absolute = target_path.to_string_lossy().to_string();
+
+                        let _ = conn.execute(
+                            "UPDATE ip_images SET filename = ?, relative_path = ?, absolute_path = ? WHERE id = ?",
+                            rusqlite::params![&unique_filename, &new_relative, &new_absolute, ip_image_id],
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     // Mark inbox images as tagged once metadata is edited
     if current_image.status != "archived" {
         let _ = conn.execute(
@@ -205,11 +317,25 @@ pub async fn update_ip_image(
         );
     }
 
-    // Update IP association
+    // Update IP association (primary IP in ip_images table)
     let _ = conn.execute(
         "UPDATE ip_images SET ip_id = ? WHERE id = ?",
-        rusqlite::params![&request.ip_id, ip_image_id],
+        rusqlite::params![&request.primary_ip_id, ip_image_id],
     );
+
+    // Update ip_image_relations
+    let _ = conn.execute(
+        "DELETE FROM ip_image_relations WHERE ip_image_id = ?",
+        [ip_image_id],
+    );
+
+    for ip_id in &request.ip_ids {
+        let is_primary = if ip_id == &request.primary_ip_id { 1 } else { 0 };
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO ip_image_relations (ip_image_id, ip_id, is_primary) VALUES (?, ?, ?)",
+            rusqlite::params![ip_image_id, ip_id, is_primary],
+        );
+    }
 
     // Update watermark info
     if let Some(has_watermark) = request.has_watermark {
@@ -257,8 +383,17 @@ pub async fn update_ip_image(
     };
     let tags = fetch_ip_image_tags(&conn, ip_image_id).unwrap_or_default();
     let ip_name = fetch_ip_name(&conn, &ip_image.ip_id).unwrap_or_else(|| "Unknown".to_string());
+    let ip_ids = fetch_associated_ips(&conn, ip_image_id).unwrap_or_default();
+    let ip_ids = if ip_ids.is_empty() { vec![ip_image.ip_id.clone()] } else { ip_ids };
+    let primary_ip_id = ip_image.ip_id.clone();
 
-    CommandResult::ok(IpImageResponse { ip_image, tags, ip_name })
+    CommandResult::ok(IpImageResponse { 
+        ip_image, 
+        tags, 
+        ip_name,
+        ip_ids,
+        primary_ip_id,
+    })
 }
 
 // ==================== Archive ====================
@@ -301,11 +436,12 @@ pub async fn archive_ip_images(
             continue;
         }
 
-        // Get IP name
+        // Get IP name & path
         let ip_name = fetch_ip_name(&conn, &ip_image.ip_id).unwrap_or_else(|| "Unknown".to_string());
+        let ip_path = fetch_ip_path(&conn, &ip_image.ip_id).unwrap_or_else(|| "unknown".to_string());
 
-        // Target directory: library_path/ip_name/
-        let target_dir = std::path::PathBuf::from(&library_path).join(&ip_name);
+        // Target directory: library_path/ip_archived/ip_path/
+        let target_dir = std::path::PathBuf::from(&library_path).join("ip_archived").join(&ip_path);
 
         // Generate unique filename
         let date = &ip_image.created_at[..10]; // YYYY-MM-DD
@@ -373,7 +509,11 @@ pub async fn archive_ip_images(
         }
 
         // Update database
-        let new_relative = std::path::PathBuf::from(&new_filename).to_string_lossy().to_string();
+        let new_relative = std::path::Path::new("ip_archived")
+            .join(&ip_path)
+            .join(&new_filename)
+            .to_string_lossy()
+            .to_string();
         let new_absolute = target_path.to_string_lossy().to_string();
 
         if let Err(e) = conn.execute(
@@ -501,7 +641,16 @@ fn fetch_ip_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<IpImag
             mapped.filter_map(|r| r.ok()).map(|ip_image| {
                 let tags = fetch_ip_image_tags(conn, &ip_image.id).unwrap_or_default();
                 let ip_name = fetch_ip_name(conn, &ip_image.ip_id).unwrap_or_else(|| "Unknown".to_string());
-                IpImageResponse { ip_image, tags, ip_name }
+                let ip_ids = fetch_associated_ips(conn, &ip_image.id).unwrap_or_default();
+                let ip_ids = if ip_ids.is_empty() { vec![ip_image.ip_id.clone()] } else { ip_ids };
+                let primary_ip_id = ip_image.ip_id.clone();
+                IpImageResponse { 
+                    ip_image, 
+                    tags, 
+                    ip_name,
+                    ip_ids,
+                    primary_ip_id,
+                }
             }).collect()
         }
         Err(_) => Vec::new(),
@@ -538,4 +687,26 @@ fn fetch_ip_name(conn: &Connection, ip_id: &str) -> Option<String> {
         [ip_id],
         |row| row.get(0),
     ).ok()
+}
+
+fn fetch_ip_path(conn: &Connection, ip_id: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT path FROM ip_assets WHERE id = ?",
+        [ip_id],
+        |row| row.get(0),
+    ).ok()
+}
+
+fn fetch_associated_ips(conn: &Connection, ip_image_id: &str) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT ip_id FROM ip_image_relations WHERE ip_image_id = ?"
+    )?;
+    let rows = stmt.query_map([ip_image_id], |row| row.get(0))?;
+    let mut ips = Vec::new();
+    for r in rows {
+        if let Ok(ip) = r {
+            ips.push(ip);
+        }
+    }
+    Ok(ips)
 }

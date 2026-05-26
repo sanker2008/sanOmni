@@ -3,15 +3,6 @@ use std::path::Path;
 
 pub fn init_database(db_path: &Path) -> Result<()> {
     let conn = Connection::open(db_path)?;
-    
-    // 清理旧开发版本的临时结构，确保重新以 path 为基础创建表
-    let _ = conn.execute("DROP TABLE IF EXISTS ip_character_sheets", []);
-    let _ = conn.execute("DROP TABLE IF EXISTS ip_emojis", []);
-    let _ = conn.execute("DROP TABLE IF EXISTS ip_creations", []);
-    let _ = conn.execute("DROP TABLE IF EXISTS ip_sticker_pack_platforms", []);
-    let _ = conn.execute("DROP TABLE IF EXISTS ip_sticker_packs", []);
-    let _ = conn.execute("DROP TABLE IF EXISTS ip_relations", []);
-    let _ = conn.execute("DROP TABLE IF EXISTS ip_assets", []);
 
     // Create tables
     conn.execute_batch(SCHEMA)?;
@@ -39,6 +30,24 @@ pub fn init_database(db_path: &Path) -> Result<()> {
     // Backfill path from name for existing rows that have no path
     let _ = conn.execute(
         "UPDATE ip_assets SET path = id WHERE path IS NULL OR path = ''",
+        [],
+    );
+
+    // Add path column to ip_sticker_packs if not exists (migration for existing DBs)
+    let _ = conn.execute(
+        "ALTER TABLE ip_sticker_packs ADD COLUMN path TEXT",
+        [],
+    );
+    // Backfill path from id for existing rows that have no path
+    let _ = conn.execute(
+        "UPDATE ip_sticker_packs SET path = id WHERE path IS NULL OR path = ''",
+        [],
+    );
+    
+    // Backfill existing ip_images records to ip_image_relations
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO ip_image_relations (ip_image_id, ip_id, is_primary)
+         SELECT id, ip_id, 1 FROM ip_images WHERE ip_id IS NOT NULL",
         [],
     );
     
@@ -266,6 +275,7 @@ CREATE TABLE IF NOT EXISTS ip_sticker_packs (
     id                  TEXT PRIMARY KEY,
     ip_id               TEXT NOT NULL,
     name                TEXT NOT NULL,
+    path                TEXT NOT NULL,
     description         TEXT,
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL,
@@ -320,11 +330,22 @@ CREATE TABLE IF NOT EXISTS ip_image_tag_relations (
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
+-- IP Image-IP relations (Multi-IP support)
+CREATE TABLE IF NOT EXISTS ip_image_relations (
+    ip_image_id  TEXT NOT NULL,
+    ip_id        TEXT NOT NULL,
+    is_primary   INTEGER DEFAULT 0,
+    PRIMARY KEY (ip_image_id, ip_id),
+    FOREIGN KEY (ip_image_id) REFERENCES ip_images(id) ON DELETE CASCADE,
+    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE
+);
+
 -- Indexes for IP assets
 CREATE INDEX IF NOT EXISTS idx_ip_character_sheets_ip ON ip_character_sheets(ip_id);
 CREATE INDEX IF NOT EXISTS idx_ip_sticker_packs_ip ON ip_sticker_packs(ip_id);
 CREATE INDEX IF NOT EXISTS idx_ip_emojis_pack ON ip_emojis(pack_id);
 CREATE INDEX IF NOT EXISTS idx_ip_spp_pack ON ip_sticker_pack_platforms(pack_id);
+CREATE INDEX IF NOT EXISTS idx_ip_ir_ip ON ip_image_relations(ip_id);
 "#;
 
 fn migrate_ip_images(conn: &Connection) -> Result<()> {

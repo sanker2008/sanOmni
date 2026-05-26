@@ -83,6 +83,7 @@ export interface IpStickerPack {
   id: string;
   ip_id: string;
   name: string;
+  path: string;
   description?: string;
   created_at: string;
   updated_at: string;
@@ -136,7 +137,6 @@ export interface ImageWithRelations extends Image {
   prompt_groups: PromptGroup[];
 }
 
-// IP 域专用图片类型
 export interface IpImageWithRelations {
   id: string;
   filename: string;
@@ -159,6 +159,8 @@ export interface IpImageWithRelations {
   archived_at?: string;
   tags: Tag[];
   ip_name: string;
+  ip_ids?: string[];
+  primary_ip_id?: string;
 }
 
 export interface Vendor {

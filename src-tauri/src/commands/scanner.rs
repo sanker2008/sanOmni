@@ -494,7 +494,7 @@ pub async fn scan_ip_archived_directory(
     let template = naming_template
         .unwrap_or_else(|| "{ip}-{date}-{index}".to_string());
 
-    let archived_root = std::path::Path::new(&library_path);
+    let archived_root = std::path::Path::new(&library_path).join("ip_archived");
     if !archived_root.exists() {
         return CommandResult::err(format!(
             "归档目录不存在: {}",

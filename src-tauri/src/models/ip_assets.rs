@@ -35,6 +35,7 @@ pub struct IpStickerPack {
     pub id: String,
     pub ip_id: String,
     pub name: String,
+    pub path: String,
     pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,

@@ -32,18 +32,18 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 │   │   ├── 1234567890_sticker.png
 │   │   └── ...
 │   └── ...
-├── ip_archived/                  # IP 图片归档（按 IP path 字段组织）
-│   ├── luna/                     # ip_assets.path = "luna"
-│   │   ├── luna-20240115-001.png
-│   │   └── ...
+├── ip_archived/                  # IP 资源归档及私有资产目录（按唯一 IP path 路径标识组织）
+│   ├── luna/                     # IP 角色 luna 目录 (path = "luna")
+│   │   ├── ip_assets/            # 存放该 IP 的专属图片资源（头像、设定图、三视图、衍生创作图片等）
+│   │   │   ├── avatar.png
+│   │   │   ├── luna_sheet_01.png
+│   │   │   └── ...
+│   │   └── emojis/               # 存放该 IP 的表情包分组目录
+│   │       └── default/          # 某个表情包分组的分组路径目录 (pack_path = "default")
+│   │           ├── emoji1.png
+│   │           └── ...
 │   └── ...
-└── ip_assets/                    # IP 角色私有资源（头像、设定图、表情等）
-    ├── {ip_id}/
-    │   ├── avatar/
-    │   ├── sheets/
-    │   ├── emojis/
-    │   └── creations/
-    └── ...
+└── ...
 ```
 
 ## 工作流程
@@ -84,14 +84,12 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 
 ### IP 角色私有资源（设定图/表情/创作）
 
-这类图片通过 `ip_assets.rs` 管理，存储在独立目录，**不经过 inbox/archived 流程**：
+这类图片通过 `ip_assets.rs` 管理，存储在 IP 路径标识对应的目录中，**不经过 inbox/archived 流程**：
 
 ```
-{AppDataDir}/ip_assets/{ip_id}/
-├── avatar/     # 头像
-├── sheets/     # 角色设定图（三视图等）
-├── emojis/     # 表情包图片
-└── creations/  # 衍生创作图片
+{AppDataDir}/ip_archived/{ip_path}/
+├── ip_assets/            # 存放三视图、头像、创作等普通资产图片
+└── emojis/{pack_path}/   # 存放对应表情包分组下的表情包图片
 ```
 
 ## 磁盘空间考虑

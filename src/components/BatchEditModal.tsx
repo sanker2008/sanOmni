@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useImageStore, useIpImageStore, useVendorStore } from "@/stores";
+import { useImageStore, useIpImageStore, useVendorStore, useUIStore } from "@/stores";
 import type { IpAsset } from "@/stores";
 import { imageApi, ipImageApi } from "@/services/tauri";
 import {
@@ -43,6 +43,7 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
   const [ipAction, setIpAction] = useState<"replace" | "append" | "none">("none");
   const [selectedIps, setSelectedIps] = useState<string[]>([]);
   const [availableIps, setAvailableIps] = useState<IpAsset[]>([]);
+  const [primaryIp, setPrimaryIp] = useState<string | null>(null);
 
   useEffect(() => {
     if (isIpMode) {
@@ -54,9 +55,25 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
 
   const toggleIp = (ipId: string) => {
     if (selectedIps.includes(ipId)) {
-      setSelectedIps(selectedIps.filter((id) => id !== ipId));
+      let next = selectedIps.filter((id) => id !== ipId);
+      if (next.length === 0) {
+        next = ["unknown"];
+      }
+      setSelectedIps(next);
+      if (primaryIp === ipId) {
+        setPrimaryIp(next[0] ?? null);
+      }
     } else {
-      setSelectedIps([...selectedIps, ipId]);
+      let next: string[];
+      if (ipId === "unknown") {
+        next = ["unknown"];
+      } else {
+        next = [...selectedIps.filter((id) => id !== "unknown"), ipId];
+      }
+      setSelectedIps(next);
+      if (next.length === 1 || !primaryIp || primaryIp === "unknown") {
+        setPrimaryIp(ipId);
+      }
     }
   };
 
@@ -152,16 +169,39 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
         if (isIpMode) {
           // IP 图片：使用 ipImageApi.update
           const ipImg = image as import("@/stores").IpImageWithRelations;
-          let newIpId = ipImg.ip_id;
-          if (ipAction === "replace" && selectedIps.length > 0) {
-            newIpId = selectedIps[0];
+          const existingIpIds = ipImg.ip_ids || [ipImg.ip_id];
+          
+          let finalIpIds: string[];
+          let finalPrimaryIpId: string;
+
+          if (ipAction === "replace") {
+            finalIpIds = selectedIps.length > 0 ? selectedIps : existingIpIds;
+            finalPrimaryIpId = primaryIp || finalIpIds[0] || ipImg.ip_id;
+          } else if (ipAction === "append") {
+            finalIpIds = [...new Set([...existingIpIds.filter(id => id !== "unknown"), ...selectedIps])];
+            if (finalIpIds.length === 0) {
+              finalIpIds = ["unknown"];
+            }
+            finalPrimaryIpId = primaryIp || ipImg.primary_ip_id || ipImg.ip_id;
+            if (finalPrimaryIpId === "unknown" && finalIpIds[0] !== "unknown") {
+              finalPrimaryIpId = finalIpIds[0];
+            }
+          } else {
+            finalIpIds = existingIpIds;
+            finalPrimaryIpId = ipImg.primary_ip_id || ipImg.ip_id;
           }
+
+          const settings = useUIStore.getState().settings;
+          const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+
           const updated = await ipImageApi.update({
             ip_image_id: imageId,
-            ip_id: newIpId,
+            ip_ids: finalIpIds,
+            primary_ip_id: finalPrimaryIpId,
             tags: finalTags,
             has_watermark: finalHasWatermark,
             watermark_platform: finalWatermarkPlatform,
+            naming_template: namingTemplate,
           });
           updateImage(imageId, updated as any);
         } else {
@@ -218,6 +258,7 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
   const handleClose = () => {
     setIpAction("none");
     setSelectedIps([]);
+    setPrimaryIp(null);
     setModelAction("none");
     setSelectedModels([]);
     setPrimaryModel(null);
@@ -362,6 +403,23 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
                           <Circle className="w-3 h-3" />
                         )}
                         {ip.name}
+                        {isSelected && ip.id !== "unknown" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPrimaryIp(ip.id);
+                            }}
+                            className={cn(
+                              "ml-1 p-0.5 rounded",
+                              primaryIp === ip.id
+                                ? "text-yellow-500"
+                                : "text-muted-foreground hover:text-yellow-500"
+                            )}
+                            title={primaryIp === ip.id ? "主 IP" : "设为主 IP"}
+                          >
+                            <Star className={cn("w-3 h-3", primaryIp === ip.id && "fill-current")} />
+                          </button>
+                        )}
                       </button>
                     );
                   })}

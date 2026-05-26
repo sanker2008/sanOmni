@@ -778,12 +778,13 @@ export const ipApi = {
     return result.data || false;
   },
 
-  async createStickerPack(ipId: string, name: string, description?: string): Promise<IpStickerPack> {
+  async createStickerPack(ipId: string, name: string, path: string, description?: string): Promise<IpStickerPack> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<IpStickerPack>>("create_ip_sticker_pack", {
       dbPath,
       ipId,
       name,
+      path,
       description,
     });
     if (!result.success || !result.data) {
@@ -792,12 +793,13 @@ export const ipApi = {
     return result.data;
   },
 
-  async updateStickerPack(packId: string, name: string, description?: string): Promise<boolean> {
+  async updateStickerPack(packId: string, name: string, path: string, description?: string): Promise<boolean> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<boolean>>("update_ip_sticker_pack", {
       dbPath,
       packId,
       name,
+      path,
       description,
     });
     if (!result.success) {
@@ -952,6 +954,8 @@ export interface IpImageResponse {
   archived_at?: string;
   tags: Array<{ id: string; name: string; color?: string }>;
   ip_name: string;
+  ip_ids: string[];
+  primary_ip_id: string;
 }
 
 interface ImportIpImageRequest {
@@ -964,10 +968,12 @@ interface ImportIpImageRequest {
 
 interface UpdateIpImageRequest {
   ip_image_id: string;
-  ip_id: string;
+  ip_ids: string[];
+  primary_ip_id: string;
   tags: string[];
   has_watermark?: boolean;
   watermark_platform?: string;
+  naming_template?: string;
 }
 
 interface ArchiveIpImagesRequest {

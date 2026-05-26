@@ -78,7 +78,8 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
           })
         : await ipImageApi.update({
             ip_image_id: image.id,
-            ip_id: image.ip_id,
+            ip_ids: image.ip_ids || [image.ip_id],
+            primary_ip_id: image.primary_ip_id || image.ip_id,
             tags: image.tags.map((t) => t.name),
             has_watermark: nextHasWatermark,
             watermark_platform: nextHasWatermark ? "unknown" : undefined,

@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Search, Users, ChevronRight, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 interface IpSidebarProps {
   onIpSelect: (ipId: string | null) => void;
   selectedIpId: string | null;
+  imageCounts?: Record<string, number>;
+  totalCount?: number;
 }
 
-export default function IpSidebar({ onIpSelect, selectedIpId }: IpSidebarProps) {
+export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, totalCount }: IpSidebarProps) {
   const [ips, setIps] = useState<IpAsset[]>([]);
   const [search, setSearch] = useState("");
   const [isExpanded, setIsExpanded] = useState(true);
@@ -52,11 +55,18 @@ export default function IpSidebar({ onIpSelect, selectedIpId }: IpSidebarProps) 
         <div className="p-2">
           <Button
             variant={selectedIpId === null ? "secondary" : "ghost"}
-            className="w-full justify-start font-medium mb-2"
+            className="w-full justify-between font-medium mb-2"
             onClick={() => onIpSelect(null)}
           >
-            <Users className="mr-2 h-4 w-4" />
-            全部图片
+            <div className="flex items-center">
+              <Users className="mr-2 h-4 w-4 text-muted-foreground" />
+              全部图片
+            </div>
+            {typeof totalCount === "number" && (
+              <Badge variant="secondary" className="font-normal text-xs px-1.5 py-0.2 min-w-[20px] h-5 justify-center">
+                {totalCount}
+              </Badge>
+            )}
           </Button>
           
           <div className="space-y-1">
@@ -75,19 +85,33 @@ export default function IpSidebar({ onIpSelect, selectedIpId }: IpSidebarProps) 
             
             {isExpanded && (
               <div className="pl-4 space-y-1 mt-1">
-                {filteredIps.map((ip) => (
-                  <Button
-                    key={ip.id}
-                    variant={selectedIpId === ip.id ? "secondary" : "ghost"}
-                    className={cn(
-                      "w-full justify-start h-8 px-2 text-sm",
-                      selectedIpId === ip.id && "bg-secondary"
-                    )}
-                    onClick={() => onIpSelect(ip.id)}
-                  >
-                    <span className="truncate">{ip.name}</span>
-                  </Button>
-                ))}
+                {filteredIps.map((ip) => {
+                  const count = imageCounts?.[ip.id] || 0;
+                  return (
+                    <Button
+                      key={ip.id}
+                      variant={selectedIpId === ip.id ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full justify-between h-8 px-2 text-sm",
+                        selectedIpId === ip.id && "bg-secondary"
+                      )}
+                      onClick={() => onIpSelect(ip.id)}
+                    >
+                      <span className="truncate mr-2 text-left">{ip.name}</span>
+                      {imageCounts && (
+                        <Badge 
+                          variant="outline" 
+                          className={cn(
+                            "font-normal text-xs px-1.5 py-0.2 min-w-[20px] h-5 justify-center border-none",
+                            selectedIpId === ip.id ? "bg-background/50 text-foreground" : "bg-muted/50 text-muted-foreground"
+                          )}
+                        >
+                          {count}
+                        </Badge>
+                      )}
+                    </Button>
+                  );
+                })}
               </div>
             )}
           </div>

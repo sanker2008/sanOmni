@@ -67,7 +67,8 @@ export default function IpInboxView() {
       try {
         const updated = await ipImageApi.update({
           ip_image_id: imageId,
-          ip_id: image.ip_id,
+          ip_ids: image.ip_ids || [image.ip_id],
+          primary_ip_id: image.primary_ip_id || image.ip_id,
           tags: image.tags.map((t) => t.name),
           has_watermark: hasWatermark,
           watermark_platform: hasWatermark ? "unknown" : undefined,

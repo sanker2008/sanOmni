@@ -46,6 +46,7 @@ export default function QuickEditModal() {
   const [selectedPromptGroupIds, setSelectedPromptGroupIds] = useState<string[]>([]);
   const [availableIps, setAvailableIps] = useState<IpAsset[]>([]);
   const [selectedIpIds, setSelectedIpIds] = useState<string[]>([]);
+  const [primaryIpId, setPrimaryIpId] = useState<string | null>(null);
   const [newPromptText, setNewPromptText] = useState("");
   const [newNegativePrompt, setNewNegativePrompt] = useState("");
   const [newPromptName, setNewPromptName] = useState("");
@@ -89,7 +90,8 @@ export default function QuickEditModal() {
     setSelectedModels(promptImage?.models?.map((model) => model.id) || []);
     setPrimaryModel(promptImage?.models?.find((model) => model.is_primary)?.id || null);
     setTags(image.tags?.map((tag) => tag.name) || []);
-    setSelectedIpIds(ipImage ? [ipImage.ip_id] : []);
+    setSelectedIpIds(ipImage?.ip_ids || (ipImage ? [ipImage.ip_id] : []));
+    setPrimaryIpId(ipImage?.primary_ip_id || ipImage?.ip_id || null);
     setHasWatermark(image.has_watermark);
     setWatermarkPlatform(image.watermark_platform || "");
     setNewPromptText("");
@@ -142,12 +144,16 @@ export default function QuickEditModal() {
 
     if (isIpImage && ipImage) {
       // IP 图片：使用 ipImageApi.update
+      const settings = useUIStore.getState().settings;
+      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
       const updatedIp = await ipImageApi.update({
         ip_image_id: image.id,
-        ip_id: selectedIpIds[0] || ipImage.ip_id,
+        ip_ids: selectedIpIds.length > 0 ? selectedIpIds : [ipImage.ip_id],
+        primary_ip_id: primaryIpId || selectedIpIds[0] || ipImage.ip_id,
         tags,
         has_watermark: hasWatermark,
         watermark_platform: watermarkPlatform || undefined,
+        naming_template: namingTemplate,
       });
       updateIpImage(image.id, updatedIp);
 
@@ -1020,9 +1026,25 @@ export default function QuickEditModal() {
                           key={ip.id}
                           onClick={() => {
                             if (isSelected) {
-                              setSelectedIpIds(selectedIpIds.filter(id => id !== ip.id));
+                              let nextIps = selectedIpIds.filter(id => id !== ip.id);
+                              if (nextIps.length === 0) {
+                                nextIps = ["unknown"];
+                              }
+                              setSelectedIpIds(nextIps);
+                              if (primaryIpId === ip.id) {
+                                setPrimaryIpId(nextIps[0] || null);
+                              }
                             } else {
-                              setSelectedIpIds([...selectedIpIds, ip.id]);
+                              let nextIps: string[];
+                              if (ip.id === "unknown") {
+                                nextIps = ["unknown"];
+                              } else {
+                                nextIps = [...selectedIpIds.filter(id => id !== "unknown"), ip.id];
+                              }
+                              setSelectedIpIds(nextIps);
+                              if (!primaryIpId || primaryIpId === "unknown" || nextIps.length === 1) {
+                                setPrimaryIpId(ip.id);
+                              }
                             }
                           }}
                           className={cn(
@@ -1038,6 +1060,25 @@ export default function QuickEditModal() {
                             <Circle className="w-3 h-3" />
                           )}
                           {ip.name}
+                          {isSelected && ip.id !== "unknown" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isSelected) {
+                                  setPrimaryIpId(ip.id);
+                                }
+                              }}
+                              className={cn(
+                                "ml-1 p-0.5 rounded",
+                                primaryIpId === ip.id
+                                  ? "text-yellow-500"
+                                  : "text-muted-foreground hover:text-yellow-500"
+                              )}
+                              title={primaryIpId === ip.id ? "主 IP" : "设为主 IP"}
+                            >
+                              <Star className={cn("w-3 h-3", primaryIpId === ip.id && "fill-current")} />
+                            </button>
+                          )}
                         </button>
                       );
                     })}
@@ -1135,19 +1176,21 @@ export default function QuickEditModal() {
           <Button variant="outline" onClick={closeQuickEdit}>
             取消
           </Button>
-          <Button variant="outline" onClick={handleSaveAndArchive} disabled={isSaving || isSavingAndArchiving}>
-            {isSavingAndArchiving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                保存并归档中...
-              </>
-            ) : (
-              <>
-                <Archive className="mr-2 h-4 w-4" />
-                保存并归档
-              </>
-            )}
-          </Button>
+          {image?.status !== "archived" && (
+            <Button variant="outline" onClick={handleSaveAndArchive} disabled={isSaving || isSavingAndArchiving}>
+              {isSavingAndArchiving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存并归档中...
+                </>
+              ) : (
+                <>
+                  <Archive className="mr-2 h-4 w-4" />
+                  保存并归档
+                </>
+              )}
+            </Button>
+          )}
           <Button onClick={handleSave} disabled={isSaving || isSavingAndArchiving}>
             {isSaving ? (
               <>

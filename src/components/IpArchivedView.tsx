@@ -69,7 +69,8 @@ export default function IpArchivedView() {
       try {
         const updated = await ipImageApi.update({
           ip_image_id: imageId,
-          ip_id: image.ip_id,
+          ip_ids: image.ip_ids || [image.ip_id],
+          primary_ip_id: image.primary_ip_id || image.ip_id,
           tags: image.tags.map((t) => t.name),
           has_watermark: hasWatermark,
           watermark_platform: hasWatermark ? "unknown" : undefined,
@@ -140,12 +141,14 @@ export default function IpArchivedView() {
       if (!matchesSearch) return false;
     }
     
-    // IP 筛选（按 ip_id 过滤）
+    // IP 筛选（支持多关联过滤，若有 ip_ids 数组则判断是否包含，否则 fallback 到单个 ip_id）
     if (selectedIpId) {
-      if (selectedIpId === "unknown") {
-        if (image.ip_id !== "unknown") return false;
-      } else {
-        if (image.ip_id !== selectedIpId) return false;
+      const ipIds = image.ip_ids && image.ip_ids.length > 0
+        ? image.ip_ids
+        : [image.ip_id || "unknown"];
+        
+      if (!ipIds.includes(selectedIpId)) {
+        return false;
       }
     }
     
@@ -181,7 +184,19 @@ export default function IpArchivedView() {
     return result;
   }, [filteredImages, sortBy, sortOrder]);
 
-
+  const ipImageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    archivedImages.forEach((image) => {
+      const ipIds = image.ip_ids && image.ip_ids.length > 0
+        ? image.ip_ids
+        : [image.ip_id || "unknown"];
+        
+      ipIds.forEach((ipId) => {
+        counts[ipId] = (counts[ipId] || 0) + 1;
+      });
+    });
+    return counts;
+  }, [archivedImages]);
 
   const isAllSelected = sortedImages.length > 0 &&
     sortedImages.every((img) => selectedImages.includes(img.id));
@@ -331,6 +346,8 @@ export default function IpArchivedView() {
       <IpSidebar
         onIpSelect={setSelectedIpId}
         selectedIpId={selectedIpId}
+        imageCounts={ipImageCounts}
+        totalCount={archivedImages.length}
       />
 
       {/* Main Content */}
