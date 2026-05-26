@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useImageStore, useUIStore, useVendorStore, type PromptGroup } from "@/stores";
+import { useImageStore, useIpImageStore, useUIStore, useVendorStore } from "@/stores";
+import type { PromptGroup, IpAsset } from "@/stores";
 import { imageApi, promptApi } from "@/services/tauri";
-import { appDataDir } from "@tauri-apps/api/path";
 import { toast } from "@/hooks/useToast";
 import {
   Dialog,
@@ -33,7 +33,8 @@ import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { cn } from "@/lib/utils";
 
 export default function QuickEditModal() {
-  const { inboxImages, archivedImages, updateImage, removeImage } = useImageStore();
+  const { inboxImages, archivedImages, updateImage: updatePromptImage, removeImage: removePromptImage } = useImageStore();
+  const { inboxImages: ipInboxImages, archivedImages: ipArchivedImages, updateImage: updateIpImage, removeImage: removeIpImage } = useIpImageStore();
   const { isQuickEditOpen, editingImageId, closeQuickEdit } = useUIStore();
   const { vendors } = useVendorStore();
 
@@ -43,6 +44,8 @@ export default function QuickEditModal() {
   const [tagInput, setTagInput] = useState("");
   const [availablePromptGroups, setAvailablePromptGroups] = useState<PromptGroup[]>([]);
   const [selectedPromptGroupIds, setSelectedPromptGroupIds] = useState<string[]>([]);
+  const [availableIps, setAvailableIps] = useState<IpAsset[]>([]);
+  const [selectedIpIds, setSelectedIpIds] = useState<string[]>([]);
   const [newPromptText, setNewPromptText] = useState("");
   const [newNegativePrompt, setNewNegativePrompt] = useState("");
   const [newPromptName, setNewPromptName] = useState("");
@@ -69,18 +72,22 @@ export default function QuickEditModal() {
   const [editPromptTab, setEditPromptTab] = useState<"base" | "template">("base");
   const [addPromptTab, setAddPromptTab] = useState<"base" | "template">("base");
 
+  const isIpImage = ipInboxImages.some(img => img.id === editingImageId) || ipArchivedImages.some(img => img.id === editingImageId);
   const image =
     inboxImages.find((img) => img.id === editingImageId) ||
-    archivedImages.find((img) => img.id === editingImageId);
+    archivedImages.find((img) => img.id === editingImageId) ||
+    ipInboxImages.find((img) => img.id === editingImageId) ||
+    ipArchivedImages.find((img) => img.id === editingImageId);
 
   useEffect(() => {
     if (!image) {
       return;
     }
 
-    setSelectedModels(image.models.map((model) => model.id));
-    setPrimaryModel(image.models.find((model) => model.is_primary)?.id || null);
-    setTags(image.tags.map((tag) => tag.name));
+    setSelectedModels(image.models?.map((model) => model.id) || []);
+    setPrimaryModel(image.models?.find((model) => model.is_primary)?.id || null);
+    setTags(image.tags?.map((tag) => tag.name) || []);
+    setSelectedIpIds(image.ips?.map((ip) => ip.id) || []);
     setHasWatermark(image.has_watermark);
     setWatermarkPlatform(image.watermark_platform || "");
     setNewPromptText("");
@@ -101,17 +108,23 @@ export default function QuickEditModal() {
     let cancelled = false;
     void (async () => {
       try {
-        const [groups, linkedGroups] = await Promise.all([
-          promptApi.getAll(),
-          promptApi.getForImage(image.id),
-        ]);
+        if (isIpImage) {
+          const { ipApi } = await import("@/services/tauri");
+          const ips = await ipApi.getAll();
+          if (!cancelled) setAvailableIps(ips);
+        } else {
+          const [groups, linkedGroups] = await Promise.all([
+            promptApi.getAll(),
+            promptApi.getForImage(image.id),
+          ]);
 
-        if (!cancelled) {
-          setAvailablePromptGroups(groups);
-          setSelectedPromptGroupIds(linkedGroups.map((group) => group.id));
+          if (!cancelled) {
+            setAvailablePromptGroups(groups);
+            setSelectedPromptGroupIds(linkedGroups.map((group) => group.id));
+          }
         }
       } catch (error) {
-        console.error("加载 Prompt 关联失败:", error);
+        console.error("加载关联数据失败:", error);
       }
     })();
 
@@ -127,32 +140,54 @@ export default function QuickEditModal() {
 
     const updated = await imageApi.update({
       image_id: image.id,
-      model_ids: selectedModels,
-      primary_model_id: primaryModel || undefined,
+      model_ids: isIpImage ? [] : selectedModels,
+      primary_model_id: isIpImage ? undefined : (primaryModel || undefined),
       tags,
       has_watermark: hasWatermark,
       watermark_platform: watermarkPlatform || undefined,
     });
 
-    await promptApi.setForImage(image.id, nextPromptGroupIds);
-
     const finalImage = { ...updated };
-    try {
-      const finalPrompts = await promptApi.getForImage(image.id);
-      finalImage.prompt_groups = finalPrompts;
-    } catch (error) {
-      console.error("加载关联 Prompt 失败:", error);
+    if (isIpImage) {
+      const { ipApi } = await import("@/services/tauri");
+      await ipApi.setCharactersForImage(image.id, selectedIpIds);
+      finalImage.ips = availableIps.filter(ip => selectedIpIds.includes(ip.id));
+    } else {
+      await promptApi.setForImage(image.id, nextPromptGroupIds);
+      try {
+        const finalPrompts = await promptApi.getForImage(image.id);
+        finalImage.prompt_groups = finalPrompts;
+      } catch (error) {
+        console.error("加载关联 Prompt 失败:", error);
+      }
     }
 
-    updateImage(image.id, finalImage);
+    if (isIpImage) {
+      updateIpImage(image.id, finalImage);
+    } else {
+      updatePromptImage(image.id, finalImage);
+    }
 
     if (archiveAfterSave) {
-      const customPath = useUIStore.getState().settings.customArchivedPath;
-      const libraryPath = customPath || (await appDataDir());
-      const result = await imageApi.archive([image.id], libraryPath);
+      const settings = useUIStore.getState().settings;
+      let libraryPath: string;
+      const { appDataDir } = await import("@tauri-apps/api/path");
 
-      if (result.success_count > 0) {
-        removeImage(image.id);
+      if (isIpImage) {
+        const customPath = settings.customIpArchivedPath;
+        libraryPath = customPath || await appDataDir();
+        const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+        const result = await imageApi.archive([image.id], libraryPath, namingTemplate, "ip");
+        if (result.success_count > 0) {
+          removeIpImage(image.id);
+        }
+      } else {
+        const customPath = settings.customArchivedPath;
+        libraryPath = customPath || await appDataDir();
+        const result = await imageApi.archive([image.id], libraryPath);
+        if (result.success_count > 0) {
+          removePromptImage(image.id);
+        }
       }
     }
 
@@ -533,8 +568,10 @@ export default function QuickEditModal() {
 
           <ScrollArea className="flex-1 pr-4">
             <div className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">模型选择</label>
+              {!isIpImage && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">模型选择</label>
                 <div className="space-y-3">
                   {vendors.map((vendor) => (
                     <div key={vendor.id} className="space-y-2">
@@ -965,8 +1002,50 @@ export default function QuickEditModal() {
               </div>
 
               <Separator />
+              </>
+            )}
 
-              <div className="space-y-2">
+            {isIpImage && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">关联 IP 形象</label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableIps.map((ip) => {
+                      const isSelected = selectedIpIds.includes(ip.id);
+                      return (
+                        <button
+                          key={ip.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedIpIds(selectedIpIds.filter(id => id !== ip.id));
+                            } else {
+                              setSelectedIpIds([...selectedIpIds, ip.id]);
+                            }
+                          }}
+                          className={cn(
+                            "flex items-center gap-1 px-3 py-1.5 rounded-md text-sm border transition-colors",
+                            isSelected
+                              ? "bg-primary/10 border-primary text-primary"
+                              : "bg-background border-input hover:bg-muted"
+                          )}
+                        >
+                          {isSelected ? (
+                            <CheckCircle2 className="w-3 h-3" />
+                          ) : (
+                            <Circle className="w-3 h-3" />
+                          )}
+                          {ip.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <Separator />
+              </>
+            )}
+
+            <div className="space-y-2">
                 <label className="text-sm font-medium">标签</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {tags.map((tag) => (

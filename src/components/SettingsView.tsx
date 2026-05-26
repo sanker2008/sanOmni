@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, FolderOpen, AlertTriangle, Edit2, Trash2, ChevronDown, ChevronRight, Save, ScanLine, Loader2 } from "lucide-react";
+import { X, ScanLine, Loader2, Plus, Trash2, FolderOpen, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import TrashView from "./TrashView";
 import ConfirmDialog from "./ConfirmDialog";
@@ -29,6 +29,13 @@ const DEFAULT_SETTINGS: Record<string, any> = {
   watchFolders: [],
   watchExtensions: "png,jpg,jpeg,webp,gif",
   watchDebounceMs: 1000,
+
+  // IP 专属设置
+  ipNamingTemplate: "{ip}-{date}-{index}",
+  ipCustomInboxPath: "",
+  ipCustomArchivedPath: "",
+  ipWatchFolders: [],
+  ipWatchExtensions: "png,jpg,jpeg,webp,gif",
 };
 
 // 快捷键列表（只读）
@@ -772,20 +779,325 @@ function SettingsView() {
             </div>
           )}
 
-          {/* IP 形象相关 */}
+          {/* IP 形象管理相关 */}
           {activeSettingsTab === "ip" && (
             <div className="space-y-6">
+              <div className="text-lg font-semibold mb-4 border-b pb-2">归档与路径配置</div>
+              
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">IP 形象相关设置</CardTitle>
+                  <CardTitle className="text-base">IP 命名模板</CardTitle>
                   <CardDescription>
-                    关于 IP 角色、设定图、表情包的管理设置
+                    配置归档 IP 图片时的文件名模板。可用变量：
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
+                      {"{ip}"}
+                    </code>
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
+                      {"{date}"}
+                    </code>
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
+                      {"{index}"}
+                    </code>
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    目前 IP 模块采用独立存储架构，暂无需要特殊配置的项。未来的默认发布平台、表情包尺寸预设等设置将在此处扩展。
+                  <Input
+                    value={localSettings.ipNamingTemplate || ""}
+                    onChange={(e) => handleLocalUpdate("ipNamingTemplate", e.target.value)}
+                    placeholder="{ip}-{date}-{index}"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    示例：Unknown-20260509-001.png
                   </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">自定义 IP 待整理路径</CardTitle>
+                  <CardDescription>
+                    导入 IP 图片时的临时存储位置。留空则使用默认位置（AppData/ip_inbox）
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Input
+                      value={localSettings.ipCustomInboxPath || ""}
+                      onChange={(e) =>
+                        handleLocalUpdate("ipCustomInboxPath", e.target.value)
+                      }
+                      placeholder="留空使用默认位置"
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => handleSelectCustomPath("ipCustomInboxPath")}
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {!localSettings.ipCustomInboxPath && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      默认：%APPDATA%\com.sanmediabox.app\ip_inbox
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">自定义 IP 归档路径</CardTitle>
+                  <CardDescription>
+                    IP 图片归档的根目录。留空则使用默认位置（AppData/ip_archived）
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Input
+                      value={localSettings.ipCustomArchivedPath || ""}
+                      onChange={(e) =>
+                        handleLocalUpdate("ipCustomArchivedPath", e.target.value)
+                      }
+                      placeholder="留空使用默认位置"
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => handleSelectCustomPath("ipCustomArchivedPath")}
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {!localSettings.ipCustomArchivedPath && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      默认：%APPDATA%\com.sanmediabox.app\ip_archived
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="text-lg font-semibold mt-8 mb-4 border-b pb-2">自动化处理</div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ScanLine className="w-4 h-4" />
+                    扫描 IP 待整理目录
+                  </CardTitle>
+                  <CardDescription>
+                    扫描 IP 待整理目录当前实际存在的图片文件，清理数据库中已经被你手动删除的待整理记录。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isCleaningInbox}
+                    onClick={async () => {
+                      setIsCleaningInbox(true);
+                      setInboxCleanupResult(null);
+                      try {
+                        let inboxPath: string;
+                        const customPath = localSettings.ipCustomInboxPath;
+
+                        if (customPath) {
+                          inboxPath = customPath;
+                        } else {
+                          const { appDataDir, join } = await import("@tauri-apps/api/path");
+                          const appDir = await appDataDir();
+                          inboxPath = await join(appDir, "ip_inbox");
+                        }
+
+                        const result = await scannerApi.cleanupIpInbox(inboxPath);
+                        setInboxCleanupResult(result);
+
+                        if (result.removed_count > 0) {
+                          const { imageApi } = await import("@/services/tauri");
+                          const inbox = await imageApi.getIpInboxImages();
+                          const { useIpImageStore } = await import("@/stores");
+                          useIpImageStore.getState().setInboxImages(inbox);
+                        }
+
+                      } catch (error) {
+                        toast({
+                          title: "✗ 扫描失败",
+                          description: String(error),
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsCleaningInbox(false);
+                      }
+                    }}
+                  >
+                    {isCleaningInbox ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        扫描中...
+                      </>
+                    ) : (
+                      <>
+                        <ScanLine className="w-4 h-4 mr-2" />
+                        开始扫描
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ScanLine className="w-4 h-4" />
+                    扫描 IP 归档目录
+                  </CardTitle>
+                  <CardDescription>
+                    扫描 IP 归档目录下的图片文件，将未入库的图片按命名模板重命名后直接写入归档数据库。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isScanning}
+                    onClick={async () => {
+                      setIsScanning(true);
+                      setScanResult(null);
+                      try {
+                        let libraryPath: string;
+                        const customPath = localSettings.ipCustomArchivedPath;
+                        
+                        if (customPath) {
+                          libraryPath = customPath;
+                        } else {
+                          const { appDataDir, join } = await import("@tauri-apps/api/path");
+                          const appDir = await appDataDir();
+                          libraryPath = await join(appDir, "ip_archived");
+                        }
+                        
+                        const result = await scannerApi.scanIpArchived(
+                          libraryPath,
+                          localSettings.ipNamingTemplate
+                        );
+                        setScanResult(result);
+                        
+                        if (result.imported_count > 0) {
+                          const { imageApi } = await import("@/services/tauri");
+                          const archived = await imageApi.getIpArchivedImages();
+                          const { useIpImageStore } = await import("@/stores");
+                          useIpImageStore.getState().setArchivedImages(archived);
+                        }
+                      } catch (error) {
+                        toast({
+                          title: "✗ 扫描失败",
+                          description: String(error),
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsScanning(false);
+                      }
+                    }}
+                  >
+                    {isScanning ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        扫描中...
+                      </>
+                    ) : (
+                      <>
+                        <ScanLine className="w-4 h-4 mr-2" />
+                        开始扫描
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">IP 文件夹监控</CardTitle>
+                  <CardDescription>
+                    添加需要监控的文件夹，当有新图片时自动导入到 IP 待整理区。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="粘贴文件夹路径，或点击右侧选择..."
+                      value={newWatchFolder}
+                      onChange={(e) => setNewWatchFolder(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const folders = [...(localSettings.ipWatchFolders || []), newWatchFolder.trim()];
+                          handleLocalUpdate("ipWatchFolders", folders);
+                          setNewWatchFolder("");
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <Button variant="outline" onClick={handleSelectWatchFolder}>
+                      <FolderOpen className="w-4 h-4 mr-2" />
+                      浏览
+                    </Button>
+                    <Button onClick={() => {
+                        if (newWatchFolder.trim()) {
+                          const folders = [...(localSettings.ipWatchFolders || []), newWatchFolder.trim()];
+                          handleLocalUpdate("ipWatchFolders", folders);
+                          setNewWatchFolder("");
+                        }
+                    }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      添加
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {localSettings.ipWatchFolders?.map((folder: string, i: number) => {
+                      const isActive = activeWatchers.some(
+                        w => w.path === folder && w.is_active && w.watcher_type === "ip"
+                      );
+                      
+                      return (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between p-2 rounded-md bg-muted/50 border group"
+                        >
+                          <div className="flex items-center gap-2 overflow-hidden flex-1">
+                            <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <span className="text-sm font-medium truncate" title={folder}>
+                              {folder}
+                            </span>
+                            {isActive ? (
+                              <Badge variant="secondary" className="ml-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 shrink-0 border-transparent">
+                                监控中
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="ml-2 shrink-0">
+                                未激活
+                              </Badge>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2"
+                            onClick={() => {
+                              const folders = [...(localSettings.ipWatchFolders || [])];
+                              folders.splice(i, 1);
+                              handleLocalUpdate("ipWatchFolders", folders);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    {(!localSettings.ipWatchFolders || localSettings.ipWatchFolders.length === 0) && (
+                      <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-md">
+                        尚未添加监控文件夹
+                      </p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>

@@ -15,7 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Settings, Sun, Moon, Monitor, LayoutTemplate, Users } from "lucide-react";
-import IPManagementView from "@/components/IPManagementView";
+import IpDomainView from "@/components/IpDomainView";
 import type { Theme } from "@/stores";
 
 const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
@@ -101,12 +101,12 @@ function App() {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {activeTab === "prompt" ? (
-            <PromptDomainView />
-          ) : activeTab === "ip" ? (
-            <IPManagementView />
-          ) : null}
+        <main className="flex-1 overflow-hidden relative">
+            {activeTab === "prompt" ? (
+              <PromptDomainView />
+            ) : (
+              <IpDomainView />
+            )}
         </main>
 
         {/* Quick Edit Modal */}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useImageStore, useUIStore } from "@/stores";
+import { useImageStore, useIpImageStore, useUIStore } from "@/stores";
 import { toast } from "@/hooks/useToast";
 import { imageApi } from "@/services/tauri";
 import {
@@ -28,17 +28,22 @@ import {
 } from "lucide-react";
 
 export default function ImageViewer() {
-  const { inboxImages, archivedImages } = useImageStore();
+  const { inboxImages: promptInbox, archivedImages: promptArchived } = useImageStore();
+  const { inboxImages: ipInbox, archivedImages: ipArchived } = useIpImageStore();
   const { 
     isImageViewerOpen, 
     viewingImageId, 
     closeImageViewer,
     openQuickEdit,
     activeTab,
+    promptTab,
+    ipTab,
   } = useUIStore();
 
-  // Get current image list based on active tab
-  const currentImages = activeTab === "inbox" ? inboxImages : archivedImages;
+  // Get current image list based on active tab and sub-tab
+  const currentImages = activeTab === "prompt" 
+    ? (promptTab === "inbox" ? promptInbox : promptArchived)
+    : (ipTab === "inbox" ? ipInbox : ipArchived);
   const currentIndex = currentImages.findIndex((img) => img.id === viewingImageId);
   const image = currentImages[currentIndex];
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);

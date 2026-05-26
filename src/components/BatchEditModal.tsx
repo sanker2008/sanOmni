@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useImageStore, useVendorStore } from "@/stores";
+import { useState, useEffect } from "react";
+import { useImageStore, useIpImageStore, useVendorStore } from "@/stores";
+import type { IpAsset } from "@/stores";
 import { imageApi } from "@/services/tauri";
 import {
   Dialog,
@@ -25,15 +26,39 @@ import { cn } from "@/lib/utils";
 interface BatchEditModalProps {
   open: boolean;
   onClose: () => void;
+  isIpMode?: boolean;
 }
 
 type ModelAction = "replace" | "append" | "none";
 type TagAction = "append" | "replace" | "none";
 type WatermarkAction = "none" | "no_watermark" | "has_watermark";
 
-export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
-  const { inboxImages, archivedImages, selectedImages, updateImage } = useImageStore();
+export default function BatchEditModal({ open, onClose, isIpMode = false }: BatchEditModalProps) {
+  const promptStore = useImageStore();
+  const ipStore = useIpImageStore();
+  const { inboxImages, archivedImages, selectedImages, updateImage } = isIpMode ? ipStore : promptStore;
   const { vendors } = useVendorStore();
+
+  // IP settings
+  const [ipAction, setIpAction] = useState<"replace" | "append" | "none">("none");
+  const [selectedIps, setSelectedIps] = useState<string[]>([]);
+  const [availableIps, setAvailableIps] = useState<IpAsset[]>([]);
+
+  useEffect(() => {
+    if (isIpMode) {
+      import("@/services/tauri").then((m) => {
+        m.ipApi.getAll().then((res) => setAvailableIps(res)).catch(console.error);
+      });
+    }
+  }, [isIpMode]);
+
+  const toggleIp = (ipId: string) => {
+    if (selectedIps.includes(ipId)) {
+      setSelectedIps(selectedIps.filter((id) => id !== ipId));
+    } else {
+      setSelectedIps([...selectedIps, ipId]);
+    }
+  };
 
   // Model settings
   const [modelAction, setModelAction] = useState<ModelAction>("none");
@@ -89,7 +114,8 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
   };
 
   const handleSave = async () => {
-    if (modelAction === "none" && tagAction === "none" && watermarkAction === "none") return;
+    if (!isIpMode && modelAction === "none" && tagAction === "none" && watermarkAction === "none") return;
+    if (isIpMode && ipAction === "none" && tagAction === "none" && watermarkAction === "none") return;
 
     setIsSaving(true);
     setResult(null);
@@ -144,14 +170,30 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
           finalWatermarkPlatform = watermarkPlatform;
         }
 
+        let finalIpIds: string[] | undefined = undefined;
+        if (isIpMode) {
+          if (ipAction === "replace") {
+            finalIpIds = selectedIps;
+          } else if (ipAction === "append") {
+            const existing = image.ips?.map((i) => i.id) || [];
+            finalIpIds = [...new Set([...existing, ...selectedIps])];
+          }
+        }
+
         const updated = await imageApi.update({
           image_id: imageId,
-          model_ids: finalModelIds,
-          primary_model_id: finalPrimaryModel,
+          model_ids: isIpMode ? [] : finalModelIds,
+          primary_model_id: isIpMode ? undefined : finalPrimaryModel,
           tags: finalTags,
           has_watermark: finalHasWatermark,
           watermark_platform: finalWatermarkPlatform,
         });
+
+        if (isIpMode && finalIpIds) {
+          const { ipApi } = await import("@/services/tauri");
+          await ipApi.setCharactersForImage(imageId, finalIpIds);
+          updated.ips = availableIps.filter(ip => finalIpIds!.includes(ip.id));
+        }
 
         updateImage(imageId, updated);
         successCount++;
@@ -174,6 +216,8 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
   };
 
   const handleClose = () => {
+    setIpAction("none");
+    setSelectedIps([]);
     setModelAction("none");
     setSelectedModels([]);
     setPrimaryModel(null);
@@ -186,7 +230,7 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
     onClose();
   };
 
-  const canSave = (modelAction !== "none" || tagAction !== "none" || watermarkAction !== "none") && !isSaving;
+  const canSave = ((!isIpMode && modelAction !== "none") || (isIpMode && ipAction !== "none") || tagAction !== "none" || watermarkAction !== "none") && !isSaving;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
@@ -197,6 +241,7 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
 
         <div className="space-y-5 py-1">
           {/* ── Models ── */}
+          {!isIpMode && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">模型</label>
@@ -270,6 +315,61 @@ export default function BatchEditModal({ open, onClose }: BatchEditModalProps) {
               </div>
             )}
           </div>
+          )}
+
+          {/* ── IPs ── */}
+          {isIpMode && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">关联 IP 形象</label>
+              <div className="flex items-center gap-1 text-xs">
+                {(["none", "append", "replace"] as const).map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => setIpAction(a)}
+                    className={cn(
+                      "px-2 py-0.5 rounded border transition-colors",
+                      ipAction === a
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-input hover:bg-muted"
+                    )}
+                  >
+                    {{ none: "不修改", append: "追加", replace: "替换" }[a]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {ipAction !== "none" && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {availableIps.map((ip) => {
+                    const isSelected = selectedIps.includes(ip.id);
+                    return (
+                      <button
+                        key={ip.id}
+                        onClick={() => toggleIp(ip.id)}
+                        className={cn(
+                          "flex items-center gap-1 px-3 py-1.5 rounded-md text-sm border transition-colors",
+                          isSelected
+                            ? "bg-primary/10 border-primary text-primary"
+                            : "bg-background border-input hover:bg-muted"
+                        )}
+                      >
+                        {isSelected ? (
+                          <CheckCircle2 className="w-3 h-3" />
+                        ) : (
+                          <Circle className="w-3 h-3" />
+                        )}
+                        {ip.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          )}
 
           <Separator />
 

@@ -14,6 +14,7 @@ pub struct ImportImageRequest {
     pub model_ids: Vec<String>,
     pub primary_model_id: Option<String>,
     pub tags: Vec<String>,
+    pub image_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,6 +33,7 @@ pub struct UpdateImageRequest {
 pub struct ArchiveRequest {
     pub image_ids: Vec<String>,
     pub naming_template: Option<String>,
+    pub image_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,6 +51,8 @@ pub struct ImageResponse {
     pub models: Vec<ModelInfo>,
     pub tags: Vec<Tag>,
     pub prompt_groups: Vec<PromptGroup>,
+    #[serde(default)]
+    pub ips: Vec<crate::models::IpAsset>,
 }
 
 // ==================== Import ====================
@@ -140,6 +144,7 @@ pub async fn import_image(
         created_at: now.clone(),
         imported_at: now.clone(),
         archived_at: None,
+        image_type: request.image_type.unwrap_or_else(|| "prompt".to_string()),
     };
 
     eprintln!("Inserting image with vendor_id='{}', storage_model_id='{}', primary_model_id='{}'", 
@@ -168,13 +173,13 @@ pub async fn import_image(
         "UPDATE images SET
             has_watermark = ?, watermark_platform = ?,
             watermark_detected = ?, watermark_removed = ?,
-            file_hash = ?, format = ?, archived_at = ?
+            file_hash = ?, format = ?, archived_at = ?, image_type = ?
         WHERE id = ?",
         rusqlite::params![
             image.has_watermark as i32, &image.watermark_platform,
             image.watermark_detected as i32, image.watermark_removed as i32,
             &image.file_hash, &image.format, &image.archived_at,
-            &image.id,
+            &image.image_type, &image.id,
         ],
     ) {
         return CommandResult::err(format!("Failed to update image optional fields: {}", e));
@@ -216,8 +221,9 @@ pub async fn import_image(
     let models = fetch_image_models(&conn, &image_id).unwrap_or_default();
     let tags = fetch_image_tags(&conn, &image_id).unwrap_or_default();
     let prompt_groups = fetch_image_prompt_groups(&conn, &image_id).unwrap_or_default();
+    let ips = fetch_image_ips(&conn, &image_id).unwrap_or_default();
 
-    CommandResult::ok(ImageResponse { image, models, tags, prompt_groups })
+    CommandResult::ok(ImageResponse { image, models, tags, prompt_groups, ips })
 }
 
 // ==================== Get Inbox ====================
@@ -229,7 +235,18 @@ pub async fn get_inbox_images(db_path: String) -> CommandResult<Vec<ImageRespons
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
 
-    let images = fetch_images_by_status(&conn, &["inbox", "tagged"]);
+    let images = fetch_images_by_status(&conn, &["inbox", "tagged"], Some("prompt"));
+    CommandResult::ok(images)
+}
+
+#[tauri::command]
+pub async fn get_ip_inbox_images(db_path: String) -> CommandResult<Vec<ImageResponse>> {
+    let conn = match Connection::open(&db_path) {
+        Ok(conn) => conn,
+        Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
+    };
+
+    let images = fetch_images_by_status(&conn, &["inbox", "tagged"], Some("ip"));
     CommandResult::ok(images)
 }
 
@@ -242,7 +259,18 @@ pub async fn get_archived_images(db_path: String) -> CommandResult<Vec<ImageResp
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
 
-    let images = fetch_images_by_status(&conn, &["archived"]);
+    let images = fetch_images_by_status(&conn, &["archived"], Some("prompt"));
+    CommandResult::ok(images)
+}
+
+#[tauri::command]
+pub async fn get_ip_archived_images(db_path: String) -> CommandResult<Vec<ImageResponse>> {
+    let conn = match Connection::open(&db_path) {
+        Ok(conn) => conn,
+        Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
+    };
+
+    let images = fetch_images_by_status(&conn, &["archived"], Some("ip"));
     CommandResult::ok(images)
 }
 
@@ -532,7 +560,9 @@ pub async fn update_image(
     let tags = fetch_image_tags(&conn, image_id).unwrap_or_default();
     let prompt_groups = fetch_image_prompt_groups(&conn, image_id).unwrap_or_default();
 
-    CommandResult::ok(ImageResponse { image, models, tags, prompt_groups })
+    let ips = fetch_image_ips(&conn, &image_id).unwrap_or_default();
+
+    CommandResult::ok(ImageResponse { image, models, tags, prompt_groups, ips })
 }
 
 // ==================== Archive ====================
@@ -556,7 +586,12 @@ pub async fn archive_images(
     };
 
     let now = chrono::Utc::now().to_rfc3339();
-    let template = request.naming_template.unwrap_or_else(|| "{vendor}-{model}-{date}-{index}".to_string());
+    let default_template = if request.image_type.as_deref() == Some("ip") {
+        "{ip}-{date}-{index}".to_string()
+    } else {
+        "{vendor}-{model}-{date}-{index}".to_string()
+    };
+    let template = request.naming_template.unwrap_or(default_template);
 
     for image_id in &request.image_ids {
         // Fetch image
@@ -574,24 +609,41 @@ pub async fn archive_images(
             continue;
         }
 
-        // Get vendor and model path
-        let vendor_path: String = conn.query_row(
-            "SELECT path FROM vendors WHERE id = ?",
-            [&image.storage_vendor_id],
-            |row| row.get(0),
-        ).unwrap_or_else(|_| image.storage_vendor_id.clone());
+        let is_ip = request.image_type.as_deref() == Some("ip");
+        let (vendor_path, model_path, ip_name, target_dir) = if is_ip {
+            // For IP images, fetch the first IP name
+            let ip_name: String = conn.query_row(
+                "SELECT a.name FROM ip_assets a JOIN image_ip_relations r ON a.id = r.ip_id WHERE r.image_id = ? LIMIT 1",
+                [&image_id],
+                |row| row.get(0),
+            ).unwrap_or_else(|_| "Unknown".to_string());
+            
+            // For IP images, the library_path is already the custom archived path
+            let target_dir = std::path::PathBuf::from(&library_path).join(&ip_name);
+            ("".to_string(), "".to_string(), ip_name, target_dir)
+        } else {
+            // Get vendor and model path for prompt images
+            let v_path: String = conn.query_row(
+                "SELECT path FROM vendors WHERE id = ?",
+                [&image.storage_vendor_id],
+                |row| row.get(0),
+            ).unwrap_or_else(|_| image.storage_vendor_id.clone());
 
-        let model_path: String = conn.query_row(
-            "SELECT path FROM models WHERE id = ?",
-            [&image.storage_model_id],
-            |row| row.get(0),
-        ).unwrap_or_else(|_| image.storage_model_id.clone());
+            let m_path: String = conn.query_row(
+                "SELECT path FROM models WHERE id = ?",
+                [&image.storage_model_id],
+                |row| row.get(0),
+            ).unwrap_or_else(|_| image.storage_model_id.clone());
 
-        // Build target directory
-        let target_dir = std::path::Path::new(&library_path)
-            .join("archived")
-            .join(&vendor_path)
-            .join(&model_path);
+            let target_dir = std::path::Path::new(&library_path)
+                .join("archived")
+                .join(&v_path)
+                .join(&m_path);
+                
+            (v_path, m_path, "".to_string(), target_dir)
+        };
+
+        // The target_dir is already calculated above in the if-else block.
 
         // Generate unique filename to prevent overwriting existing files
         let date = &image.created_at[..10]; // YYYY-MM-DD
@@ -604,12 +656,22 @@ pub async fn archive_images(
         let mut suffix_counter = 1;
 
         let (target_path, new_filename) = loop {
-            let filename_candidate = template
-                .replace("{vendor}", &vendor_path)
-                .replace("{model}", &model_path)
-                .replace("{date}", date)
-                .replace("{index}", &format!("{:03}", index))
-                .replace("{original}", &image.original_filename);
+            let mut filename_candidate = template.clone();
+            
+            if is_ip {
+                filename_candidate = filename_candidate
+                    .replace("{ip}", &ip_name)
+                    .replace("{date}", date)
+                    .replace("{index}", &format!("{:03}", index))
+                    .replace("{original}", &image.original_filename);
+            } else {
+                filename_candidate = filename_candidate
+                    .replace("{vendor}", &vendor_path)
+                    .replace("{model}", &model_path)
+                    .replace("{date}", date)
+                    .replace("{index}", &format!("{:03}", index))
+                    .replace("{original}", &image.original_filename);
+            }
 
             let mut path_file = std::path::PathBuf::from(&filename_candidate);
             if path_file.extension().is_none() {
@@ -661,10 +723,15 @@ pub async fn archive_images(
 
         // Update database
         // Build relative path using Path for cross-platform compatibility
-        let relative_path = std::path::Path::new("archived")
-            .join(&vendor_path)
-            .join(&model_path)
-            .join(&new_filename);
+        let relative_path = if is_ip {
+            std::path::PathBuf::from(&new_filename)
+        } else {
+            std::path::Path::new("archived")
+                .join(&vendor_path)
+                .join(&model_path)
+                .join(&new_filename)
+        };
+        
         let new_relative = relative_path.to_string_lossy().to_string();
         let new_absolute = target_path.to_string_lossy().to_string();
 
@@ -936,11 +1003,41 @@ fn ensure_unknown_vendor_model(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn fetch_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<ImageResponse> {
+fn fetch_image_ips(conn: &Connection, image_id: &str) -> Result<Vec<crate::models::IpAsset>> {
+    let mut stmt = conn.prepare(
+        "SELECT a.id, a.name, a.avatar_path, a.inspiration, a.description, a.created_at, a.updated_at 
+         FROM ip_assets a
+         JOIN image_ip_relations r ON a.id = r.ip_id
+         WHERE r.image_id = ?"
+    )?;
+    let ip_iter = stmt.query_map([image_id], |row| {
+        Ok(crate::models::IpAsset {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            avatar_path: row.get(2)?,
+            inspiration: row.get(3)?,
+            description: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+        })
+    })?;
+
+    let mut ips = Vec::new();
+    for ip_result in ip_iter {
+        if let Ok(ip) = ip_result {
+            ips.push(ip);
+        }
+    }
+    Ok(ips)
+}
+
+fn fetch_images_by_status(conn: &Connection, statuses: &[&str], image_type: Option<&str>) -> Vec<ImageResponse> {
     let placeholders: Vec<&str> = statuses.iter().map(|_| "?").collect();
+    let type_filter = image_type.unwrap_or("prompt");
     let sql = format!(
-        "SELECT * FROM images WHERE status IN ({}) ORDER BY imported_at DESC",
-        placeholders.join(",")
+        "SELECT * FROM images WHERE status IN ({}) AND image_type = '{}' ORDER BY imported_at DESC",
+        placeholders.join(","),
+        type_filter
     );
 
     let mut stmt = match conn.prepare(&sql) {
@@ -978,6 +1075,7 @@ fn fetch_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<ImageResp
             created_at: row.get(20)?,
             imported_at: row.get(21)?,
             archived_at: row.get(22)?,
+            image_type: row.get(23).unwrap_or_else(|_| "prompt".to_string()),
         })
     }) {
         Ok(iter) => iter,
@@ -993,7 +1091,8 @@ fn fetch_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<ImageResp
             let models = fetch_image_models(conn, &image.id).unwrap_or_default();
             let tags = fetch_image_tags(conn, &image.id).unwrap_or_default();
             let prompt_groups = fetch_image_prompt_groups(conn, &image.id).unwrap_or_default();
-            images.push(ImageResponse { image, models, tags, prompt_groups });
+            let ips = fetch_image_ips(conn, &image.id).unwrap_or_default();
+            images.push(ImageResponse { image, models, tags, prompt_groups, ips });
         }
     }
 
@@ -1029,6 +1128,7 @@ fn fetch_image_by_id(conn: &Connection, image_id: &str) -> Option<Image> {
                 created_at: row.get(20)?,
                 imported_at: row.get(21)?,
                 archived_at: row.get(22)?,
+                image_type: row.get(23).unwrap_or_else(|_| "prompt".to_string()),
             })
         },
     ).ok()

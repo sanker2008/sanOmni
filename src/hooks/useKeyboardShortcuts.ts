@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { useImageStore, useUIStore } from "@/stores";
+import { useImageStore, useIpImageStore, useUIStore } from "@/stores";
 
 export function useKeyboardShortcuts() {
   const {
@@ -12,7 +12,8 @@ export function useKeyboardShortcuts() {
     openSettings,
     setSearchQuery,
   } = useUIStore();
-  const { inboxImages, archivedImages, selectedImages, selectAll, clearSelection } = useImageStore();
+  const { selectedImages, clearSelection } = useImageStore();
+  const { selectedImages: ipSelectedImages, clearSelection: clearIpSelection } = useIpImageStore();
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -25,9 +26,14 @@ export function useKeyboardShortcuts() {
       // Ctrl+A: Select all images in current view (only when not in input)
       if (e.ctrlKey && e.key === "a" && !isInputFocused) {
         e.preventDefault();
-        selectAll(
-          (activeTab === "archived" ? archivedImages : inboxImages).map((img) => img.id)
-        );
+        const { activeTab, promptTab, ipTab } = useUIStore.getState();
+        if (activeTab === "prompt") {
+            const { inboxImages: promptInbox, archivedImages: promptArchived, selectAll: selectPromptAll } = useImageStore.getState();
+            selectPromptAll((promptTab === "archived" ? promptArchived : promptInbox).map(img => img.id));
+        } else {
+            const { inboxImages: ipInbox, archivedImages: ipArchived, selectAll: selectIpAll } = useIpImageStore.getState();
+            selectIpAll((ipTab === "archived" ? ipArchived : ipInbox).map(img => img.id));
+        }
         return;
       }
 
@@ -41,49 +47,51 @@ export function useKeyboardShortcuts() {
           closeQuickEdit();
           return;
         }
-        if (selectedImages.length > 0) {
+        if (selectedImages.length > 0 || ipSelectedImages.length > 0) {
           clearSelection();
+          clearIpSelection();
           return;
         }
         return;
       }
 
+      const hasSelection = selectedImages.length > 0 || ipSelectedImages.length > 0;
+      const allSelectedIds = activeTab === "prompt" ? selectedImages : ipSelectedImages;
+
       // Delete/Backspace: Delete selected images (only confirmation)
       if (
         (e.key === "Delete" || e.key === "Backspace") &&
         !isInputFocused &&
-        selectedImages.length > 0
+        hasSelection
       ) {
-        // Only prevent default if there are selected images
         e.preventDefault();
-        // Trigger a custom event that the delete confirmation dialog can listen to
         window.dispatchEvent(
           new CustomEvent("keyboard-delete-selected", {
-            detail: { imageIds: selectedImages },
+            detail: { imageIds: allSelectedIds },
           })
         );
         return;
       }
 
       // Ctrl+Enter: Archive selected images
-      if (e.ctrlKey && e.key === "Enter" && selectedImages.length > 0) {
+      if (e.ctrlKey && e.key === "Enter" && hasSelection) {
         e.preventDefault();
         window.dispatchEvent(
           new CustomEvent("keyboard-archive-selected", {
-            detail: { imageIds: selectedImages },
+            detail: { imageIds: allSelectedIds },
           })
         );
         return;
       }
 
-      // 1/2: Switch inbox/archived tab (only when not in input)
+      // 1/2: Switch prompt/ip tab (only when not in input)
       if (!isInputFocused && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (e.key === "1") {
-          setActiveTab("inbox");
+          setActiveTab("prompt");
           return;
         }
         if (e.key === "2") {
-          setActiveTab("archived");
+          setActiveTab("ip");
           return;
         }
       }
@@ -122,8 +130,6 @@ export function useKeyboardShortcuts() {
     },
     [
       activeTab,
-      inboxImages,
-      archivedImages,
       setActiveTab,
       isQuickEditOpen,
       closeQuickEdit,
@@ -132,8 +138,9 @@ export function useKeyboardShortcuts() {
       openSettings,
       setSearchQuery,
       selectedImages,
-      selectAll,
       clearSelection,
+      ipSelectedImages,
+      clearIpSelection,
     ]
   );
 

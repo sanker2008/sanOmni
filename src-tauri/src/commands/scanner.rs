@@ -401,3 +401,353 @@ pub async fn cleanup_inbox_directory(
 
     CommandResult::ok(result)
 }
+
+/// 扫描 IP inbox 目录，清理数据库中已不存在的待整理记录
+#[tauri::command]
+pub async fn cleanup_ip_inbox_directory(
+    db_path: String,
+    inbox_path: String,
+) -> CommandResult<InboxCleanupResult> {
+    let mut conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
+    };
+
+    let inbox_root = std::path::Path::new(&inbox_path);
+    if !inbox_root.exists() {
+        return CommandResult::err(format!(
+            "待整理目录不存在: {}",
+            inbox_root.display()
+        ));
+    }
+
+    let mut result = InboxCleanupResult {
+        scanned_count: 0,
+        kept_count: 0,
+        removed_count: 0,
+        failed_count: 0,
+        errors: Vec::new(),
+    };
+
+    let records: Vec<(String, String)> = {
+        let mut stmt = match conn.prepare(
+            "SELECT id, absolute_path FROM images WHERE status IN ('inbox', 'tagged') AND image_type = 'ip'"
+        ) {
+            Ok(stmt) => stmt,
+            Err(e) => return CommandResult::err(format!("查询待整理数据失败: {}", e)),
+        };
+
+        let rows = match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?))) {
+            Ok(rows) => rows,
+            Err(e) => return CommandResult::err(format!("读取待整理数据失败: {}", e)),
+        };
+
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    let tx = match conn.transaction() {
+        Ok(tx) => tx,
+        Err(e) => return CommandResult::err(format!("无法开启事务: {}", e)),
+    };
+
+    for (image_id, absolute_path) in records {
+        result.scanned_count += 1;
+
+        if std::path::Path::new(&absolute_path).exists() {
+            result.kept_count += 1;
+            continue;
+        }
+
+        if let Err(e) = tx.execute("DELETE FROM image_ip_relations WHERE image_id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除IP关联失败: {}", image_id, e));
+            continue;
+        }
+        if let Err(e) = tx.execute("DELETE FROM image_tag_relations WHERE image_id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除标签关联失败: {}", image_id, e));
+            continue;
+        }
+        if let Err(e) = tx.execute("DELETE FROM processing_history WHERE image_id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除处理历史失败: {}", image_id, e));
+            continue;
+        }
+        if let Err(e) = tx.execute("DELETE FROM images WHERE id = ?", [&image_id]) {
+            result.failed_count += 1;
+            result.errors.push(format!("{}: 删除图片记录失败: {}", image_id, e));
+            continue;
+        }
+
+        result.removed_count += 1;
+    }
+
+    if let Err(e) = tx.commit() {
+        return CommandResult::err(format!("提交清理结果失败: {}", e));
+    }
+
+    CommandResult::ok(result)
+}
+
+/// 扫描 IP archived 目录
+#[tauri::command]
+pub async fn scan_ip_archived_directory(
+    db_path: String,
+    library_path: String,
+    naming_template: Option<String>,
+) -> CommandResult<ScanResult> {
+    let conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
+    };
+
+    let template = naming_template
+        .unwrap_or_else(|| "{ip}-{date}-{index}".to_string());
+
+    let archived_root = std::path::Path::new(&library_path);
+    if !archived_root.exists() {
+        return CommandResult::err(format!(
+            "归档目录不存在: {}",
+            archived_root.display()
+        ));
+    }
+
+    let mut result = ScanResult {
+        scanned_count: 0,
+        imported_count: 0,
+        skipped_count: 0,
+        renamed_count: 0,
+        failed_count: 0,
+        errors: Vec::new(),
+    };
+
+    // 收集所有已在数据库中的 absolute_path，用于去重
+    let existing_paths: std::collections::HashSet<String> = {
+        match conn.prepare("SELECT absolute_path FROM images WHERE image_type = 'ip'") {
+            Ok(mut stmt) => {
+                match stmt.query_map([], |row| row.get::<_, String>(0)) {
+                    Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                    Err(_) => std::collections::HashSet::new(),
+                }
+            }
+            Err(e) => return CommandResult::err(format!("查询数据库失败: {}", e)),
+        }
+    };
+
+    // 遍历两层目录结构
+    let ip_dirs = match std::fs::read_dir(&archived_root) {
+        Ok(d) => d,
+        Err(e) => return CommandResult::err(format!("无法读取归档目录: {}", e)),
+    };
+
+    // 用于生成 index 的计数器
+    let mut global_index: usize = {
+        conn.query_row(
+            "SELECT COUNT(*) FROM images WHERE status = 'archived' AND image_type = 'ip'",
+            [],
+            |row| row.get::<_, usize>(0),
+        )
+        .unwrap_or(0)
+    };
+
+    for ip_entry in ip_dirs.flatten() {
+        let ip_dir = ip_entry.path();
+        if !ip_dir.is_dir() {
+            continue;
+        }
+
+        let ip_name = ip_dir
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        // 查找数据库中对应的 ip_asset
+        let ip_id: Option<String> = conn
+            .query_row(
+                "SELECT id FROM ip_assets WHERE name = ?",
+                [&ip_name],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let resolved_ip_id = match ip_id {
+            Some(id) => id,
+            None => {
+                // 如果 IP 不存在，则自动创建
+                let new_id = format!("ip_{}", Uuid::new_v4().to_string().replace("-", "")[..12].to_string());
+                let now = chrono::Utc::now().to_rfc3339();
+                match conn.execute(
+                    "INSERT INTO ip_assets (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                    [&new_id, &ip_name, &now, &now],
+                ) {
+                    Ok(_) => new_id,
+                    Err(e) => {
+                        result.failed_count += 1;
+                        result.errors.push(format!("创建 IP {} 失败: {}", ip_name, e));
+                        continue;
+                    }
+                }
+            }
+        };
+
+        // 遍历 IP 目录下的图片
+        let image_entries = match std::fs::read_dir(&ip_dir) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        for entry in image_entries.flatten() {
+            let file_path = entry.path();
+            if file_path.is_dir() {
+                continue;
+            }
+
+            // 检查扩展名是否为常见图片格式
+            let ext = match file_path.extension().and_then(|e| e.to_str()) {
+                Some(e) => e.to_lowercase(),
+                None => continue,
+            };
+            if !["png", "jpg", "jpeg", "webp", "gif"].contains(&ext.as_str()) {
+                continue;
+            }
+
+            result.scanned_count += 1;
+
+            let abs_path_str = file_path.to_string_lossy().to_string();
+
+            // 如果文件已存在于数据库中，则跳过
+            if existing_paths.contains(&abs_path_str) {
+                result.skipped_count += 1;
+                continue;
+            }
+
+            // 获取文件信息
+            let file_size = file_path.metadata().map(|m| m.len() as i64).unwrap_or(0);
+            let original_filename = file_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+
+            let now = chrono::Utc::now();
+            let date_str = now.format("%Y%m%d").to_string();
+
+            global_index += 1;
+            let index_str = format!("{:03}", global_index);
+
+            // 根据模板生成新文件名
+            let new_stem = template
+                .replace("{ip}", &ip_name)
+                .replace("{date}", &date_str)
+                .replace("{index}", &index_str);
+
+            let new_filename = format!("{}.{}", new_stem, ext);
+
+            let (final_filename, final_abs_path) = if original_filename == new_filename {
+                (original_filename.clone(), abs_path_str.clone())
+            } else {
+                // 重命名文件
+                let new_path = ip_dir.join(&new_filename);
+
+                // 避免目标文件已存在时覆盖
+                let new_path = if new_path.exists() {
+                    let unique_stem = format!("{}-{}", new_stem, chrono::Utc::now().timestamp_millis());
+                    let unique_name = format!("{}.{}", unique_stem, ext);
+                    ip_dir.join(&unique_name)
+                } else {
+                    new_path
+                };
+
+                match std::fs::rename(&file_path, &new_path) {
+                    Ok(_) => {
+                        result.renamed_count += 1;
+                        (
+                            new_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                            new_path.to_string_lossy().to_string(),
+                        )
+                    }
+                    Err(e) => {
+                        result.failed_count += 1;
+                        result.errors.push(format!(
+                            "重命名失败 {}: {}",
+                            original_filename, e
+                        ));
+                        continue;
+                    }
+                }
+            };
+
+            // 构建相对路径
+            let relative_path = std::path::Path::new("ip_archived")
+                .join(&ip_name)
+                .join(&final_filename)
+                .to_string_lossy()
+                .to_string();
+
+            // 生成图片 ID
+            let uuid_str = Uuid::new_v4().to_string().replace("-", "");
+            let image_id = format!("img_{}", &uuid_str[..12]);
+            let now_str = now.to_rfc3339();
+            let format_upper = ext.to_uppercase();
+
+            // 写入数据库
+            let insert_result = conn.execute(
+                "INSERT INTO images (
+                    id, filename, original_filename,
+                    storage_vendor_id, storage_model_id,
+                    relative_path, absolute_path, primary_model_id,
+                    status, file_size, format,
+                    has_watermark, watermark_detected, watermark_removed,
+                    created_at, imported_at, archived_at, image_type
+                ) VALUES (
+                    ?1, ?2, ?3, 'ip', 'ip', ?4, ?5, 'unknown',
+                    'archived', ?6, ?7,
+                    0, 0, 0,
+                    ?8, ?8, ?8, 'ip'
+                )",
+                rusqlite::params![
+                    image_id,
+                    final_filename,
+                    original_filename,
+                    relative_path,
+                    final_abs_path,
+                    file_size,
+                    format_upper,
+                    now_str,
+                ],
+            );
+
+            match insert_result {
+                Ok(_) => {
+                    // 插入 ip 关联
+                    let _ = conn.execute(
+                        "INSERT OR IGNORE INTO image_ip_relations (image_id, ip_id) VALUES (?, ?)",
+                        rusqlite::params![image_id, resolved_ip_id],
+                    );
+
+                    // 记录处理历史
+                    let _ = conn.execute(
+                        "INSERT INTO processing_history (image_id, action, status, details, created_at) VALUES (?, 'scan_import', 'success', ?, ?)",
+                        rusqlite::params![
+                            image_id,
+                            format!("扫描导入并重命名: {} -> {}", original_filename, final_filename),
+                            now_str,
+                        ],
+                    );
+
+                    result.imported_count += 1;
+                }
+                Err(e) => {
+                    result.failed_count += 1;
+                    result.errors.push(format!(
+                        "写入数据库失败 {}: {}",
+                        final_filename, e
+                    ));
+                }
+            }
+        }
+    }
+
+    CommandResult::ok(result)
+}

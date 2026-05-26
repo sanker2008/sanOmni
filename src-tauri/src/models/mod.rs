@@ -51,6 +51,7 @@ pub struct Image {
     pub created_at: String,
     pub imported_at: String,
     pub archived_at: Option<String>,
+    pub image_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

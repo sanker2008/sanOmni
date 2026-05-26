@@ -133,6 +133,7 @@ export interface ImageWithRelations extends Image {
   models: ModelInfo[];
   tags: Tag[];
   prompt_groups: PromptGroup[];
+  ips?: IpAsset[];
 }
 
 export interface Vendor {
@@ -173,6 +174,57 @@ interface ImageStore {
 }
 
 export const useImageStore = create<ImageStore>((set) => ({
+  // Initial state
+  inboxImages: [],
+  archivedImages: [],
+  selectedImages: [],
+  isLoading: false,
+  error: null,
+
+  // Actions
+  setInboxImages: (images) => set({ inboxImages: images }),
+  setArchivedImages: (images) => set({ archivedImages: images }),
+  
+  selectImage: (imageId) => set((state) => ({
+    selectedImages: state.selectedImages.includes(imageId)
+      ? state.selectedImages
+      : [...state.selectedImages, imageId],
+  })),
+  
+  deselectImage: (imageId) => set((state) => ({
+    selectedImages: state.selectedImages.filter((id) => id !== imageId),
+  })),
+  
+  selectAll: (imageIds) => set({
+    selectedImages: imageIds,
+  }),
+  
+  clearSelection: () => set({ selectedImages: [] }),
+  
+  setLoading: (loading) => set({ isLoading: loading }),
+  setError: (error) => set({ error }),
+  
+  addImage: (image) => set((state) => ({
+    inboxImages: [image, ...state.inboxImages],
+  })),
+  
+  updateImage: (imageId, updates) => set((state) => ({
+    inboxImages: state.inboxImages.map((img) =>
+      img.id === imageId ? { ...img, ...updates } : img
+    ),
+    archivedImages: state.archivedImages.map((img) =>
+      img.id === imageId ? { ...img, ...updates } : img
+    ),
+  })),
+  
+  removeImage: (imageId) => set((state) => ({
+    inboxImages: state.inboxImages.filter((img) => img.id !== imageId),
+    archivedImages: state.archivedImages.filter((img) => img.id !== imageId),
+    selectedImages: state.selectedImages.filter((id) => id !== imageId),
+  })),
+}));
+
+export const useIpImageStore = create<ImageStore>((set) => ({
   // Initial state
   inboxImages: [],
   archivedImages: [],
@@ -385,6 +437,7 @@ applyTheme(loadTheme());
 interface UIStore {
   activeTab: "prompt" | "ip";
   promptTab: "inbox" | "archived" | "templates" | "vendors";
+  ipTab: "inbox" | "archived" | "assets";
   searchQuery: string;
   selectedVendorFilter: string | null;
   selectedModelFilter: string | null;
@@ -402,6 +455,7 @@ interface UIStore {
 
   setActiveTab: (tab: "prompt" | "ip") => void;
   setPromptTab: (tab: "inbox" | "archived" | "templates" | "vendors") => void;
+  setIpTab: (tab: "inbox" | "archived" | "assets") => void;
   setSearchQuery: (query: string) => void;
   setVendorFilter: (vendorId: string | null) => void;
   setModelFilter: (modelId: string | null) => void;
@@ -423,6 +477,7 @@ interface UIStore {
 export const useUIStore = create<UIStore>((set, get) => ({
   activeTab: "prompt",
   promptTab: "inbox",
+  ipTab: "assets",
   searchQuery: "",
   selectedVendorFilter: null,
   selectedModelFilter: null,
@@ -448,6 +503,10 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setPromptTab: (tab) => {
     useImageStore.getState().clearSelection();
     set({ promptTab: tab });
+  },
+  setIpTab: (tab) => {
+    useIpImageStore.getState().clearSelection();
+    set({ ipTab: tab });
   },
   setSearchQuery: (query) => set({ searchQuery: query }),
   setVendorFilter: (vendorId) => set({ selectedVendorFilter: vendorId }),

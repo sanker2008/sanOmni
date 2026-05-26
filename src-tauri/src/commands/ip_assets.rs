@@ -327,6 +327,10 @@ pub fn update_ip_asset(
     description: Option<String>,
     avatar_path: Option<String>,
 ) -> CommandResult<IpAsset> {
+    if ip_id == "unknown" {
+        return CommandResult::err("系统默认的未知形象不可被编辑".to_string());
+    }
+
     let conn = match Connection::open(Path::new(&db_path)) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
@@ -397,6 +401,10 @@ pub fn update_ip_asset(
 
 #[tauri::command]
 pub fn delete_ip_asset(db_path: String, ip_id: String) -> CommandResult<bool> {
+    if ip_id == "unknown" {
+        return CommandResult::err("系统默认的未知形象不可删除".to_string());
+    }
+
     let conn = match Connection::open(Path::new(&db_path)) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
@@ -919,6 +927,77 @@ pub fn move_ip_emojis_to_pack(
             params![pack_id, id],
         ) {
             return CommandResult::err(format!("移动表情套件记录失败: {}", e));
+        }
+    }
+
+    match tx.commit() {
+        Ok(_) => CommandResult::ok(true),
+        Err(e) => CommandResult::err(format!("提交事务失败: {}", e)),
+    }
+}
+
+// ==================== IP Image Relations ====================
+
+#[tauri::command]
+pub fn get_ip_characters_for_image(db_path: String, image_id: String) -> CommandResult<Vec<IpAsset>> {
+    let conn = match Connection::open(Path::new(&db_path)) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+
+    let mut stmt = match conn.prepare(
+        "SELECT a.id, a.name, a.avatar_path, a.inspiration, a.description, a.created_at, a.updated_at
+         FROM ip_assets a
+         JOIN image_ip_relations r ON a.id = r.ip_id
+         WHERE r.image_id = ?"
+    ) {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err(format!("准备查询语句失败: {}", e)),
+    };
+
+    let rows = stmt.query_map([&image_id], |row| {
+        Ok(IpAsset {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            avatar_path: row.get(2)?,
+            inspiration: row.get(3)?,
+            description: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+        })
+    });
+
+    match rows {
+        Ok(mapped) => {
+            let list: Vec<IpAsset> = mapped.filter_map(|r| r.ok()).collect();
+            CommandResult::ok(list)
+        }
+        Err(e) => CommandResult::err(format!("查询图片关联的 IP 失败: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub fn set_ip_characters_for_image(db_path: String, image_id: String, ip_ids: Vec<String>) -> CommandResult<bool> {
+    let mut conn = match Connection::open(Path::new(&db_path)) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+
+    let tx = match conn.transaction() {
+        Ok(t) => t,
+        Err(e) => return CommandResult::err(format!("开启事务失败: {}", e)),
+    };
+
+    if let Err(e) = tx.execute("DELETE FROM image_ip_relations WHERE image_id = ?", [&image_id]) {
+        return CommandResult::err(format!("删除旧关系失败: {}", e));
+    }
+
+    for ip_id in ip_ids {
+        if let Err(e) = tx.execute(
+            "INSERT INTO image_ip_relations (image_id, ip_id) VALUES (?, ?)",
+            [&image_id, &ip_id],
+        ) {
+            return CommandResult::err(format!("插入新关系失败: {}", e));
         }
     }
 

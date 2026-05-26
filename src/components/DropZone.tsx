@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useImageStore, useUIStore } from "@/stores";
+import { useImageStore, useIpImageStore, useUIStore } from "@/stores";
 import { imageApi, classifyApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Upload, Image as ImageIcon, FolderOpen, Loader2 } from "lucide-react";
@@ -9,6 +9,7 @@ import { toast } from "@/hooks/useToast";
 
 interface DropZoneProps {
   onImportComplete?: () => void;
+  imageType?: "prompt" | "ip";
 }
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
@@ -18,10 +19,11 @@ function isImageFile(fileName: string): boolean {
   return IMAGE_EXTENSIONS.includes(ext);
 }
 
-export default function DropZone({ onImportComplete }: DropZoneProps) {
+export default function DropZone({ onImportComplete, imageType = "prompt" }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const { addImage } = useImageStore();
+  const { addImage: addPromptImage } = useImageStore();
+  const { addImage: addIpImage } = useIpImageStore();
   const { settings } = useUIStore();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -149,13 +151,24 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
       
       // 使用自定义路径或默认路径
       let inboxDir: string;
-      if (settings.customInboxPath) {
-        inboxDir = settings.customInboxPath;
-        console.log("Using custom inbox path:", inboxDir);
+      if (imageType === "ip") {
+        if (settings.customIpInboxPath) {
+          inboxDir = settings.customIpInboxPath;
+          console.log("Using custom ip inbox path:", inboxDir);
+        } else {
+          const appDir = await appDataDir();
+          inboxDir = await join(appDir, "ip_inbox");
+          console.log("Using default ip inbox path:", inboxDir);
+        }
       } else {
-        const appDir = await appDataDir();
-        inboxDir = await join(appDir, "inbox");
-        console.log("Using default inbox path:", inboxDir);
+        if (settings.customInboxPath) {
+          inboxDir = settings.customInboxPath;
+          console.log("Using custom prompt inbox path:", inboxDir);
+        } else {
+          const appDir = await appDataDir();
+          inboxDir = await join(appDir, "inbox");
+          console.log("Using default prompt inbox path:", inboxDir);
+        }
       }
       
       // Ensure inbox directory exists
@@ -232,9 +245,14 @@ export default function DropZone({ onImportComplete }: DropZoneProps) {
             vendor_id: vendorId,
             model_ids: modelIds,
             tags: [],
+            image_type: imageType,
           });
           console.log("Import result:", result);
-          addImage(result);
+          if (imageType === "ip") {
+            addIpImage(result);
+          } else {
+            addPromptImage(result);
+          }
         } catch (error) {
           console.error("Failed to import image:", error);
           toast({

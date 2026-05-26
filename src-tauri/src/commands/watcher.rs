@@ -13,6 +13,7 @@ pub struct WatcherConfig {
     pub recursive: bool,
     pub file_extensions: Vec<String>,
     pub debounce_ms: u64,
+    pub watcher_type: Option<String>,
 }
 
 /// File event from watcher
@@ -21,6 +22,7 @@ pub struct FileWatchEvent {
     pub event_type: String,
     pub path: String,
     pub timestamp: String,
+    pub watcher_type: String,
 }
 
 /// Active watcher info
@@ -31,6 +33,7 @@ pub struct WatcherInfo {
     pub recursive: bool,
     pub is_active: bool,
     pub created_at: String,
+    pub watcher_type: String,
 }
 
 /// Global watcher state
@@ -71,6 +74,7 @@ pub async fn start_folder_watcher<R: Runtime>(
         recursive: config.recursive,
         is_active: true,
         created_at: created_at.clone(),
+        watcher_type: config.watcher_type.clone().unwrap_or_else(|| "prompt".to_string()),
     };
     
     // Store watcher info
@@ -84,9 +88,10 @@ pub async fn start_folder_watcher<R: Runtime>(
     let app_clone = app.clone();
     let extensions = config.file_extensions.clone();
     let debounce = config.debounce_ms;
+    let w_type = config.watcher_type.unwrap_or_else(|| "prompt".to_string());
     
     std::thread::spawn(move || {
-        if let Err(e) = run_watcher(watch_path, app_clone, extensions, debounce) {
+        if let Err(e) = run_watcher(watch_path, app_clone, extensions, debounce, w_type) {
             eprintln!("Watcher error: {}", e);
         }
     });
@@ -100,6 +105,7 @@ fn run_watcher<R: Runtime>(
     app: AppHandle<R>,
     extensions: Vec<String>,
     debounce_ms: u64,
+    watcher_type: String,
 ) -> Result<(), String> {
     let app_clone = app.clone();
     let extensions_clone = extensions.clone();
@@ -123,6 +129,7 @@ fn run_watcher<R: Runtime>(
                                         event_type: "new_image".to_string(),
                                         path: path.to_string_lossy().to_string(),
                                         timestamp: chrono::Utc::now().to_rfc3339(),
+                                        watcher_type: watcher_type.clone(),
                                     };
                                     
                                     let _ = app_clone.emit("file-watch-event", event_data);

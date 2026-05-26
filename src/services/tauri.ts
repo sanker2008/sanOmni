@@ -10,6 +10,7 @@ interface ImportImageRequest {
   model_ids: string[];
   primary_model_id?: string;
   tags: string[];
+  image_type?: string;
 }
 
 interface UpdateImageRequest {
@@ -26,6 +27,7 @@ interface UpdateImageRequest {
 interface ArchiveRequest {
   image_ids: string[];
   naming_template?: string;
+  image_type?: string;
 }
 
 interface ArchiveResult {
@@ -86,6 +88,20 @@ export const imageApi = {
     return result.data || [];
   },
 
+  async getIpInboxImages(): Promise<ImageWithRelations[]> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<ImageWithRelations[]>>("get_ip_inbox_images", { dbPath });
+    if (!result.success) throw new Error(result.error || "Failed to get IP inbox images");
+    return result.data || [];
+  },
+
+  async getIpArchivedImages(): Promise<ImageWithRelations[]> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<ImageWithRelations[]>>("get_ip_archived_images", { dbPath });
+    if (!result.success) throw new Error(result.error || "Failed to get IP archived images");
+    return result.data || [];
+  },
+
   async update(request: UpdateImageRequest): Promise<ImageWithRelations> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<ImageWithRelations>>("update_image", {
@@ -105,9 +121,9 @@ export const imageApi = {
     return result.data || false;
   },
 
-  async archive(imageIds: string[], libraryPath: string, template?: string): Promise<ArchiveResult> {
+  async archive(imageIds: string[], libraryPath: string, template?: string, image_type?: string): Promise<ArchiveResult> {
     const dbPath = await getDbPath();
-    const request: ArchiveRequest = { image_ids: imageIds, naming_template: template };
+    const request: ArchiveRequest = { image_ids: imageIds, naming_template: template, image_type };
     const result = await invoke<CommandResult<ArchiveResult>>("archive_images", {
       dbPath,
       libraryPath,
@@ -577,6 +593,31 @@ export const scannerApi = {
     }
     return result.data;
   },
+
+  async cleanupIpInbox(inboxPath: string): Promise<InboxCleanupResult> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<InboxCleanupResult>>("cleanup_ip_inbox_directory", {
+      dbPath,
+      inboxPath,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "扫描失败");
+    }
+    return result.data;
+  },
+
+  async scanIpArchived(libraryPath: string, namingTemplate?: string): Promise<ScanResult> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<ScanResult>>("scan_ip_archived_directory", {
+      dbPath,
+      libraryPath,
+      namingTemplate,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "扫描失败");
+    }
+    return result.data;
+  },
 };
 
 // ==================== Settings API ====================
@@ -896,6 +937,28 @@ export const ipApi = {
     });
     if (!result.success) {
       throw new Error(result.error || "移动表情套件失败");
+    }
+    return result.data || false;
+  },
+
+  async getCharactersForImage(imageId: string): Promise<IpAsset[]> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpAsset[]>>("get_ip_characters_for_image", { dbPath, imageId });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "获取图片关联 IP 失败");
+    }
+    return result.data;
+  },
+
+  async setCharactersForImage(imageId: string, ipIds: string[]): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("set_ip_characters_for_image", {
+      dbPath,
+      imageId,
+      ipIds,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "设置图片关联 IP 失败");
     }
     return result.data || false;
   },

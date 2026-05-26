@@ -786,14 +786,18 @@ export default function IPManagementView() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => handleOpenEditIp(detail.ip)} className="gap-1">
-                  <Pencil className="w-4 h-4" />
-                  编辑资料
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => handleDeleteIp(detail.ip.id)} className="gap-1">
-                  <Trash2 className="w-4 h-4" />
-                  删除 IP
-                </Button>
+                {detail.ip.id !== "unknown" && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => handleOpenEditIp(detail.ip)} className="gap-1">
+                      <Pencil className="w-4 h-4" />
+                      编辑资料
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => handleDeleteIp(detail.ip.id)} className="gap-1">
+                      <Trash2 className="w-4 h-4" />
+                      删除 IP
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 

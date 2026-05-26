@@ -28,6 +28,12 @@ pub fn init_database(db_path: &Path) -> Result<()> {
         [],
     );
     
+    // Add image_type column if not exists
+    let _ = conn.execute(
+        "ALTER TABLE images ADD COLUMN image_type TEXT DEFAULT 'prompt'",
+        [],
+    );
+    
     // Insert default vendors and models
     insert_defaults(&conn)?;
     
@@ -266,6 +272,15 @@ CREATE TABLE IF NOT EXISTS ip_relations (
     FOREIGN KEY (ip_b_id) REFERENCES ip_assets(id) ON DELETE CASCADE
 );
 
+-- Image-IP relations
+CREATE TABLE IF NOT EXISTS image_ip_relations (
+    image_id     TEXT NOT NULL,
+    ip_id        TEXT NOT NULL,
+    PRIMARY KEY (image_id, ip_id),
+    FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
+    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE
+);
+
 -- Indexes for IP assets
 CREATE INDEX IF NOT EXISTS idx_ip_character_sheets_ip ON ip_character_sheets(ip_id);
 CREATE INDEX IF NOT EXISTS idx_ip_sticker_packs_ip ON ip_sticker_packs(ip_id);
@@ -275,6 +290,21 @@ CREATE INDEX IF NOT EXISTS idx_ip_spp_pack ON ip_sticker_pack_platforms(pack_id)
 
 fn insert_defaults(conn: &Connection) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
+    
+    // Insert default unknown IP asset
+    let ip_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM ip_assets WHERE id = 'unknown'",
+        [],
+        |row| row.get(0)
+    )?;
+    
+    if ip_count == 0 {
+        conn.execute(
+            "INSERT INTO ip_assets (id, name, description, created_at, updated_at) 
+             VALUES (?, ?, ?, ?, ?)",
+            ("unknown", "Unknown", "Default unknown IP character", &now, &now),
+        )?;
+    }
     
     // Check if vendors already exist
     let count: i64 = conn.query_row(
