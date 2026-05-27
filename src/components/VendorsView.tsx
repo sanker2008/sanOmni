@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Save } from "lucide-react";
+import { X, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Save, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ConfirmDialog from "./ConfirmDialog";
 
 export default function VendorsView() {
   const { vendors, setVendors } = useVendorStore();
@@ -19,6 +20,9 @@ export default function VendorsView() {
   const [addingModelForVendor, setAddingModelForVendor] = useState<string | null>(null);
   const [modelToDelete, setModelToDelete] = useState<{id: string, name: string} | null>(null);
   const [modelUsageCount, setModelUsageCount] = useState<number>(0);
+  const [vendorToDelete, setVendorToDelete] = useState<{id: string, name: string} | null>(null);
+  const [vendorUsageCount, setVendorUsageCount] = useState<number>(0);
+  const [deleteVendorStep, setDeleteVendorStep] = useState<number>(0);
   const [isDeleting, setIsDeleting] = useState(false);
 
   return (
@@ -129,19 +133,22 @@ export default function VendorsView() {
                                       size="sm"
                                       variant="ghost"
                                       onClick={async () => {
-                                        if (confirm(`确定要删除厂商 "${vendor.name}" 吗？`)) {
-                                          try {
-                                            const { vendorApi } = await import("@/services/tauri");
-                                            await vendorApi.delete(vendor.id);
-                                            const updatedVendors = await vendorApi.getAll();
-                                            setVendors(updatedVendors);
-                                          } catch (error) {
-                                            toast({
-                                              title: "✗ 删除失败",
-                                              description: String(error),
-                                              variant: "destructive",
-                                            });
+                                        try {
+                                          const { vendorApi } = await import("@/services/tauri");
+                                          const count = await vendorApi.checkVendorUsage(vendor.id);
+                                          setVendorToDelete({ id: vendor.id, name: vendor.name });
+                                          setVendorUsageCount(count);
+                                          if (count > 0) {
+                                            setDeleteVendorStep(-1);
+                                          } else {
+                                            setDeleteVendorStep(1);
                                           }
+                                        } catch (error) {
+                                          toast({
+                                            title: "✗ 检查失败",
+                                            description: String(error),
+                                            variant: "destructive",
+                                          });
                                         }
                                       }}
                                     >
@@ -485,6 +492,85 @@ export default function VendorsView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 无法删除厂商提示 */}
+      <Dialog open={deleteVendorStep === -1} onOpenChange={(open) => !open && setDeleteVendorStep(0)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              无法删除厂商
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-4 text-base">
+              厂商 <span className="font-semibold text-foreground">{vendorToDelete?.name}</span> 目前有 <span className="font-semibold text-destructive">{vendorUsageCount}</span> 张图片关联。
+              <br/><br/>
+              为了保障数据完整性，<span className="font-semibold text-foreground text-destructive">不可以删除</span>有关联图片的厂商！请先将这些图片的生成模型归档、删除或重新分类，然后再试。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button
+              className="w-full"
+              onClick={() => {
+                setDeleteVendorStep(0);
+                setVendorToDelete(null);
+              }}
+            >
+              我知道了
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除厂商确认 - 步骤 1 */}
+      <ConfirmDialog
+        open={deleteVendorStep === 1}
+        title="确认删除厂商"
+        description={`确定要删除厂商 "${vendorToDelete?.name}" 吗？注意：这不会物理删除磁盘上的文件，但在数据库中此厂商的记录将被移除！`}
+        confirmText="继续"
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={() => setDeleteVendorStep(2)}
+        onCancel={() => {
+          setDeleteVendorStep(0);
+          setVendorToDelete(null);
+        }}
+      />
+
+      {/* 删除厂商确认 - 步骤 2 */}
+      <ConfirmDialog
+        open={deleteVendorStep === 2}
+        title="⚠️ 最终删除确认"
+        description={`【严重警告】您真的非常确定要彻底删除厂商 "${vendorToDelete?.name}" 吗？此操作不可逆！`}
+        confirmText="确认彻底删除"
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!vendorToDelete) return;
+          setDeleteVendorStep(0);
+          try {
+            const { vendorApi } = await import("@/services/tauri");
+            await vendorApi.delete(vendorToDelete.id);
+            const updatedVendors = await vendorApi.getAll();
+            setVendors(updatedVendors);
+            toast({
+              title: "✓ 删除成功",
+              description: `厂商 "${vendorToDelete.name}" 已成功删除`,
+            });
+          } catch (error) {
+            toast({
+              title: "✗ 删除失败",
+              description: String(error),
+              variant: "destructive",
+            });
+          } finally {
+            setVendorToDelete(null);
+          }
+        }}
+        onCancel={() => {
+          setDeleteVendorStep(0);
+          setVendorToDelete(null);
+        }}
+      />
     </div>
   );
 }

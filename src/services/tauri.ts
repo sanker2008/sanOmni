@@ -213,6 +213,13 @@ export const vendorApi = {
     return result.data || 0;
   },
 
+  async checkVendorUsage(vendorId: string): Promise<number> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<number>>("check_vendor_usage", { dbPath, vendorId });
+    if (!result.success) throw new Error(result.error || "Failed to check vendor usage");
+    return result.data || 0;
+  },
+
   async deleteModelCascade(modelId: string, action: "delete_images" | "move_to_unknown" | "none"): Promise<boolean> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<boolean>>("delete_model_cascade", { dbPath, modelId, action });
@@ -630,6 +637,27 @@ export const settingsApi = {
     if (!result.success) throw new Error(result.error || "Failed to reset database");
     return result.data || false;
   },
+
+  async resetGeneralSettings(): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("reset_general_settings", { dbPath });
+    if (!result.success) throw new Error(result.error || "Failed to reset general settings");
+    return result.data || false;
+  },
+
+  async resetPromptData(deleteFiles: boolean): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("reset_prompt_data", { dbPath, deleteFiles });
+    if (!result.success) throw new Error(result.error || "Failed to reset prompt data");
+    return result.data || false;
+  },
+
+  async resetIpData(deleteFiles: boolean): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("reset_ip_data", { dbPath, deleteFiles });
+    if (!result.success) throw new Error(result.error || "Failed to reset IP data");
+    return result.data || false;
+  },
 };
 
 // ==================== IP Asset API ====================
@@ -686,9 +714,9 @@ export const ipApi = {
     return result.data;
   },
 
-  async delete(ipId: string): Promise<boolean> {
+  async delete(ipId: string, keepImages: boolean = false): Promise<boolean> {
     const dbPath = await getDbPath();
-    const result = await invoke<CommandResult<boolean>>("delete_ip_asset", { dbPath, ipId });
+    const result = await invoke<CommandResult<boolean>>("delete_ip_asset", { dbPath, ipId, keepImages });
     if (!result.success) {
       throw new Error(result.error || "删除 IP 失败");
     }
@@ -974,6 +1002,7 @@ interface UpdateIpImageRequest {
   has_watermark?: boolean;
   watermark_platform?: string;
   naming_template?: string;
+  associate_sticker_pack_id?: string;
 }
 
 interface ArchiveIpImagesRequest {

@@ -57,7 +57,7 @@ type SettingsTab = "general" | "prompt" | "ip" | "shortcuts" | "trash";
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "通用设置" },
   { key: "prompt", label: "Prompt 模板管理" },
-  { key: "ip", label: "IP 形象管理" },
+  { key: "ip", label: "IP 资产管理" },
   { key: "shortcuts", label: "快捷键" },
   { key: "trash", label: "回收站" },
 ];
@@ -91,8 +91,96 @@ function SettingsView() {
     errors: string[];
   } | null>(null);
   
-  // Vendor management state
-  const [resetDbStep, setResetDbStep] = useState(0);
+  // Reset management states
+  const [resetType, setResetType] = useState<'general' | 'prompt_data' | 'prompt_all' | 'ip_data' | 'ip_all' | null>(null);
+  const [resetStep, setResetStep] = useState(0); // 0, 1, 2
+
+  const resetContent = (() => {
+    switch (resetType) {
+      case 'general':
+        return {
+          step1Title: "确认重置通用数据",
+          step1Desc: "确定要重置通用数据吗？这将清除所有主题色、布局偏好等基础设置。注意：您的 Prompt 模板和 IP 资产数据将保持原样，不受任何影响！",
+          step2Title: "⚠️ 通用设置最终确认",
+          step2Desc: "【警告】重置通用数据是不可逆的！所有通用系统设置和界面显示首选项都将被恢复为默认值。您真的确定要重置吗？",
+          confirmText: "确认重置",
+          action: async () => {
+            await settingsApi.resetGeneralSettings();
+            toast({
+              title: "✓ 通用设置已重置",
+              description: "通用设置已恢复默认，应用将重新加载",
+            });
+            setTimeout(() => window.location.reload(), 1000);
+          }
+        };
+      case 'prompt_data':
+        return {
+          step1Title: "确认重置 Prompt 模板数据",
+          step1Desc: "确定要重置 Prompt 模板数据吗？这将清空数据库中的所有 Prompt 模板记录、图片关联和分类。注意：图片文件本身不会被删除！",
+          step2Title: "⚠️ Prompt 记录最终确认",
+          step2Desc: "【警告】此操作将清除所有 Prompt 模板的数据库记录，且不可恢复！您真的确定要重置吗？",
+          confirmText: "确认重置记录",
+          action: async () => {
+            await settingsApi.resetPromptData(false);
+            toast({
+              title: "✓ Prompt 数据库记录已重置",
+              description: "Prompt 模板数据已重置，应用将重新加载",
+            });
+            setTimeout(() => window.location.reload(), 1000);
+          }
+        };
+      case 'prompt_all':
+        return {
+          step1Title: "⚠️ 确认重置数据并删除 Prompt 文件",
+          step1Desc: "确定要重置 Prompt 数据并【删除所有关联图片文件】吗？这将清空 Prompt 模板数据库记录，并且【永久删除】待处理(inbox)和归档(archived)目录下的所有图片文件！",
+          step2Title: "🚨 Prompt 文件永久删除警告",
+          step2Desc: "【极其严重警告】所有待处理(inbox)和归档(archived)目录下的图片文件都将被彻底删除，无法恢复！请确保您已做好备份。确定要永久删除文件并重置吗？",
+          confirmText: "永久删除并重置",
+          action: async () => {
+            await settingsApi.resetPromptData(true);
+            toast({
+              title: "✓ Prompt 数据及文件已彻底删除",
+              description: "相关文件与记录已清理，应用将重新加载",
+            });
+            setTimeout(() => window.location.reload(), 1000);
+          }
+        };
+      case 'ip_data':
+        return {
+          step1Title: "确认重置 IP 资产数据",
+          step1Desc: "确定要重置 IP 资产数据吗？这将清空数据库中的所有 IP 形象记录、资产关联、表情包和贴纸（系统默认的未知形象 'unknown' 将予以保留）。注意：您的图片文件本身不会被删除！",
+          step2Title: "⚠️ IP 资产记录最终确认",
+          step2Desc: "【警告】此操作将清除所有 IP 形象及关联的数据库记录（除 'unknown' 外），且不可恢复！您真的确定要重置吗？",
+          confirmText: "确认重置记录",
+          action: async () => {
+            await settingsApi.resetIpData(false);
+            toast({
+              title: "✓ IP 资产数据库记录已重置",
+              description: "IP 资产数据已重置，应用将重新加载",
+            });
+            setTimeout(() => window.location.reload(), 1000);
+          }
+        };
+      case 'ip_all':
+        return {
+          step1Title: "⚠️ 确认重置数据并删除 IP 文件",
+          step1Desc: "确定要重置 IP 资产数据并【删除所有关联图片文件】吗？这将清空所有 IP 资产数据库记录（保留默认 'unknown'），并且【永久删除】IP待处理(ip_inbox)和IP归档(ip_archived)目录下的所有图片文件！",
+          step2Title: "🚨 IP 文件永久删除警告",
+          step2Desc: "【极其严重警告】所有 IP 待处理(ip_inbox)和归档(ip_archived)目录下的图片文件都将被彻底删除，无法恢复！请确保您已备份。确定要永久删除所有 IP 资产文件并重置吗？",
+          confirmText: "永久删除并重置",
+          action: async () => {
+            await settingsApi.resetIpData(true);
+            toast({
+              title: "✓ IP 资产数据及文件已彻底删除",
+              description: "相关 IP 文件与记录已清理，应用将重新加载",
+            });
+            setTimeout(() => window.location.reload(), 1000);
+          }
+        };
+      default:
+        return null;
+    }
+  })();
 
   // Tab 切换时清空扫描结果
   useEffect(() => {
@@ -320,19 +408,22 @@ function SettingsView() {
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2 text-destructive">
                     <AlertTriangle className="w-4 h-4" />
-                    重置数据库
+                    重置通用数据
                   </CardTitle>
                   <CardDescription>
-                    删除所有数据并重新初始化数据库。此操作不可恢复！
+                    重置所有系统设置参数，但不会影响 IP 资产或 Prompt 模板数据。此操作不可恢复！
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Button 
                     variant="destructive" 
                     size="sm"
-                    onClick={() => setResetDbStep(1)}
+                    onClick={() => {
+                      setResetType('general');
+                      setResetStep(1);
+                    }}
                   >
-                    重置数据库
+                    重置通用数据
                   </Button>
                 </CardContent>
               </Card>
@@ -344,23 +435,29 @@ function SettingsView() {
           {activeSettingsTab === "prompt" && (
             <div className="space-y-6">
               <div className="text-lg font-semibold mb-4 border-b pb-2">归档与路径配置</div>
-<Card>
+              <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">命名模板</CardTitle>
-                  <CardDescription>
-                    配置归档图片时的文件名模板。可用变量：
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
-                      {"{vendor}"}
-                    </code>
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
-                      {"{model}"}
-                    </code>
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
-                      {"{date}"}
-                    </code>
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
-                      {"{index}"}
-                    </code>
+                  <CardTitle className="text-base">图片归档命名模板</CardTitle>
+                  <CardDescription className="space-y-1.5 mt-1.5">
+                    <div>配置归档图片库（待整理/已归档）时的文件名命名规则。</div>
+                    <div className="flex flex-col gap-1.5 mt-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{vendor}"}</code>
+                        <span>大模型厂商标识（例如：<span className="font-mono text-slate-500">openai</span>，即厂商的小写英文标识名，非中文显示名称）</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{model}"}</code>
+                        <span>生成模型标识（例如：<span className="font-mono text-slate-500">gpt-4</span>，即模型的小写英文/数字缩写标识，非显示名称）</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{date}"}</code>
+                        <span>归档当天日期（格式为：<span className="font-mono text-slate-500">YYYY-MM-DD</span>，例如 <span className="font-mono text-slate-500">2026-05-27</span>）</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{index}"}</code>
+                        <span>当天自增排序号（格式为：<span className="font-mono text-slate-500">001</span>, <span className="font-mono text-slate-500">002</span> ...）</span>
+                      </div>
+                    </div>
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -369,9 +466,20 @@ function SettingsView() {
                     onChange={(e) => handleLocalUpdate("namingTemplate", e.target.value)}
                     placeholder="{vendor}-{model}-{date}-{index}"
                   />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    示例：OpenAI-GPT Image 2-20260509-001.png
-                  </p>
+                  {(() => {
+                    const template = localSettings.namingTemplate || "{vendor}-{model}-{date}-{index}";
+                    const formattedDate = new Date().toISOString().split("T")[0];
+                    const previewName = template
+                      .replace(/{vendor}/g, "openai")
+                      .replace(/{model}/g, "gpt-4")
+                      .replace(/{date}/g, formattedDate)
+                      .replace(/{index}/g, "001");
+                    return (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        实时预览（以厂商 <span className="font-mono font-medium text-slate-800 dark:text-slate-200 bg-muted px-1.5 py-0.5 rounded">openai</span> 和模型 <span className="font-mono font-medium text-slate-800 dark:text-slate-200 bg-muted px-1.5 py-0.5 rounded">gpt-4</span> 为例）：<span className="font-mono font-semibold text-primary">{previewName}.png</span>
+                      </p>
+                    );
+                  })()}
                 </CardContent>
               </Card>
 
@@ -781,29 +889,69 @@ function SettingsView() {
                   </div>
                 </CardContent>
               </Card>
+              
+              <Card className="border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="w-4 h-4" />
+                    重置 Prompt 模板数据
+                  </CardTitle>
+                  <CardDescription>
+                    管理与清除 Prompt 模板数据库记录及对应文件。此操作不可恢复！
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-4">
+                  <Button 
+                    variant="outline" 
+                    className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                    size="sm"
+                    onClick={() => {
+                      setResetType('prompt_data');
+                      setResetStep(1);
+                    }}
+                  >
+                    重置数据库记录
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={() => {
+                      setResetType('prompt_all');
+                      setResetStep(1);
+                    }}
+                  >
+                    重置数据并删除文件
+                  </Button>
+                </CardContent>
+              </Card>
                       
             </div>
           )}
 
-          {/* IP 形象管理相关 */}
+          {/* IP 资产管理相关 */}
           {activeSettingsTab === "ip" && (
             <div className="space-y-6">
               <div className="text-lg font-semibold mb-4 border-b pb-2">归档与路径配置</div>
               
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">IP 命名模板</CardTitle>
-                  <CardDescription>
-                    配置归档 IP 图片时的文件名模板。可用变量：
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
-                      {"{ip}"}
-                    </code>
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
-                      {"{date}"}
-                    </code>
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded ml-1">
-                      {"{index}"}
-                    </code>
+                  <CardTitle className="text-base">IP 归档命名模板</CardTitle>
+                  <CardDescription className="space-y-1.5 mt-1.5">
+                    <div>配置归档 IP 资产图片时的文件名命名规则。</div>
+                    <div className="flex flex-col gap-1.5 mt-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{ip}"}</code>
+                        <span>IP 路径标识（例如：<span className="font-mono text-slate-500">sanker</span>，即保存的小写、无空格/特殊符号的标识符，非中文显示名称）</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{date}"}</code>
+                        <span>归档当天日期（格式为：<span className="font-mono text-slate-500">YYYY-MM-DD</span>，例如 <span className="font-mono text-slate-500">2026-05-27</span>）</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{index}"}</code>
+                        <span>当天自增排序号（格式为：<span className="font-mono text-slate-500">001</span>, <span className="font-mono text-slate-500">002</span> ...）</span>
+                      </div>
+                    </div>
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -812,9 +960,19 @@ function SettingsView() {
                     onChange={(e) => handleLocalUpdate("ipNamingTemplate", e.target.value)}
                     placeholder="{ip}-{date}-{index}"
                   />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    示例：Unknown-20260509-001.png
-                  </p>
+                  {(() => {
+                    const template = localSettings.ipNamingTemplate || "{ip}-{date}-{index}";
+                    const formattedDate = new Date().toISOString().split("T")[0];
+                    const previewName = template
+                      .replace(/{ip}/g, "sanker")
+                      .replace(/{date}/g, formattedDate)
+                      .replace(/{index}/g, "001");
+                    return (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        实时预览（以路径标识 <span className="font-mono font-medium text-slate-800 dark:text-slate-200 bg-muted px-1.5 py-0.5 rounded">sanker</span> 为例）：<span className="font-mono font-semibold text-primary">{previewName}.png</span>
+                      </p>
+                    );
+                  })()}
                 </CardContent>
               </Card>
               <Card>
@@ -1159,6 +1317,41 @@ function SettingsView() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card className="border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="w-4 h-4" />
+                    重置 IP 资产数据
+                  </CardTitle>
+                  <CardDescription>
+                    管理与清除 IP 资产数据库记录（系统默认未知形象 'unknown' 将保留）及对应文件。此操作不可恢复！
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-4">
+                  <Button 
+                    variant="outline" 
+                    className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                    size="sm"
+                    onClick={() => {
+                      setResetType('ip_data');
+                      setResetStep(1);
+                    }}
+                  >
+                    重置数据库记录
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={() => {
+                      setResetType('ip_all');
+                      setResetStep(1);
+                    }}
+                  >
+                    重置数据并删除文件
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
           )}
 {/* 快捷键 */}
@@ -1220,44 +1413,49 @@ function SettingsView() {
       </div>
     </div>
 
-    {/* Reset Database Confirmation - Step 1 */}
+    {/* Unified Reset Confirmation - Step 1 */}
     <ConfirmDialog
-      open={resetDbStep === 1}
-      title="确认重置数据库"
-      description="确定要重置数据库吗？这将删除所有图片记录、标签和设置！注意：图片文件本身不会被删除。"
+      open={resetStep === 1 && resetContent !== null}
+      title={resetContent?.step1Title || "确认重置"}
+      description={resetContent?.step1Desc || ""}
       confirmText="继续"
       cancelText="取消"
       variant="destructive"
-      onConfirm={() => setResetDbStep(2)}
-      onCancel={() => setResetDbStep(0)}
+      onConfirm={() => setResetStep(2)}
+      onCancel={() => {
+        setResetStep(0);
+        setResetType(null);
+      }}
     />
 
-    {/* Reset Database Confirmation - Step 2 */}
+    {/* Unified Reset Confirmation - Step 2 */}
     <ConfirmDialog
-      open={resetDbStep === 2}
-      title="⚠️ 最终确认"
-      description="【警告】重置数据库是不可逆的！所有归档记录、待整理图片关联和系统设置都会被彻底删除！您真的非常确定要重置数据库吗？"
-      confirmText="确认重置"
+      open={resetStep === 2 && resetContent !== null}
+      title={resetContent?.step2Title || "最终确认"}
+      description={resetContent?.step2Desc || ""}
+      confirmText={resetContent?.confirmText || "确认"}
       cancelText="取消"
       variant="destructive"
       onConfirm={async () => {
-        setResetDbStep(0);
-        try {
-          await settingsApi.resetDatabase();
-          toast({
-            title: "✓ 数据库已重置",
-            description: "应用将重新加载",
-          });
-          setTimeout(() => window.location.reload(), 1000);
-        } catch (error) {
-          toast({
-            title: "✗ 重置失败",
-            description: String(error),
-            variant: "destructive",
-          });
+        setResetStep(0);
+        const action = resetContent?.action;
+        setResetType(null);
+        if (action) {
+          try {
+            await action();
+          } catch (error) {
+            toast({
+              title: "✗ 操作失败",
+              description: String(error),
+              variant: "destructive",
+            });
+          }
         }
       }}
-      onCancel={() => setResetDbStep(0)}
+      onCancel={() => {
+        setResetStep(0);
+        setResetType(null);
+      }}
     />
     </>
   );

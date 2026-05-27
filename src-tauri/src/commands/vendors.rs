@@ -363,9 +363,19 @@ pub async fn delete_model_cascade(
                 "unknown".to_string()
             };
             
+            let new_vendor = if new_primary == "unknown" {
+                "unknown".to_string()
+            } else {
+                conn.query_row(
+                    "SELECT vendor_id FROM models WHERE id = ?",
+                    [&new_primary],
+                    |row| row.get::<_, String>(0)
+                ).unwrap_or_else(|_| "unknown".to_string())
+            };
+            
             let _ = conn.execute(
-                "UPDATE images SET primary_model_id = ? WHERE id = ?",
-                [&new_primary, &img_id]
+                "UPDATE images SET primary_model_id = ?, storage_model_id = ?, storage_vendor_id = ? WHERE id = ?",
+                [&new_primary, &new_primary, &new_vendor, &img_id]
             );
             if new_primary == "unknown" {
                 let _ = conn.execute(
@@ -400,6 +410,22 @@ pub async fn delete_model_cascade(
         }
         Err(e) => CommandResult::err(format!("Failed to delete model: {}", e)),
     }
+}
+
+#[tauri::command]
+pub async fn check_vendor_usage(db_path: String, vendor_id: String) -> CommandResult<i64> {
+    let conn = match Connection::open(&db_path) {
+        Ok(conn) => conn,
+        Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
+    };
+
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM images WHERE storage_vendor_id = ?",
+        [&vendor_id],
+        |row| row.get(0),
+    ).unwrap_or(0);
+
+    CommandResult::ok(count)
 }
 
 

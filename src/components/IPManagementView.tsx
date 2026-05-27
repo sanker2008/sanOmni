@@ -6,23 +6,25 @@ import {
   Search,
   Plus,
   Pencil,
+  Edit2,
+  Eye,
+  FolderOpen,
   Trash2,
   Sparkles,
   Link,
   ChevronRight,
   ChevronLeft,
   BookOpen,
-  Image as ImageIcon,
   Smile,
   Copy,
   PlusCircle,
   ExternalLink,
-  ZoomIn,
+  AlertTriangle,
   X,
   Loader2,
 } from "lucide-react";
-import { useUIStore, type IpAsset, type IpAssetDetail, type IpStickerPack, type IpStickerPackPlatform } from "@/stores";
-import { ipApi, geminiWatermarkApi, watermarkApi } from "@/services/tauri";
+import { useUIStore, type IpAsset, type IpAssetDetail, type IpStickerPack, type IpStickerPackPlatform, type IpImageWithTags, type Tag, type IpImageWithRelations, type IpEmoji } from "@/stores";
+import { ipApi, geminiWatermarkApi, watermarkApi, ipImageApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -30,9 +32,10 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
+import ConfirmDialog from "./ConfirmDialog";
 
 export default function IPManagementView() {
-  const { selectedIpId, setSelectedIpId, settings } = useUIStore();
+  const { selectedIpId, setSelectedIpId, settings, openQuickEdit, openImageViewer, isQuickEditOpen } = useUIStore();
   const showFullImage = settings?.showFullImage ?? false;
 
   // 大图查看器状态
@@ -50,7 +53,7 @@ export default function IPManagementView() {
   const [listSearch, setListSearch] = useState("");
 
   // 子选项卡状态
-  const [activeTab, setActiveTab] = useState<"profile" | "sheets" | "emojis" | "creations" | "relations">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "emojis" | "creations" | "relations">("profile");
 
   // 表单弹窗状态
   const [isIpModalOpen, setIsIpModalOpen] = useState(false);
@@ -61,8 +64,8 @@ export default function IPManagementView() {
   const [ipDescription, setIpDescription] = useState("");
   const [ipAvatarPath, setIpAvatarPath] = useState<string | null>(null);
 
-  // 三视图图片类型选择
-  const [sheetType, setSheetType] = useState<string>("three-view");
+  // 创作图筛选过滤类型
+  const [creationsFilter, setCreationsFilter] = useState<string>("all");
 
   // 表情包套件状态
   const [selectedPackId, setSelectedPackId] = useState<string>("__ALL__");
@@ -88,10 +91,18 @@ export default function IPManagementView() {
   const [relationType, setRelationType] = useState("朋友");
   const [relationDesc, setRelationDesc] = useState("");
 
+
   // 初始化加载所有 IP
   useEffect(() => {
     loadIps();
   }, []);
+
+  // 当 QuickEditModal 关闭时，重新加载 IP 详情，以便刷新列表里的标签、头像与表情归档状态
+  useEffect(() => {
+    if (!isQuickEditOpen && selectedIpId) {
+      loadDetail(selectedIpId);
+    }
+  }, [isQuickEditOpen, selectedIpId]);
 
   // 键盘监听：左右箭头切换图片，Esc 键退出
   useEffect(() => {
@@ -297,8 +308,21 @@ export default function IPManagementView() {
       toast({ title: "请输入 IP 名字" });
       return;
     }
-    // 自动生成 path：如果用户没填，用 name 的小写+连字符形式
-    const finalPath = ipPath.trim() || ipName.trim().toLowerCase().replace(/\s+/g, "-");
+    // 自动生成并清洗 path：转为小写，仅限小写字母、数字、横杠、下划线组合，空格转连字符，其余特殊字符直接过滤
+    const sanitizePath = (str: string) => {
+      return str
+        .trim()
+        .toLowerCase()
+        .replace(/[\s\/\\]+/g, "-")
+        .replace(/[^a-z0-9\-_]/g, "")
+        .replace(/-+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    };
+    const finalPath = sanitizePath(ipPath || ipName);
+    if (!finalPath) {
+      toast({ title: "保存失败", description: "路径标识无可用的合法字符（限小写字母、数字、横线、下划线组合）", variant: "destructive" });
+      return;
+    }
     try {
       if (editingIp) {
         const updated = await ipApi.update(
@@ -330,19 +354,46 @@ export default function IPManagementView() {
     }
   };
 
-  // 删除 IP 资产
-  const handleDeleteIp = async (id: string) => {
-    if (!confirm("确定要删除这个 IP 形象吗？这会级联删除其下的所有三视图、表情包及关系链！")) return;
+  // IP 删除二次确认弹窗状态
+  const [deleteIpId, setDeleteIpId] = useState<string | null>(null);
+  const [deleteIpName, setDeleteIpName] = useState<string>("");
+  const [deleteIpAssetCount, setDeleteIpAssetCount] = useState<number>(0);
+
+  // 删除 IP 形象 (打开二次确认弹窗)
+  const handleDeleteIp = (id: string) => {
+    if (id === "unknown") {
+      toast({ title: "删除失败", description: "系统默认的未知形象不可删除", variant: "destructive" });
+      return;
+    }
+    const name = detail?.ip.name || "该 IP 形象";
+    const assetCount = detail?.ip_images?.length || 0;
+    
+    setDeleteIpId(id);
+    setDeleteIpName(name);
+    setDeleteIpAssetCount(assetCount);
+  };
+
+  const executeDeleteIp = async (keepImages: boolean) => {
+    if (!deleteIpId) return;
     try {
-      await ipApi.delete(id);
-      toast({ title: "删除成功", description: "IP 形象已成功删除" });
-      if (selectedIpId === id) {
+      await ipApi.delete(deleteIpId, keepImages);
+      toast({
+        title: "删除成功",
+        description: keepImages ? "IP 形象已删除，图片资产已移至待整理" : "IP 形象及其全部图片已删除",
+      });
+      if (selectedIpId === deleteIpId) {
         setSelectedIpId(null);
+        setDetail(null);
       }
+      setDeleteIpId(null);
       loadIps();
     } catch (e) {
       console.error(e);
-      toast({ title: "删除失败", description: "无法删除该 IP 形象", variant: "destructive" });
+      toast({
+        title: "删除失败",
+        description: typeof e === "string" ? e : "删除 IP 形象时发生错误",
+        variant: "destructive",
+      });
     }
   };
 
@@ -364,42 +415,7 @@ export default function IPManagementView() {
     }
   };
 
-  // 动作：导入设定图 (多选本地图片)
-  const handleImportSheets = async () => {
-    if (!selectedIpId) return;
-    try {
-      const selected = await open({
-        multiple: true,
-        filters: [{
-          name: "Images",
-          extensions: ["png", "jpg", "jpeg", "webp", "gif"]
-        }]
-      });
-      if (selected) {
-        const paths = Array.isArray(selected) ? selected : [selected];
-        await ipApi.addCharacterSheets(selectedIpId, paths, sheetType);
-        toast({ title: "导入成功", description: "已将选中图片拷贝为三视图设定图" });
-        loadDetail(selectedIpId);
-      }
-    } catch (e) {
-      console.error("导入设定图失败:", e);
-      toast({ title: "导入失败", description: "关联设定图时发生错误", variant: "destructive" });
-    }
-  };
-
-  // 动作：移除设定图
-  const handleRemoveSheet = async (imagePath: string) => {
-    if (!selectedIpId) return;
-    try {
-      await ipApi.removeCharacterSheets(selectedIpId, [imagePath]);
-      toast({ title: "移除成功", description: "已移除设定图并从磁盘清理" });
-      loadDetail(selectedIpId);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // 动作：导入创作图 (多选本地图片)
+  // 动作：导入创作图 (多选本地图片 - 自动导入到图库并自动归档关联)
   const handleImportCreations = async () => {
     if (!selectedIpId) return;
     try {
@@ -407,37 +423,96 @@ export default function IPManagementView() {
         multiple: true,
         filters: [{
           name: "Images",
-          extensions: ["png", "jpg", "jpeg", "webp", "gif"]
+          extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
         }]
       });
       if (selected) {
         const paths = Array.isArray(selected) ? selected : [selected];
-        // 自动用不含后缀的文件名作为默认的创作名称
-        const names = paths.map((p) => {
-          const parts = p.split(/[\\/]/);
-          const nameWithExt = parts[parts.length - 1];
-          const name = nameWithExt.substring(0, nameWithExt.lastIndexOf("."));
-          return name || "未命名插画";
-        });
-        await ipApi.addCreations(selectedIpId, paths, names);
-        toast({ title: "导入成功", description: "已将作品图片拷贝并添加至出镜作品归档" });
+        
+        const { appDataDir, join } = await import("@tauri-apps/api/path");
+        const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
+        
+        const { settings } = useUIStore.getState();
+        
+        // 解析待整理收件箱路径
+        let inboxDir: string;
+        if (settings.customIpInboxPath) {
+          inboxDir = settings.customIpInboxPath;
+        } else {
+          const appDir = await appDataDir();
+          inboxDir = await join(appDir, "ip_inbox");
+        }
+        
+        if (!(await exists(inboxDir))) {
+          await mkdir(inboxDir, { recursive: true });
+        }
+        
+        // 解析归档库路径
+        let libraryPath: string;
+        if (settings.customIpArchivedPath) {
+          libraryPath = settings.customIpArchivedPath;
+        } else {
+          libraryPath = await appDataDir();
+        }
+        const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+        
+        for (const path of paths) {
+          const fileName = path.split(/[/\\]/).pop() || "unknown";
+          
+          let fileSize = 0;
+          try {
+            const fileMeta = await stat(path);
+            fileSize = fileMeta.size;
+          } catch (error) {
+            console.error(`Failed to get metadata for ${path}:`, error);
+          }
+          
+          const timestamp = Date.now();
+          const uniqueFileName = `${timestamp}_${fileName}`;
+          const targetPath = await join(inboxDir, uniqueFileName);
+          
+          await copyFile(path, targetPath);
+          
+          // 1. 导入至图库收件箱并关联 IP
+          const importResult = await ipImageApi.import({
+            file_path: targetPath,
+            file_name: fileName,
+            file_size: fileSize,
+            ip_id: selectedIpId,
+            tags: [],
+          });
+          
+          // 2. 自动进行图库归档
+          try {
+            await ipImageApi.archive([importResult.id], libraryPath, namingTemplate);
+          } catch (archiveError) {
+            console.error(`自动归档图片 ${importResult.id} 失败:`, archiveError);
+            // 归档失败时依然保留在收件箱中，不阻断整体流程
+          }
+        }
+        
+        toast({ title: "导入成功", description: "已将图片自动导入归档库并关联至该 IP 形象" });
         loadDetail(selectedIpId);
       }
     } catch (e) {
-      console.error("导入创作图失败:", e);
-      toast({ title: "导入失败", variant: "destructive" });
+      console.error("导入并归档图片失败:", e);
+      toast({ title: "导入失败", description: String(e), variant: "destructive" });
     }
   };
 
-  // 动作：移除创作关联
-  const handleRemoveCreation = async (imagePath: string) => {
+  // 动作：删除关联创作图片
+  const [pendingDeleteCreationId, setPendingDeleteCreationId] = useState<string | null>(null);
+
+  const executeDeleteCreation = async (ipImageId: string) => {
+    setPendingDeleteCreationId(null);
     if (!selectedIpId) return;
     try {
-      await ipApi.removeCreations(selectedIpId, [imagePath]);
-      toast({ title: "移除成功", description: "已移除出镜插画并从磁盘清理" });
+      await ipImageApi.delete(ipImageId);
+      toast({ title: "删除成功", description: "已永久删除该关联图片" });
       loadDetail(selectedIpId);
     } catch (e) {
-      console.error(e);
+      console.error("删除关联图片失败:", e);
+      toast({ title: "删除失败", description: String(e), variant: "destructive" });
     }
   };
 
@@ -455,13 +530,8 @@ export default function IPManagementView() {
       });
       if (selected) {
         const paths = Array.isArray(selected) ? selected : [selected];
-        // 自动用不含后缀的文件名作为表情默认触发快捷词
-        const words = paths.map((p) => {
-          const parts = p.split(/[\\/]/);
-          const nameWithExt = parts[parts.length - 1];
-          const name = nameWithExt.substring(0, nameWithExt.lastIndexOf("."));
-          return name || "";
-        });
+        // 快捷触发词默认是空，直接传 null 数组
+        const words = paths.map(() => null);
         await ipApi.addEmojis(selectedIpId, targetPackId, paths, words);
         toast({ title: "导入成功", description: "表情图片已拷贝并添加至 IP 表情库" });
         loadDetail(selectedIpId);
@@ -473,9 +543,11 @@ export default function IPManagementView() {
   };
 
   // 动作：彻底删除表情图片
-  const handleDeleteEmoji = async (emojiId: string) => {
+  const [pendingDeleteEmojiId, setPendingDeleteEmojiId] = useState<string | null>(null);
+
+  const executeDeleteEmoji = async (emojiId: string) => {
+    setPendingDeleteEmojiId(null);
     if (!selectedIpId) return;
-    if (!confirm("确定要彻底删除该表情吗？这会将其从所有分组套件中移除，并物理删除该表情文件！")) return;
     try {
       await ipApi.deleteEmojis([emojiId]);
       toast({ title: "已删除表情", description: "已彻底从表情库中删除该表情并物理清理文件" });
@@ -680,7 +752,7 @@ export default function IPManagementView() {
   return (
     <div className="flex-1 flex overflow-hidden bg-background">
       {/* ==================== 左侧 IP 列表 ==================== */}
-      <div className="w-80 border-r flex flex-col bg-card/40">
+      <div className="w-80 border-r flex flex-col bg-muted/40 h-full overflow-hidden">
         <div className="p-4 border-b flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -816,9 +888,8 @@ export default function IPManagementView() {
               <div className="flex gap-4">
                 {[
                   { id: "profile", label: "基本设定", icon: BookOpen },
-                  { id: "sheets", label: "三视图 / 设定图", icon: ImageIcon },
                   { id: "emojis", label: "表情包管理", icon: Smile },
-                  { id: "creations", label: "参与的创作", icon: Sparkles },
+                  { id: "creations", label: "全部资产", icon: Sparkles },
                   { id: "relations", label: "关系链谱", icon: Link },
                 ].map((tab) => {
                   const Icon = tab.icon;
@@ -827,14 +898,19 @@ export default function IPManagementView() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as any)}
-                      className={`flex items-center gap-2 py-3 px-1 text-sm font-medium border-b-2 transition-all duration-200 ${
+                      className={`flex items-center gap-2 py-3 px-1 text-sm font-medium border-b-2 transition-all duration-200 relative ${
                         isActive
                           ? "border-primary text-primary"
                           : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
                       }`}
                     >
                       <Icon className="w-4 h-4" />
-                      {tab.label}
+                      <span>{tab.label}</span>
+                      {tab.id === "creations" && (detail.ip_images || []).length > 0 && (
+                        <span className="absolute -top-1 -right-3.5 flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow-md ring-2 ring-background animate-in zoom-in duration-300">
+                          {(detail.ip_images || []).length}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -876,227 +952,332 @@ export default function IPManagementView() {
                 </ScrollArea>
               )}
 
-              {/* === TAB: SHEETS (三视图) === */}
-              {activeTab === "sheets" && (
-                <div className="h-full flex flex-col gap-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={sheetType}
-                        onChange={(e) => setSheetType(e.target.value)}
-                        className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      >
-                        <option value="three-view">三视图</option>
-                        <option value="front">正面图</option>
-                        <option value="side">侧面图</option>
-                        <option value="back">背面图</option>
-                        <option value="concept">概念原画</option>
-                        <option value="other">其他设定图</option>
-                      </select>
-                      <Button
-                        onClick={handleImportSheets}
-                        size="sm"
-                        className="gap-1.5"
-                      >
-                        <PlusCircle className="w-4 h-4" />
-                        添加本地图片
-                      </Button>
-                    </div>
-                  </div>
-
-                  <ScrollArea className="flex-1 border rounded-lg py-4 px-0 bg-card/20">
-                    {detail.character_sheets.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
-                        <ImageIcon className="w-10 h-10 opacity-30" />
-                        <span className="text-sm">暂无设定图，请点击上方“添加本地图片”</span>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {detail.character_sheets.map((sheet, index) => (
-                          <div
-                            key={sheet.id}
-                            onClick={() => {
-                              const paths = detail.character_sheets.map(s => s.image_path);
-                              setPreviewImages(paths);
-                              setPreviewIndex(index);
-                            }}
-                            className="group relative aspect-square rounded-lg overflow-hidden border bg-muted shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer"
-                          >
-                            <img
-                              src={`${convertFileSrc(sheet.image_path)}?t=${imageTimestamp}`}
-                              alt="设定图"
-                              className={`w-full h-full ${showFullImage ? "object-contain bg-background" : "object-cover"} transition-transform duration-300 group-hover:scale-102`}
-                            />
-                            {/* 类型标签 */}
-                            <Badge className="absolute top-2 left-2 shadow-sm font-normal">
-                              {sheet.sheet_type === "three-view" && "三视图"}
-                              {sheet.sheet_type === "front" && "正面"}
-                              {sheet.sheet_type === "side" && "侧面"}
-                              {sheet.sheet_type === "back" && "背面"}
-                              {sheet.sheet_type === "concept" && "概念图"}
-                              {sheet.sheet_type === "other" && "其他设定"}
-                            </Badge>
-
-                            {/* 操作浮层 */}
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
-                              <Button
-                                size="icon"
-                                variant="secondary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const paths = detail.character_sheets.map(s => s.image_path);
-                                  setPreviewImages(paths);
-                                  setPreviewIndex(index);
-                                }}
-                                className="h-8 w-8 rounded-full"
-                                title="查看大图"
-                              >
-                                <ZoomIn className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="secondary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveWatermarkPath(sheet.image_path);
-                                  setIsWatermarkModalOpen(true);
-                                }}
-                                className="h-8 w-8 rounded-full text-amber-500 hover:text-amber-600 hover:bg-amber-50"
-                                title="去水印"
-                              >
-                                <Sparkles className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveSheet(sheet.image_path);
-                                }}
-                                className="h-8 w-8 rounded-full"
-                                title="删除设定图"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </ScrollArea>
-                </div>
-              )}
-
               {/* === TAB: CREATIONS (创作) === */}
-              {activeTab === "creations" && (
-                <div className="h-full flex flex-col gap-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">记录该 IP 角色出镜的插图或海报等 AI 作品</span>
-                    <Button
-                      onClick={handleImportCreations}
-                      size="sm"
-                      className="gap-1.5"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      添加本地作品
-                    </Button>
-                  </div>
+              {activeTab === "creations" && (() => {
+                const creations = (detail.ip_images || []).map((img: IpImageWithTags) => {
+                  const tagsList = (img.tags || []).map((t: Tag) => t.name.toLowerCase());
+                  const filename = img.ip_image.filename.toLowerCase();
+                  
+                  const getSheetLabel = (): string | null => {
+                    if (tagsList.includes("三视图") || filename.includes("三视图") || filename.includes("three-view") || filename.includes("threeview") || filename.includes("three view")) {
+                      return "三视图";
+                    }
+                    if (tagsList.includes("正面") || tagsList.includes("正面图") || filename.includes("正面") || filename.includes("front")) {
+                      return "正面图";
+                    }
+                    if (tagsList.includes("侧面") || tagsList.includes("侧面图") || filename.includes("侧面") || filename.includes("side")) {
+                      return "侧面图";
+                    }
+                    if (tagsList.includes("背面") || tagsList.includes("背面图") || filename.includes("背面") || filename.includes("back")) {
+                      return "背面图";
+                    }
+                    if (tagsList.includes("概念") || tagsList.includes("概念图") || tagsList.includes("原画") || tagsList.includes("概念原画") || filename.includes("概念") || filename.includes("原画") || filename.includes("concept")) {
+                      return "概念原画";
+                    }
+                    
+                    const sheetKeywords = ["三视图", "正面", "侧面", "背面", "概念", "原画", "设定", "concept", "three-view", "threeview", "front", "side", "back", "sheet"];
+                    const matchesKeywords = tagsList.some((t: string) => sheetKeywords.some((kw: string) => t.includes(kw))) ||
+                                            sheetKeywords.some((kw: string) => filename.includes(kw));
+                    if (matchesKeywords || tagsList.includes("其他设定") || tagsList.includes("其他") || filename.includes("other") || filename.includes("设定") || filename.includes("sheet")) {
+                      return "其他设定";
+                    }
+                    return null;
+                  };
 
-                  <ScrollArea className="flex-1 border rounded-lg py-4 px-0 bg-card/20">
-                    {detail.creations.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
-                        <Sparkles className="w-10 h-10 opacity-30" />
-                        <span className="text-sm">暂无关联创作，点击右上角“添加本地作品”</span>
+                  const sheetLabel = getSheetLabel();
+                  const isSheet = sheetLabel !== null;
+                  const isAvatar = detail.ip.avatar_path ? (
+                    img.ip_image.absolute_path === detail.ip.avatar_path ||
+                    img.ip_image.absolute_path.replace(/\\/g, "/") === detail.ip.avatar_path.replace(/\\/g, "/")
+                  ) : false;
+
+                  const isEmoji = (detail.emojis || []).some(
+                    (e) =>
+                      e.image_path === img.ip_image.absolute_path ||
+                      e.image_path.replace(/\\/g, "/").toLowerCase() === img.ip_image.absolute_path.replace(/\\/g, "/").toLowerCase()
+                  );
+
+                  return {
+                    id: img.ip_image.id,
+                    name: img.ip_image.status === "archived" ? img.ip_image.filename : (img.ip_image.original_filename || img.ip_image.filename),
+                    path: img.ip_image.absolute_path,
+                    created_at: img.ip_image.imported_at,
+                    status: img.ip_image.status,
+                    isSheet,
+                    sheetLabel,
+                    isAvatar,
+                    isEmoji,
+                    hasWatermark: img.ip_image.has_watermark,
+                    tagNames: (img.tags || []).map((t: Tag) => t.name),
+                  };
+                }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+                // Collect unique tag list and sort by Priority sheet tags first
+                const allTagsSet = new Set<string>();
+                (detail.ip_images || []).forEach((img: IpImageWithTags) => {
+                  (img.tags || []).forEach((t: Tag) => {
+                    allTagsSet.add(t.name);
+                  });
+                });
+                const allUniqueTags = Array.from(allTagsSet);
+
+                const priorityTags = ["三视图", "正面", "正面图", "侧面", "侧面图", "背面", "背面图", "概念原画", "概念图", "原画", "其他设定"];
+                const presentPriorityTags = priorityTags.filter((tag) => 
+                  allUniqueTags.some((ut) => ut.toLowerCase() === tag.toLowerCase())
+                );
+                const otherTags = allUniqueTags.filter((tag) => 
+                  !priorityTags.some((pt) => pt.toLowerCase() === tag.toLowerCase())
+                );
+
+                const filteredCreations = creations.filter((c) => {
+                  if (creationsFilter === "avatar") return c.isAvatar;
+                  if (creationsFilter === "emoji") return c.isEmoji;
+                  if (creationsFilter === "inbox") return c.status !== "archived";
+                  if (creationsFilter === "archived") return c.status === "archived";
+                  if (creationsFilter.startsWith("tag:")) {
+                    const tagToFilter = creationsFilter.substring(4).toLowerCase();
+                    return c.tagNames.some(t => t.toLowerCase() === tagToFilter);
+                  }
+                  return true; // "all"
+                });
+
+                return (
+                  <div className="h-full flex flex-col gap-4">
+                    <div className="flex items-center justify-between flex-wrap gap-4 border-b pb-4">
+                      <div className="flex flex-col gap-1">
+                        <h3 className="text-sm font-semibold">关联创作图片 ({filteredCreations.length} / {creations.length})</h3>
+                        <p className="text-xs text-muted-foreground">此处展示所有关联至当前 IP 形象的图库图片。手动上传图片将自动导入图库并与该 IP 关联。</p>
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                        {detail.creations.map((c, index) => (
-                          <div
-                            key={c.image_path}
-                            className="group relative rounded-lg border overflow-hidden bg-card shadow-sm hover:shadow-md transition-all duration-300 flex flex-col"
+                      <div className="flex items-center gap-3">
+                        {/* 筛选标签下拉选择框 */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground font-medium">筛选分类:</span>
+                          <select
+                            value={creationsFilter}
+                            onChange={(e) => setCreationsFilter(e.target.value)}
+                            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-w-[150px] text-foreground font-medium cursor-pointer"
                           >
-                            <div className="aspect-square w-full bg-muted overflow-hidden relative cursor-pointer">
-                              <img
-                                src={`${convertFileSrc(c.image_path)}?t=${imageTimestamp}`}
-                                alt="作品"
-                                className={`w-full h-full ${showFullImage ? "object-contain bg-background" : "object-cover"}`}
-                                onClick={() => {
-                                  const paths = detail.creations.map(cr => cr.image_path);
-                                  setPreviewImages(paths);
-                                  setPreviewIndex(index);
-                                }}
-                              />
-                              
-                              {/* 悬停操作浮层 */}
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
-                                <Button
-                                  size="icon"
-                                  variant="secondary"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const paths = detail.creations.map(cr => cr.image_path);
-                                    setPreviewImages(paths);
-                                    setPreviewIndex(index);
-                                  }}
-                                  className="h-8 w-8 rounded-full"
-                                  title="查看大图"
-                                >
-                                  <ZoomIn className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="secondary"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveWatermarkPath(c.image_path);
-                                    setIsWatermarkModalOpen(true);
-                                  }}
-                                  className="h-8 w-8 rounded-full text-amber-500 hover:text-amber-600 hover:bg-amber-50"
-                                  title="去水印"
-                                >
-                                  <Sparkles className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="destructive"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRemoveCreation(c.image_path);
-                                  }}
-                                  className="h-8 w-8 rounded-full"
-                                  title="删除作品"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="p-3 flex-1 flex flex-col justify-between gap-1.5">
-                              <div>
-                                <h4 className="font-semibold text-sm truncate">
-                                  {c.creation_name || "未命名插画"}
-                                </h4>
-                              </div>
-
-                              <div className="flex items-center justify-between border-t pt-2 mt-1">
-                                <span className="text-[10px] text-muted-foreground">
-                                  {new Date(c.created_at).toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                            <option value="all">全部图片 ({creations.length})</option>
+                            <option value="avatar">头像图片</option>
+                            <option value="emoji">表情图片 ({creations.filter(c => c.isEmoji).length})</option>
+                            <option value="inbox">待整理 ({creations.filter(c => c.status !== "archived").length})</option>
+                            <option value="archived">已归档 ({creations.filter(c => c.status === "archived").length})</option>
+                            
+                            {presentPriorityTags.length > 0 && (
+                              <optgroup label="设定图相关 (优先)">
+                                {presentPriorityTags.map((tag) => {
+                                  const count = creations.filter(c => c.tagNames.some(t => t.toLowerCase() === tag.toLowerCase())).length;
+                                  return (
+                                    <option key={tag} value={`tag:${tag}`}>{tag} ({count})</option>
+                                  );
+                                })}
+                              </optgroup>
+                            )}
+                            
+                            {otherTags.length > 0 && (
+                              <optgroup label="其他创作标签">
+                                {otherTags.map((tag) => {
+                                  const count = creations.filter(c => c.tagNames.some(t => t.toLowerCase() === tag.toLowerCase())).length;
+                                  return (
+                                    <option key={tag} value={`tag:${tag}`}>{tag} ({count})</option>
+                                  );
+                                })}
+                              </optgroup>
+                            )}
+                          </select>
+                        </div>
+                        <Button
+                          onClick={handleImportCreations}
+                          size="sm"
+                          className="gap-1.5"
+                        >
+                          <PlusCircle className="w-4 h-4" />
+                          添加图片
+                        </Button>
                       </div>
-                    )}
-                  </ScrollArea>
-                </div>
-              )}
+                    </div>
+
+                    <ScrollArea className="flex-1 border rounded-lg py-4 px-4 bg-card/20">
+                      {filteredCreations.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
+                          <Sparkles className="w-10 h-10 opacity-30" />
+                          <span className="text-sm">暂无匹配的关联图片，点击右上角“添加图片”</span>
+                        </div>
+                      ) : (
+                        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 240px))" }}>
+                          {filteredCreations.map((c, index) => {
+                            return (
+                              <div
+                                key={c.id}
+                                className="group relative rounded-lg border overflow-hidden bg-card shadow-sm hover:shadow-md transition-all duration-300 flex flex-col"
+                              >
+                                <div className="aspect-square w-full bg-muted overflow-hidden relative cursor-pointer">
+                                  <img
+                                    src={`${convertFileSrc(c.path)}?t=${imageTimestamp}`}
+                                    alt={c.name}
+                                    className={`w-full h-full ${showFullImage ? "object-contain bg-background" : "object-cover"} transition-transform duration-300 group-hover:scale-102`}
+                                    onClick={() => {
+                                      const paths = filteredCreations.map(cr => cr.path);
+                                      setPreviewImages(paths);
+                                      setPreviewIndex(index);
+                                    }}
+                                  />
+                                  
+                                  {/* 状态标签 */}
+                                  <div className="absolute bottom-2 left-2 flex gap-1 items-center">
+                                    <Badge variant="outline" className={`text-[9px] shadow-sm font-normal px-1 py-0 h-4 border-none ${
+                                      c.status === "archived"
+                                        ? "bg-green-600/85 text-white"
+                                        : "bg-blue-600/85 text-white"
+                                    }`}>
+                                      {c.status === "archived" ? "已归档" : "待整理"}
+                                    </Badge>
+                                    {c.hasWatermark && (
+                                      <Badge variant="destructive" className="text-[9px] shadow-sm font-normal px-1 py-0 h-4 border-none bg-red-600/85 text-white">
+                                        水印
+                                      </Badge>
+                                    )}
+                                    {c.isSheet && c.sheetLabel && (
+                                      <Badge variant="outline" className="text-[9px] shadow-sm font-normal px-1 py-0 h-4 border-none bg-purple-600/85 text-white">
+                                        {c.sheetLabel}
+                                      </Badge>
+                                    )}
+                                    {c.isAvatar && (
+                                      <Badge variant="outline" className="text-[9px] shadow-sm font-normal px-1 py-0 h-4 border-none bg-amber-600/85 text-white">
+                                        头像
+                                      </Badge>
+                                    )}
+                                    {c.isEmoji && (
+                                      <Badge variant="outline" className="text-[9px] shadow-sm font-normal px-1 py-0 h-4 border-none bg-pink-600/85 text-white">
+                                        表情
+                                      </Badge>
+                                    )}
+                                  </div>
+
+                                  {/* 悬停操作浮层 */}
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-1.5">
+                                    <Button
+                                      size="icon"
+                                      variant="secondary"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const contextImages = filteredCreations.map(fc => {
+                                          const matched = detail.ip_images.find(img => img.ip_image.id === fc.id);
+                                          if (matched) {
+                                            return {
+                                              ...matched.ip_image,
+                                              tags: matched.tags,
+                                              ip_name: detail.ip.name,
+                                            } as IpImageWithRelations;
+                                          }
+                                          return null;
+                                        }).filter(Boolean) as IpImageWithRelations[];
+                                        openImageViewer(c.id, contextImages);
+                                      }}
+                                      className="h-8 w-8 rounded-full text-slate-600 hover:text-slate-700 hover:bg-slate-50"
+                                      title="查看"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="secondary"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openQuickEdit(c.id);
+                                      }}
+                                      className="h-8 w-8 rounded-full text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                      title="编辑属性"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    {c.hasWatermark && (
+                                      <Button
+                                        size="icon"
+                                        variant="secondary"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveWatermarkPath(c.path);
+                                          setIsWatermarkModalOpen(true);
+                                        }}
+                                        className="h-8 w-8 rounded-full text-amber-500 hover:text-amber-600 hover:bg-amber-50"
+                                        title="去水印"
+                                      >
+                                        <Sparkles className="w-4 h-4" />
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size="icon"
+                                      variant="secondary"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          const { Command } = await import("@tauri-apps/plugin-shell");
+                                          if (navigator.platform.toLowerCase().includes('win')) {
+                                            await Command.create('explorer', ['/select,', c.path]).execute();
+                                          } else if (navigator.platform.toLowerCase().includes('mac')) {
+                                            await Command.create('open', ['-R', c.path]).execute();
+                                          } else {
+                                            const dirPath = c.path.substring(0, Math.max(c.path.lastIndexOf('/'), c.path.lastIndexOf('\\')));
+                                            await Command.create('xdg-open', [dirPath]).execute();
+                                          }
+                                        } catch (error) {
+                                          console.error("Failed to open folder:", error);
+                                          toast({
+                                            title: "✗ 打开文件夹失败",
+                                            description: String(error),
+                                            variant: "destructive",
+                                          });
+                                        }
+                                      }}
+                                      className="h-8 w-8 rounded-full text-slate-600 hover:text-slate-700 hover:bg-slate-50"
+                                      title="打开文件夹"
+                                    >
+                                      <FolderOpen className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="destructive"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPendingDeleteCreationId(c.id);
+                                      }}
+                                      className="h-8 w-8 rounded-full"
+                                      title="删除关联图片"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                                <div className="p-3 flex-1 flex flex-col justify-between gap-1.5">
+                                  <div>
+                                    <h4 className="font-semibold text-sm truncate" title={c.name}>
+                                      {c.name}
+                                    </h4>
+                                  </div>
+
+                                  <div className="flex items-center justify-between border-t pt-2 mt-1">
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {new Date(c.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                );
+              })()}
 
               {/* === TAB: EMOJIS (表情包) === */}
               {activeTab === "emojis" && (
                 <div className="h-full flex overflow-hidden gap-4">
                   {/* 表情包套件列表 (左小栏) */}
-                  <div className="w-64 border rounded-lg p-4 flex flex-col gap-4 bg-card/20 flex-shrink-0">
-                    <div className="flex items-center justify-between">
+                  <div className="w-64 border-r bg-muted/10 flex flex-col flex-shrink-0">
+                    <div className="flex items-center justify-between p-4 border-b">
                       <h3 className="font-semibold text-sm">表情包分组</h3>
                       <Button
                         size="icon"
@@ -1115,30 +1296,29 @@ export default function IPManagementView() {
                       </Button>
                     </div>
 
-                    <ScrollArea className="flex-1 pr-1 border rounded-md p-1 bg-background/50">
-                      <div className="flex flex-col gap-1">
+                    <ScrollArea className="flex-1">
+                      <div className="p-2 flex flex-col gap-1">
                         {/* 虚拟分类: 全部表情 */}
                         <div
                           onClick={() => setSelectedPackId("__ALL__")}
-                          className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-all duration-150 ${
-                            selectedPackId === "__ALL__" ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent/40 text-xs"
+                          className={`flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer transition-all duration-150 text-sm ${
+                            selectedPackId === "__ALL__" ? "bg-secondary font-medium" : "hover:bg-accent/50"
                           }`}
                         >
-                          <span className="truncate text-xs">全部表情 ({detail.emojis.length})</span>
+                          <span className="truncate text-xs">全部表情</span>
+                          <Badge variant="outline" className="font-normal text-xs px-1.5 py-0 min-w-[20px] h-5 justify-center border-none bg-muted/50 text-muted-foreground">{detail.emojis.length}</Badge>
                         </div>
                         {/* 虚拟分类: 未分组表情 */}
                         <div
                           onClick={() => setSelectedPackId("__UNGROUPED__")}
-                          className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-all duration-150 ${
-                            selectedPackId === "__UNGROUPED__" ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent/40 text-xs"
+                          className={`flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer transition-all duration-150 text-sm ${
+                            selectedPackId === "__UNGROUPED__" ? "bg-secondary font-medium" : "hover:bg-accent/50"
                           }`}
                         >
-                          <span className="truncate text-xs">未分组表情 ({detail.emojis.filter(e => !e.pack_id).length})</span>
+                          <span className="truncate text-xs">未分组表情</span>
+                          <Badge variant="outline" className="font-normal text-xs px-1.5 py-0 min-w-[20px] h-5 justify-center border-none bg-muted/50 text-muted-foreground">{detail.emojis.filter(e => !e.pack_id).length}</Badge>
                         </div>
 
-                        <div className="border-t my-2" />
-
-                        <div className="text-[10px] font-semibold text-muted-foreground px-2 mb-1">表情包套件</div>
 
                         {detail.sticker_packs.length === 0 ? (
                           <div className="text-xs text-muted-foreground text-center py-4">暂无套件，请添加</div>
@@ -1151,8 +1331,8 @@ export default function IPManagementView() {
                                 <div
                                   key={pack.id}
                                   onClick={() => setSelectedPackId(pack.id)}
-                                  className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-all duration-150 group/item ${
-                                    isSelected ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent/40 text-xs"
+                                  className={`flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer transition-all duration-150 group/item text-sm ${
+                                    isSelected ? "bg-secondary font-medium" : "hover:bg-accent/50"
                                   }`}
                                 >
                                   <span className="truncate text-xs">{pack.name} ({packEmojis.length})</span>
@@ -1192,102 +1372,10 @@ export default function IPManagementView() {
                       </div>
                     </ScrollArea>
 
-                    {/* 分布渠道平台 (只有当选中具体套件时才展示) */}
-                    {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && (
-                      <div className="flex flex-col gap-2 mt-auto border-t pt-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <h4 className="text-xs font-semibold text-muted-foreground">发布渠道与规格</h4>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingPlatform(null);
-                              setPlatformName("微信表情开放平台");
-                              setPlatformPackName("");
-                              setPlatformSizeSpec("");
-                              setPlatformStatus("Draft");
-                              setPlatformPublishUrl("");
-                              setIsPlatformModalOpen(true);
-                            }}
-                            className="h-5 w-5 text-primary"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </Button>
-                        </div>
-
-                        <ScrollArea className="max-h-48 border rounded p-2 bg-background/50 text-xs">
-                          {detail.platforms.filter((p) => p.pack_id === selectedPackId).length === 0 ? (
-                            <div className="text-[10px] text-muted-foreground text-center py-4">未发布到任何平台</div>
-                          ) : (
-                            <div className="flex flex-col gap-2">
-                              {detail.platforms
-                                .filter((p) => p.pack_id === selectedPackId)
-                                .map((platform) => (
-                                  <div
-                                    key={platform.id}
-                                    className="p-1.5 rounded border bg-card/60 flex flex-col gap-1 relative group/plat"
-                                  >
-                                    <div className="flex items-center justify-between font-semibold">
-                                      <span>{platform.platform_name}</span>
-                                      <Badge variant="outline" className="text-[8px] px-1 py-0">
-                                        {platform.status}
-                                      </Badge>
-                                    </div>
-                                    {platform.pack_name_on_platform && (
-                                      <p className="text-[10px] text-muted-foreground truncate">
-                                        平台名: {platform.pack_name_on_platform}
-                                      </p>
-                                    )}
-                                    {platform.emoji_size_spec && (
-                                      <p className="text-[10px] text-muted-foreground truncate">
-                                        规格: {platform.emoji_size_spec}
-                                      </p>
-                                    )}
-                                    {platform.publish_url && (
-                                      <a
-                                        href={platform.publish_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-[10px] text-primary hover:underline flex items-center gap-0.5 mt-0.5"
-                                      >
-                                        发布链接 <ExternalLink className="w-2.5 h-2.5" />
-                                      </a>
-                                    )}
-
-                                    {/* 渠道编辑/删除操作 */}
-                                    <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover/plat:opacity-100 bg-background/90 px-1 rounded shadow transition-opacity">
-                                      <button
-                                        onClick={() => {
-                                          setEditingPlatform(platform);
-                                          setPlatformName(platform.platform_name);
-                                          setPlatformPackName(platform.pack_name_on_platform || "");
-                                          setPlatformSizeSpec(platform.emoji_size_spec || "");
-                                          setPlatformStatus(platform.status);
-                                          setPlatformPublishUrl(platform.publish_url || "");
-                                          setIsPlatformModalOpen(true);
-                                        }}
-                                        className="text-[10px] text-muted-foreground hover:text-primary p-0.5"
-                                      >
-                                        编辑
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeletePlatform(platform.id)}
-                                        className="text-[10px] text-muted-foreground hover:text-destructive p-0.5"
-                                      >
-                                        删除
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))}
-                            </div>
-                          )}
-                        </ScrollArea>
-                      </div>
-                    )}
                   </div>
 
-                  {/* 表情包网格 (右侧大网格) */}
-                  <div className="flex-1 border rounded-lg p-4 flex flex-col gap-3 bg-card/20 overflow-hidden">
+                  {/* 表情包网格 (中间大网格) */}
+                  <div className="flex-1 border rounded-lg p-4 flex flex-col gap-3 bg-card/20 overflow-hidden min-w-0">
                     <div className="flex-1 flex flex-col gap-3 overflow-hidden">
                       <div className="flex items-center justify-between">
                         <div>
@@ -1323,7 +1411,7 @@ export default function IPManagementView() {
                             <span className="text-xs">此分组下暂无表情图片，请点击右上角“导入本地表情”</span>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 240px))" }}>
                             {currentEmojis.map((emoji, index) => {
                               const emojiPack = detail.sticker_packs.find(p => p.id === emoji.pack_id);
                               return (
@@ -1342,8 +1430,9 @@ export default function IPManagementView() {
                                         setPreviewIndex(index);
                                       }}
                                     />
-                                    {/* 悬停复制/移动/去水印/删除 overlay */}
+                                    {/* 悬停复制/去水印/查看/编辑/删除 overlay */}
                                     <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                                      {/* 复制 */}
                                       <Button
                                         size="icon"
                                         variant="secondary"
@@ -1356,37 +1445,112 @@ export default function IPManagementView() {
                                       >
                                         <Copy className="w-3.5 h-3.5" />
                                       </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="secondary"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setMovingEmoji(emoji);
-                                        }}
-                                        className="h-7 w-7 rounded-full shadow hover:bg-primary/20 hover:text-primary"
-                                        title="移动/设置分组"
-                                      >
-                                        <Link className="w-3.5 h-3.5" />
-                                      </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="secondary"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setActiveWatermarkPath(emoji.image_path);
-                                          setIsWatermarkModalOpen(true);
-                                        }}
-                                        className="h-7 w-7 rounded-full shadow text-amber-500 hover:text-amber-600 hover:bg-amber-50"
-                                        title="去水印"
-                                      >
-                                        <Sparkles className="w-3.5 h-3.5" />
-                                      </Button>
+                                      {/* 查看 */}
+                                      {(() => {
+                                        const matchedIpImage = detail.ip_images?.find(
+                                          (img) =>
+                                            img.ip_image.absolute_path === emoji.image_path ||
+                                            img.ip_image.absolute_path.replace(/\\/g, "/") === emoji.image_path?.replace(/\\/g, "/")
+                                        );
+                                        return matchedIpImage ? (
+                                          <Button
+                                            size="icon"
+                                            variant="secondary"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const contextImages = currentEmojis.map((ae: IpEmoji) => {
+                                                const matched = detail.ip_images?.find(
+                                                  (img) =>
+                                                    img.ip_image.absolute_path === ae.image_path ||
+                                                    img.ip_image.absolute_path.replace(/\\/g, "/") === ae.image_path?.replace(/\\/g, "/")
+                                                );
+                                                if (matched) {
+                                                  return {
+                                                    ...matched.ip_image,
+                                                    tags: matched.tags,
+                                                    ip_name: detail.ip.name,
+                                                  } as IpImageWithRelations;
+                                                }
+                                                const fallbackName = ae.image_path.split(/[/\\]/).pop() || "emoji";
+                                                return {
+                                                  id: ae.id,
+                                                  filename: fallbackName,
+                                                  original_filename: fallbackName,
+                                                  ip_id: detail.ip.id,
+                                                  relative_path: "",
+                                                  absolute_path: ae.image_path || "",
+                                                  status: "archived" as const,
+                                                  has_watermark: false,
+                                                  watermark_detected: false,
+                                                  watermark_removed: false,
+                                                  created_at: ae.created_at || new Date().toISOString(),
+                                                  imported_at: ae.created_at || new Date().toISOString(),
+                                                  tags: [],
+                                                  ip_name: detail.ip.name,
+                                                } as IpImageWithRelations;
+                                              });
+                                              openImageViewer(matchedIpImage.ip_image.id, contextImages);
+                                            }}
+                                            className="h-7 w-7 rounded-full shadow hover:bg-slate-100 hover:text-slate-600"
+                                            title="查看大图与详情"
+                                          >
+                                            <Eye className="w-3.5 h-3.5" />
+                                          </Button>
+                                        ) : null;
+                                      })()}
+                                      {/* 去水印：仅当对应 ip_image 有水印时显示 */}
+                                      {(() => {
+                                        const matchedIpImage = detail.ip_images?.find(
+                                          (img) =>
+                                            img.ip_image.absolute_path === emoji.image_path ||
+                                            img.ip_image.absolute_path.replace(/\\/g, "/") === emoji.image_path?.replace(/\\/g, "/")
+                                        );
+                                        const showWatermark = matchedIpImage ? matchedIpImage.ip_image.has_watermark : false;
+                                        return showWatermark ? (
+                                          <Button
+                                            size="icon"
+                                            variant="secondary"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setActiveWatermarkPath(emoji.image_path);
+                                              setIsWatermarkModalOpen(true);
+                                            }}
+                                            className="h-7 w-7 rounded-full shadow text-amber-500 hover:text-amber-600 hover:bg-amber-50"
+                                            title="去水印"
+                                          >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                          </Button>
+                                        ) : null;
+                                      })()}
+                                      {/* 编辑 */}
+                                      {(() => {
+                                        const matchedIpImage = detail.ip_images?.find(
+                                          (img) =>
+                                            img.ip_image.absolute_path === emoji.image_path ||
+                                            img.ip_image.absolute_path.replace(/\\/g, "/") === emoji.image_path?.replace(/\\/g, "/")
+                                        );
+                                        return matchedIpImage ? (
+                                          <Button
+                                            size="icon"
+                                            variant="secondary"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openQuickEdit(matchedIpImage.ip_image.id);
+                                            }}
+                                            className="h-7 w-7 rounded-full shadow hover:bg-blue-100 hover:text-blue-600"
+                                            title="编辑图片属性"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </Button>
+                                        ) : null;
+                                      })()}
+                                      {/* 删除 */}
                                       <Button
                                         size="icon"
                                         variant="destructive"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          handleDeleteEmoji(emoji.id);
+                                          setPendingDeleteEmojiId(emoji.id);
                                         }}
                                         className="h-7 w-7 rounded-full shadow"
                                         title="彻底物理删除"
@@ -1481,8 +1645,125 @@ export default function IPManagementView() {
                     </Dialog>
 
                   </div>
+
+                  {/* 发布渠道与规格 (右侧面板，仅当选中具体套件时显示) */}
+                  {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && (
+                    <div className="w-56 border rounded-lg p-4 flex flex-col gap-3 bg-card/20 flex-shrink-0 overflow-hidden">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-semibold text-muted-foreground">发布渠道与规格</h4>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingPlatform(null);
+                            setPlatformName("微信表情开放平台");
+                            setPlatformPackName("");
+                            setPlatformSizeSpec("");
+                            setPlatformStatus("Draft");
+                            setPlatformPublishUrl("");
+                            setIsPlatformModalOpen(true);
+                          }}
+                          className="h-6 w-6 text-primary"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+
+                      <ScrollArea className="flex-1">
+                        {detail.platforms.filter((p) => p.pack_id === selectedPackId).length === 0 ? (
+                          <div className="text-[10px] text-muted-foreground text-center py-8">未发布到任何平台</div>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {detail.platforms
+                              .filter((p) => p.pack_id === selectedPackId)
+                              .map((platform) => (
+                                <div
+                                  key={platform.id}
+                                  className="p-2 rounded-md border bg-card/60 flex flex-col gap-1.5 relative group/plat"
+                                >
+                                  <div className="flex items-center justify-between font-semibold text-xs">
+                                    <span className="truncate">{platform.platform_name}</span>
+                                    <Badge variant="outline" className="text-[8px] px-1 py-0 flex-shrink-0">
+                                      {platform.status}
+                                    </Badge>
+                                  </div>
+                                  {platform.pack_name_on_platform && (
+                                    <p className="text-[10px] text-muted-foreground truncate">
+                                      平台名: {platform.pack_name_on_platform}
+                                    </p>
+                                  )}
+                                  {platform.emoji_size_spec && (
+                                    <p className="text-[10px] text-muted-foreground truncate">
+                                      规格: {platform.emoji_size_spec}
+                                    </p>
+                                  )}
+                                  {platform.publish_url && (
+                                    <a
+                                      href={platform.publish_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[10px] text-primary hover:underline flex items-center gap-0.5 mt-0.5"
+                                    >
+                                      发布链接 <ExternalLink className="w-2.5 h-2.5" />
+                                    </a>
+                                  )}
+
+                                  {/* 渠道编辑/删除操作 */}
+                                  <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover/plat:opacity-100 bg-background/90 px-1 rounded shadow transition-opacity">
+                                    <button
+                                      onClick={() => {
+                                        setEditingPlatform(platform);
+                                        setPlatformName(platform.platform_name);
+                                        setPlatformPackName(platform.pack_name_on_platform || "");
+                                        setPlatformSizeSpec(platform.emoji_size_spec || "");
+                                        setPlatformStatus(platform.status);
+                                        setPlatformPublishUrl(platform.publish_url || "");
+                                        setIsPlatformModalOpen(true);
+                                      }}
+                                      className="text-[10px] text-muted-foreground hover:text-primary p-0.5"
+                                    >
+                                      编辑
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeletePlatform(platform.id)}
+                                      className="text-[10px] text-muted-foreground hover:text-destructive p-0.5"
+                                    >
+                                      删除
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* 删除资产图片二次确认弹框 */}
+              <ConfirmDialog
+                open={pendingDeleteCreationId !== null}
+                title="确认删除图片"
+                description="确定要永久删除这张图片吗？这会从磁盘上物理删除该文件并清空所有标签关系，无法恢复！"
+                confirmText="确认删除"
+                cancelText="取消"
+                variant="destructive"
+                onConfirm={() => pendingDeleteCreationId && void executeDeleteCreation(pendingDeleteCreationId)}
+                onCancel={() => setPendingDeleteCreationId(null)}
+              />
+
+              {/* 删除表情二次确认弹框 */}
+              <ConfirmDialog
+                open={pendingDeleteEmojiId !== null}
+                title="确认删除表情"
+                description="确定要彻底删除该表情吗？这会将其从所有分组套件中移除，并物理删除该表情文件，无法恢复！"
+                confirmText="确认删除"
+                cancelText="取消"
+                variant="destructive"
+                onConfirm={() => pendingDeleteEmojiId && void executeDeleteEmoji(pendingDeleteEmojiId)}
+                onCancel={() => setPendingDeleteEmojiId(null)}
+              />
 
               {/* === TAB: RELATIONS (关系链) === */}
               {activeTab === "relations" && (
@@ -1863,15 +2144,26 @@ export default function IPManagementView() {
           hideClose
         >
           <div className="absolute top-4 right-4 flex items-center gap-2 z-50">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10 rounded-full flex items-center justify-center"
-              onClick={() => setIsWatermarkModalOpen(true)}
-              title="去水印"
-            >
-              <Sparkles className="w-4 h-4" />
-            </Button>
+            {(() => {
+              const currentImagePath = previewImages[previewIndex];
+              const currentIpImage = detail?.ip_images?.find(
+                (img) =>
+                  img.ip_image.absolute_path === currentImagePath ||
+                  img.ip_image.absolute_path.replace(/\\/g, "/") === currentImagePath?.replace(/\\/g, "/")
+              );
+              const showWatermarkIcon = currentIpImage ? currentIpImage.ip_image.has_watermark : true;
+              return showWatermarkIcon ? (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10 rounded-full flex items-center justify-center"
+                  onClick={() => setIsWatermarkModalOpen(true)}
+                  title="去水印"
+                >
+                  <Sparkles className="w-4 h-4" />
+                </Button>
+              ) : null;
+            })()}
             <Button
               size="icon"
               variant="ghost"
@@ -1982,6 +2274,75 @@ export default function IPManagementView() {
             >
               取消
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* IP 删除二次确认弹窗 */}
+      <Dialog open={deleteIpId !== null} onOpenChange={(open) => !open && setDeleteIpId(null)}>
+        <DialogContent className="max-w-md bg-card border shadow-lg rounded-xl overflow-hidden p-0 animate-in zoom-in-95 duration-200">
+          <div className="p-6 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-full text-red-600 dark:text-red-400 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <DialogTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                  确定要删除 IP 形象吗？
+                </DialogTitle>
+                <div className="text-sm text-muted-foreground leading-relaxed">
+                  你正在删除 IP 形象 <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">“{deleteIpName}”</span>。
+                  {deleteIpAssetCount > 0 ? (
+                    <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg text-amber-800 dark:text-amber-300 space-y-1">
+                      <p className="font-semibold flex items-center gap-1">
+                        ⚠️ 警告：检测到该形象下含有 {deleteIpAssetCount} 张图片资产！
+                      </p>
+                      <p className="text-xs leading-normal text-amber-700 dark:text-amber-400/90 font-normal">
+                        你可以选择彻底抹除所有图片，或保留全部图片并移回“待整理（Inbox）”供后续重新归档。
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-1.5">此操作将永久清除该形象的基本设定与关联链接。</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="bg-muted/30 px-6 py-4 border-t flex flex-col sm:flex-row gap-2 shrink-0 sm:justify-end">
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteIpId(null)}
+              className="w-full sm:w-auto"
+            >
+              取消
+            </Button>
+            {deleteIpAssetCount > 0 ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => executeDeleteIp(true)}
+                  className="w-full sm:w-auto text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200 font-medium"
+                >
+                  移至待整理并保留图片
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => executeDeleteIp(false)}
+                  className="w-full sm:w-auto"
+                >
+                  彻底删除图片与 IP
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="destructive"
+                onClick={() => executeDeleteIp(false)}
+                className="w-full sm:w-auto"
+              >
+                确定删除
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

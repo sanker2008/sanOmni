@@ -549,16 +549,16 @@ pub async fn scan_ip_archived_directory(
             .to_string();
 
         // 优先按 path 字段匹配，其次按 name 匹配
-        let ip_row: Option<(String, String)> = conn
+        let resolved_ip_id: Option<String> = conn
             .query_row(
-                "SELECT id, name FROM ip_assets WHERE path = ? OR name = ? LIMIT 1",
+                "SELECT id FROM ip_assets WHERE path = ? OR name = ? LIMIT 1",
                 rusqlite::params![dir_name, dir_name],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| row.get(0),
             )
             .ok();
 
-        let (resolved_ip_id, ip_name) = match ip_row {
-            Some((id, name)) => (id, name),
+        let resolved_ip_id = match resolved_ip_id {
+            Some(id) => id,
             None => {
                 // IP 不存在则自动创建，path 和 name 都用目录名
                 let new_id = format!("ip_{}", &Uuid::new_v4().to_string().replace("-", "")[..12]);
@@ -567,7 +567,7 @@ pub async fn scan_ip_archived_directory(
                     "INSERT INTO ip_assets (id, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
                     rusqlite::params![new_id, dir_name, dir_name, now, now],
                 ) {
-                    Ok(_) => (new_id, dir_name.clone()),
+                    Ok(_) => new_id,
                     Err(e) => {
                         result.failed_count += 1;
                         result.errors.push(format!("创建 IP {} 失败: {}", dir_name, e));
@@ -617,7 +617,7 @@ pub async fn scan_ip_archived_directory(
             global_index += 1;
 
             let new_stem = template
-                .replace("{ip}", &ip_name)
+                .replace("{ip}", &dir_name)
                 .replace("{date}", &date_str)
                 .replace("{index}", &format!("{:03}", global_index));
             let new_filename = format!("{}.{}", new_stem, ext);

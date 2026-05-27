@@ -39,14 +39,42 @@ export default function ImageViewer() {
     activeTab,
     promptTab,
     ipTab,
+    customViewerImages,
   } = useUIStore();
 
-  // Get current image list based on active tab and sub-tab
-  const currentImages = activeTab === "prompt" 
-    ? (promptTab === "inbox" ? promptInbox : promptArchived)
-    : (ipTab === "inbox" ? ipInbox : ipArchived);
-  const currentIndex = currentImages.findIndex((img) => img.id === viewingImageId);
-  const image = currentImages[currentIndex] as ImageWithRelations | IpImageWithRelations | undefined;
+  // Get current image list based on custom context, active tab, or search fallback
+  let currentImages: (ImageWithRelations | IpImageWithRelations)[] = [];
+  let currentIndex = -1;
+
+  if (customViewerImages && customViewerImages.length > 0) {
+    currentImages = customViewerImages;
+    currentIndex = currentImages.findIndex((img) => img.id === viewingImageId);
+  }
+
+  if (currentIndex === -1) {
+    const defaultList = activeTab === "prompt" 
+      ? (promptTab === "inbox" ? promptInbox : promptArchived)
+      : (ipTab === "inbox" ? ipInbox : ipArchived);
+    const idx = defaultList.findIndex((img) => img.id === viewingImageId);
+    if (idx !== -1) {
+      currentImages = defaultList;
+      currentIndex = idx;
+    }
+  }
+
+  if (currentIndex === -1 && viewingImageId) {
+    const allLists = [promptInbox, promptArchived, ipInbox, ipArchived];
+    for (const list of allLists) {
+      const idx = list.findIndex((img) => img.id === viewingImageId);
+      if (idx !== -1) {
+        currentImages = list;
+        currentIndex = idx;
+        break;
+      }
+    }
+  }
+
+  const image = currentIndex !== -1 ? currentImages[currentIndex] : undefined;
   const isIpImage = (img: ImageWithRelations | IpImageWithRelations): img is IpImageWithRelations =>
     !("models" in img);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);

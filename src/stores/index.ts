@@ -120,6 +120,33 @@ export interface IpRelation {
   ip_b_avatar_path?: string;
 }
 
+export interface IpImage {
+  id: string;
+  filename: string;
+  original_filename: string;
+  ip_id: string;
+  relative_path: string;
+  absolute_path: string;
+  status: "inbox" | "tagged" | "archived";
+  file_size?: number;
+  width?: number;
+  height?: number;
+  file_hash?: string;
+  format?: string;
+  has_watermark: boolean;
+  watermark_platform?: string;
+  watermark_detected: boolean;
+  watermark_removed: boolean;
+  created_at: string;
+  imported_at: string;
+  archived_at?: string;
+}
+
+export interface IpImageWithTags {
+  ip_image: IpImage;
+  tags: Tag[];
+}
+
 export interface IpAssetDetail {
   ip: IpAsset;
   character_sheets: IpCharacterSheet[];
@@ -128,6 +155,7 @@ export interface IpAssetDetail {
   emojis: IpEmoji[];
   platforms: IpStickerPackPlatform[];
   relations: IpRelation[];
+  ip_images: IpImageWithTags[];
 }
 
 
@@ -495,6 +523,7 @@ interface UIStore {
   editingImageId: string | null;
   isImageViewerOpen: boolean;
   viewingImageId: string | null;
+  customViewerImages: (ImageWithRelations | IpImageWithRelations)[] | null;
   settingsOpen: boolean;
   settingsTab: string;
   settings: Record<string, any>;
@@ -511,7 +540,7 @@ interface UIStore {
   setTagFilter: (tagId: string | null) => void;
   openQuickEdit: (imageId: string) => void;
   closeQuickEdit: () => void;
-  openImageViewer: (imageId: string) => void;
+  openImageViewer: (imageId: string, customImages?: (ImageWithRelations | IpImageWithRelations)[]) => void;
   closeImageViewer: () => void;
   setViewingImageId: (imageId: string) => void;
   openSettings: () => void;
@@ -535,6 +564,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   editingImageId: null,
   isImageViewerOpen: false,
   viewingImageId: null,
+  customViewerImages: null,
   settingsOpen: false,
   settingsTab: "general",
   settings: loadSettings(),
@@ -563,8 +593,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setTagFilter: (tagId) => set({ selectedTagFilter: tagId }),
   openQuickEdit: (imageId) => set({ isQuickEditOpen: true, editingImageId: imageId }),
   closeQuickEdit: () => set({ isQuickEditOpen: false, editingImageId: null }),
-  openImageViewer: (imageId) => set({ isImageViewerOpen: true, viewingImageId: imageId }),
-  closeImageViewer: () => set({ isImageViewerOpen: false, viewingImageId: null }),
+  openImageViewer: (imageId, customImages) => set({ isImageViewerOpen: true, viewingImageId: imageId, customViewerImages: customImages || null }),
+  closeImageViewer: () => set({ isImageViewerOpen: false, viewingImageId: null, customViewerImages: null }),
   setViewingImageId: (imageId) => set({ viewingImageId: imageId }),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),

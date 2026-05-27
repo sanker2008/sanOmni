@@ -84,3 +84,164 @@ pub fn reset_database(db_path: String) -> CommandResult<bool> {
         Err(e) => CommandResult::err(format!("Failed to reset database: {}", e)),
     }
 }
+
+#[tauri::command]
+pub fn reset_general_settings(db_path: String) -> CommandResult<bool> {
+    let conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+
+    match conn.execute("DELETE FROM settings", []) {
+        Ok(_) => CommandResult::ok(true),
+        Err(e) => CommandResult::err(format!("重置设置失败: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub fn reset_prompt_data(db_path: String, delete_files: bool) -> CommandResult<bool> {
+    let conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+
+    if delete_files {
+        // 1. 获取自定义目录设置
+        let custom_inbox: Option<String> = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'customInboxPath'",
+            [],
+            |row| row.get(0),
+        ).ok();
+
+        let custom_archived: Option<String> = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'customArchivedPath'",
+            [],
+            |row| row.get(0),
+        ).ok();
+
+        let db_path_buf = std::path::Path::new(&db_path);
+        if let Some(app_data_dir) = db_path_buf.parent().and_then(|p| p.parent()) {
+            let inbox_dir = if let Some(ref path_str) = custom_inbox {
+                if !path_str.trim().is_empty() {
+                    std::path::Path::new(path_str).to_path_buf()
+                } else {
+                    app_data_dir.join("inbox")
+                }
+            } else {
+                app_data_dir.join("inbox")
+            };
+
+            let archived_dir = if let Some(ref path_str) = custom_archived {
+                if !path_str.trim().is_empty() {
+                    std::path::Path::new(path_str).to_path_buf()
+                } else {
+                    app_data_dir.join("archived")
+                }
+            } else {
+                app_data_dir.join("archived")
+            };
+
+            // 彻底删除这两个文件夹
+            if inbox_dir.exists() {
+                let _ = std::fs::remove_dir_all(inbox_dir);
+            }
+            if archived_dir.exists() {
+                let _ = std::fs::remove_dir_all(archived_dir);
+            }
+        }
+    }
+
+    // 2. 清理数据库记录
+    let queries = [
+        "DELETE FROM image_model_relations",
+        "DELETE FROM image_tag_relations",
+        "DELETE FROM processing_history",
+        "DELETE FROM image_prompt_group_relations",
+        "DELETE FROM prompt_groups",
+        "DELETE FROM images",
+    ];
+
+    for query in &queries {
+        if let Err(e) = conn.execute(query, []) {
+            return CommandResult::err(format!("清理数据库失败 ({}): {}", query, e));
+        }
+    }
+
+    CommandResult::ok(true)
+}
+
+#[tauri::command]
+pub fn reset_ip_data(db_path: String, delete_files: bool) -> CommandResult<bool> {
+    let conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+
+    if delete_files {
+        // 1. 获取自定义目录设置
+        let custom_inbox: Option<String> = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'customIpInboxPath'",
+            [],
+            |row| row.get(0),
+        ).ok();
+
+        let custom_archived: Option<String> = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+            [],
+            |row| row.get(0),
+        ).ok();
+
+        let db_path_buf = std::path::Path::new(&db_path);
+        if let Some(app_data_dir) = db_path_buf.parent().and_then(|p| p.parent()) {
+            let inbox_dir = if let Some(ref path_str) = custom_inbox {
+                if !path_str.trim().is_empty() {
+                    std::path::Path::new(path_str).to_path_buf()
+                } else {
+                    app_data_dir.join("ip_inbox")
+                }
+            } else {
+                app_data_dir.join("ip_inbox")
+            };
+
+            let archived_dir = if let Some(ref path_str) = custom_archived {
+                if !path_str.trim().is_empty() {
+                    std::path::Path::new(path_str).to_path_buf()
+                } else {
+                    app_data_dir.join("ip_archived")
+                }
+            } else {
+                app_data_dir.join("ip_archived")
+            };
+
+            // 彻底删除这两个文件夹
+            if inbox_dir.exists() {
+                let _ = std::fs::remove_dir_all(inbox_dir);
+            }
+            if archived_dir.exists() {
+                let _ = std::fs::remove_dir_all(archived_dir);
+            }
+        }
+    }
+
+    // 2. 清理数据库记录 (保留系统默认未知形象 'unknown')
+    let queries = [
+        "DELETE FROM ip_creations",
+        "DELETE FROM ip_character_sheets",
+        "DELETE FROM ip_emojis",
+        "DELETE FROM ip_sticker_pack_platforms",
+        "DELETE FROM ip_sticker_packs",
+        "DELETE FROM ip_relations",
+        "DELETE FROM ip_image_tag_relations",
+        "DELETE FROM ip_image_relations",
+        "DELETE FROM ip_images",
+        "DELETE FROM ip_assets WHERE id != 'unknown'",
+    ];
+
+    for query in &queries {
+        if let Err(e) = conn.execute(query, []) {
+            return CommandResult::err(format!("清理数据库失败 ({}): {}", query, e));
+        }
+    }
+
+    CommandResult::ok(true)
+}

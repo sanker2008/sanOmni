@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useIpImageStore, useUIStore, useVendorStore } from "@/stores";
-import type { PromptGroup, IpAsset } from "@/stores";
-import { imageApi, ipImageApi, promptApi } from "@/services/tauri";
+import type { PromptGroup, IpAsset, IpStickerPack } from "@/stores";
+import { imageApi, ipImageApi, promptApi, ipApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -70,8 +71,20 @@ export default function QuickEditModal() {
   const [isAddingNewPrompt, setIsAddingNewPrompt] = useState(false);
   const [isAddPromptOpen, setIsAddPromptOpen] = useState(false);
   
+  const [isAddIpOpen, setIsAddIpOpen] = useState(false);
+  const [newIpName, setNewIpName] = useState("");
+  const [newIpPath, setNewIpPath] = useState("");
+  const [newIpInspiration, setNewIpInspiration] = useState("");
+  const [newIpDescription, setNewIpDescription] = useState("");
+  const [isAddingNewIp, setIsAddingNewIp] = useState(false);
+  
   const [editPromptTab, setEditPromptTab] = useState<"base" | "template">("base");
   const [addPromptTab, setAddPromptTab] = useState<"base" | "template">("base");
+
+  const [setAsAvatar, setSetAsAvatar] = useState(false);
+  const [associateStickerPack, setAssociateStickerPack] = useState(false);
+  const [stickerPackId, setStickerPackId] = useState<string>("");
+  const [availableStickerPacks, setAvailableStickerPacks] = useState<IpStickerPack[]>([]);
 
   const isIpImage = ipInboxImages.some(img => img.id === editingImageId) || ipArchivedImages.some(img => img.id === editingImageId);
   const promptImage =
@@ -81,6 +94,33 @@ export default function QuickEditModal() {
     ipInboxImages.find((img) => img.id === editingImageId) ||
     ipArchivedImages.find((img) => img.id === editingImageId);
   const image = promptImage || ipImage;
+
+  // 当图片不在前端已有的 store 缓存中时（例如在 IP 管理资产库直接点击编辑卡片），预加载数据库图片到 store 中
+  useEffect(() => {
+    if (!isQuickEditOpen || !editingImageId) return;
+
+    const hasPromptImg = inboxImages.some(img => img.id === editingImageId) || archivedImages.some(img => img.id === editingImageId);
+    const hasIpImg = ipInboxImages.some(img => img.id === editingImageId) || ipArchivedImages.some(img => img.id === editingImageId);
+
+    if (!hasPromptImg && !hasIpImg) {
+      void (async () => {
+        try {
+          const [pi, pa, ii, ia] = await Promise.all([
+            imageApi.getInboxImages().catch(() => []),
+            imageApi.getArchivedImages().catch(() => []),
+            ipImageApi.getInboxImages().catch(() => []),
+            ipImageApi.getArchivedImages().catch(() => []),
+          ]);
+          useImageStore.getState().setInboxImages(pi);
+          useImageStore.getState().setArchivedImages(pa);
+          useIpImageStore.getState().setInboxImages(ii);
+          useIpImageStore.getState().setArchivedImages(ia);
+        } catch (error) {
+          console.error("QuickEditModal 自动拉取全量图片库失败:", error);
+        }
+      })();
+    }
+  }, [isQuickEditOpen, editingImageId]);
 
   useEffect(() => {
     if (!image) {
@@ -108,6 +148,10 @@ export default function QuickEditModal() {
     setEditTemplateSchema("");
     setSearchPromptQuery("");
     setIsAddPromptOpen(false);
+    setSetAsAvatar(false);
+    setAssociateStickerPack(false);
+    setStickerPackId("");
+    setAvailableStickerPacks([]);
 
     let cancelled = false;
     void (async () => {
@@ -137,6 +181,52 @@ export default function QuickEditModal() {
     };
   }, [image]);
 
+  useEffect(() => {
+    if (isIpImage && primaryIpId && primaryIpId !== "unknown" && image) {
+      let cancelled = false;
+      ipApi.getDetail(primaryIpId).then((detail) => {
+        if (!cancelled) {
+          const packs = detail.sticker_packs || [];
+          setAvailableStickerPacks(packs);
+          
+          // Helper for path normalization comparison
+          const isSamePath = (p1?: string, p2?: string) => {
+            if (!p1 || !p2) return false;
+            return p1.replace(/\\/g, "/").toLowerCase() === p2.replace(/\\/g, "/").toLowerCase();
+          };
+
+          // 1. Check if it's already the IP avatar
+          const isAvatar = isSamePath(image.absolute_path, detail.ip.avatar_path);
+          setSetAsAvatar(isAvatar);
+
+          // 2. Check if it's already an emoji
+          const associatedEmoji = detail.emojis?.find(e => isSamePath(image.absolute_path, e.image_path));
+          if (associatedEmoji) {
+            setAssociateStickerPack(true);
+            setStickerPackId(associatedEmoji.pack_id || "ungrouped");
+          } else {
+            setAssociateStickerPack(false);
+            if (packs.length > 0) {
+              setStickerPackId(packs[0].id);
+            } else {
+              setStickerPackId("ungrouped");
+            }
+          }
+        }
+      }).catch((err) => {
+        console.error("加载 IP 详情及表情包套件失败:", err);
+      });
+      return () => {
+        cancelled = true;
+      };
+    } else {
+      setAvailableStickerPacks([]);
+      setStickerPackId("");
+      setSetAsAvatar(false);
+      setAssociateStickerPack(false);
+    }
+  }, [primaryIpId, isIpImage, image]);
+
   const persistChanges = async (archiveAfterSave: boolean) => {
     if (!image) return;
 
@@ -146,16 +236,19 @@ export default function QuickEditModal() {
       // IP 图片：使用 ipImageApi.update
       const settings = useUIStore.getState().settings;
       const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+
       const updatedIp = await ipImageApi.update({
         ip_image_id: image.id,
         ip_ids: selectedIpIds.length > 0 ? selectedIpIds : [ipImage.ip_id],
         primary_ip_id: primaryIpId || selectedIpIds[0] || ipImage.ip_id,
-        tags,
+        tags: tags,
         has_watermark: hasWatermark,
         watermark_platform: watermarkPlatform || undefined,
         naming_template: namingTemplate,
+        associate_sticker_pack_id: associateStickerPack ? (stickerPackId || "ungrouped") : undefined,
       });
-      updateIpImage(image.id, updatedIp);
+
+      let finalAvatarPath = updatedIp.absolute_path;
 
       if (archiveAfterSave) {
         const settings = useUIStore.getState().settings;
@@ -166,8 +259,59 @@ export default function QuickEditModal() {
         const result = await ipImageApi.archive([image.id], libraryPath, namingTemplate);
         if (result.success_count > 0) {
           removeIpImage(image.id);
+          
+          // Load the newly updated path of the archived image
+          try {
+            const archived = await ipImageApi.getArchivedImages();
+            const archivedImage = archived.find(x => x.id === image.id);
+            if (archivedImage) {
+              finalAvatarPath = archivedImage.absolute_path;
+            }
+          } catch (e) {
+            console.error("加载归档后的绝对路径失败:", e);
+          }
         }
       }
+
+      // Apply associated quick actions (avatar)
+      if (primaryIpId && primaryIpId !== "unknown") {
+        // 1. Set as avatar
+        if (setAsAvatar) {
+          try {
+            const ipDetail = await ipApi.getDetail(primaryIpId);
+            if (ipDetail && ipDetail.ip) {
+              await ipApi.update(
+                primaryIpId,
+                ipDetail.ip.name,
+                ipDetail.ip.path,
+                ipDetail.ip.inspiration || undefined,
+                ipDetail.ip.description || undefined,
+                finalAvatarPath
+              );
+              toast({
+                title: "✓ 已成功设置为 IP 头像",
+              });
+            }
+          } catch (err) {
+            console.error("设置 IP 头像失败:", err);
+            toast({
+              title: "✗ 设置 IP 头像失败",
+              description: String(err),
+              variant: "destructive",
+            });
+          }
+        }
+
+
+        // 3. Associate with emoji pack
+        if (associateStickerPack && stickerPackId) {
+          toast({
+            title: "✓ 已移动并分配至表情包分组",
+          });
+        }
+      }
+
+      updateIpImage(image.id, updatedIp);
     } else if (promptImage) {
       // Prompt 图片：使用 imageApi.update
       const updated = await imageApi.update({
@@ -238,6 +382,14 @@ export default function QuickEditModal() {
 
   const handleRemoveTag = (tag: string) => {
     setTags(tags.filter((t) => t !== tag));
+  };
+
+  const handleToggleTag = (tag: string) => {
+    if (tags.includes(tag)) {
+      setTags(tags.filter((t) => t !== tag));
+    } else {
+      setTags([...tags, tag]);
+    }
   };
 
   const toggleModel = (modelId: string) => {
@@ -514,6 +666,56 @@ export default function QuickEditModal() {
       });
     } finally {
       setIsAddingNewPrompt(false);
+    }
+  };
+
+  const handleAddNewIp = async () => {
+    if (!newIpName.trim()) return;
+    setIsAddingNewIp(true);
+    try {
+      const finalPath = newIpPath.trim() || newIpName.trim().toLowerCase().replace(/\s+/g, "-");
+      const created = await ipApi.create(
+        newIpName.trim(),
+        finalPath,
+        newIpInspiration.trim() || undefined,
+        newIpDescription.trim() || undefined,
+        undefined
+      );
+      
+      // Update available IPs list
+      const ips = await ipApi.getAll();
+      setAvailableIps(ips);
+      
+      // Auto-select/associate the newly created IP
+      setSelectedIpIds((prev) => {
+        const next = prev.filter(id => id !== "unknown");
+        if (!next.includes(created.id)) {
+          next.push(created.id);
+        }
+        return next;
+      });
+      setPrimaryIpId(created.id);
+
+      // Clear inputs
+      setNewIpName("");
+      setNewIpPath("");
+      setNewIpInspiration("");
+      setNewIpDescription("");
+
+      toast({
+        title: "✓ 创建并关联 IP 形象成功",
+      });
+
+      setIsAddIpOpen(false);
+    } catch (error) {
+      console.error("创建 IP 形象失败:", error);
+      toast({
+        title: "✗ 创建 IP 形象失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingNewIp(false);
     }
   };
 
@@ -1083,7 +1285,87 @@ export default function QuickEditModal() {
                       );
                     })}
                   </div>
+                  {availableIps.filter(x => x.id !== "unknown").length === 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full flex items-center justify-center gap-1.5 py-4 border-dashed text-xs text-muted-foreground hover:text-foreground mt-2"
+                      onClick={() => setIsAddIpOpen(true)}
+                    >
+                      <Plus className="w-4 h-4" />
+                      新增并关联 IP 形象
+                    </Button>
+                  )}
                 </div>
+
+                {primaryIpId && primaryIpId !== "unknown" && image.status === "archived" && (
+                  <div className="mt-4 space-y-4 bg-muted/40 p-4 rounded-lg border border-border/80 animate-in fade-in duration-200">
+                    <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+                      IP 快捷操作设定
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      您可以将此图片快速设置为该主 IP 的头像、设定图或关联到其表情包组。
+                    </p>
+
+                    <div className="space-y-3">
+                      {/* 1. 设置为头像 */}
+                      <div className="flex items-center justify-between p-2 rounded-md hover:bg-muted/60 transition-colors">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium text-foreground">设为 IP 头像</span>
+                          <span className="text-xs text-muted-foreground">将此图片设为当前 IP 形象的头像</span>
+                        </div>
+                        <Switch
+                          checked={setAsAvatar}
+                          onCheckedChange={setSetAsAvatar}
+                        />
+                      </div>
+
+                      <Separator className="opacity-50" />
+
+                      {/* 3. 关联表情包组 */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between p-2 rounded-md hover:bg-muted/60 transition-colors">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm font-medium text-foreground">关联表情包组</span>
+                            <span className="text-xs text-muted-foreground">将此图片作为表情图片添加到表情包分组</span>
+                          </div>
+                          <Switch
+                            checked={associateStickerPack}
+                            onCheckedChange={setAssociateStickerPack}
+                          />
+                        </div>
+
+                        {associateStickerPack && availableStickerPacks.length > 0 && (
+                          <div className="flex items-center gap-2 pl-2 animate-in slide-in-from-top-1 duration-200">
+                            <span className="text-xs text-muted-foreground">选择表情包套件:</span>
+                            <select
+                              value={stickerPackId}
+                              onChange={(e) => setStickerPackId(e.target.value)}
+                              className="h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary max-w-[200px]"
+                            >
+                              <option value="ungrouped">未分组表情</option>
+                              {availableStickerPacks.map((pack) => (
+                                <option key={pack.id} value={pack.id}>
+                                  {pack.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {associateStickerPack && availableStickerPacks.length === 0 && (
+                          <div className="flex items-center gap-2 pl-2 text-[11px] text-muted-foreground animate-in slide-in-from-top-1 duration-200">
+                            <span className="font-semibold px-1.5 py-0.5 rounded bg-muted text-[10px]">
+                              未分组表情
+                            </span>
+                            <span>将作为“未分组表情”保存。您之后可以随时去表情套件中进行归类。</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <Separator />
               </>
@@ -1116,6 +1398,37 @@ export default function QuickEditModal() {
                   <Button variant="outline" size="icon" onClick={handleAddTag}>
                     <Plus className="w-4 h-4" />
                   </Button>
+                </div>
+
+                <div className="pt-1.5">
+                  <div className="text-[11px] font-medium text-muted-foreground mb-1.5">
+                    快速添加设定标签:
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["设定图", "三视图", "正面", "侧面", "背面", "概念原画", "其他设定"].map((presetTag) => {
+                      const isSelected = tags.includes(presetTag);
+                      return (
+                        <button
+                          key={presetTag}
+                          type="button"
+                          onClick={() => handleToggleTag(presetTag)}
+                          className={cn(
+                            "px-2.5 py-1 text-xs rounded-full border transition-all duration-150 flex items-center gap-1 shadow-sm font-medium",
+                            isSelected
+                              ? "bg-primary/10 border-primary/40 text-primary hover:bg-primary/20"
+                              : "bg-background hover:bg-muted border-border/80 text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {isSelected ? (
+                            <Check className="w-3 h-3 text-primary animate-in zoom-in duration-100" />
+                          ) : (
+                            <Plus className="w-3 h-3 text-muted-foreground/60" />
+                          )}
+                          {presetTag}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -1300,6 +1613,79 @@ export default function QuickEditModal() {
           >
             {isAddingNewPrompt && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             确认新增并关联
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={isAddIpOpen} onOpenChange={setIsAddIpOpen}>
+      <DialogContent className="max-w-xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>新增并关联 IP 形象</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4 flex-1 overflow-y-auto min-h-0 pr-2">
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">形象名称 *</label>
+              <Input
+                value={newIpName}
+                onChange={(e) => setNewIpName(e.target.value)}
+                placeholder="形象名称，例如：Sanker"
+                className="bg-background text-foreground"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">存放目录名称 (英文/拼音缩写，自动生成) 可选</label>
+              <Input
+                value={newIpPath}
+                onChange={(e) => setNewIpPath(e.target.value)}
+                placeholder="例如：sanker，如果为空将根据名称自动转换"
+                className="bg-background text-foreground"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">灵感来源 / 背景故事 可选</label>
+              <textarea
+                value={newIpInspiration}
+                onChange={(e) => setNewIpInspiration(e.target.value)}
+                placeholder="描述此形象的灵感由来或背景故事..."
+                className="w-full min-h-[80px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">详细设定描述 可选</label>
+              <textarea
+                value={newIpDescription}
+                onChange={(e) => setNewIpDescription(e.target.value)}
+                placeholder="描述此形象的设定特征、性格等..."
+                className="w-full min-h-[80px] px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setIsAddIpOpen(false);
+              setNewIpName("");
+              setNewIpPath("");
+              setNewIpInspiration("");
+              setNewIpDescription("");
+            }}
+            disabled={isAddingNewIp}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            disabled={!newIpName.trim() || isAddingNewIp}
+            onClick={handleAddNewIp}
+            className="flex items-center gap-1.5"
+          >
+            {isAddingNewIp && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            确认创建并关联
           </Button>
         </DialogFooter>
       </DialogContent>

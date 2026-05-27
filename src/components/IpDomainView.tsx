@@ -42,7 +42,7 @@ export default function IpDomainView() {
       </div>
 
       {/* Main Area */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-hidden relative flex flex-col">
         {ipTab === "inbox" && <IpInboxView />}
         {ipTab === "archived" && <IpArchivedView />}
         {ipTab === "assets" && <IPManagementView />}

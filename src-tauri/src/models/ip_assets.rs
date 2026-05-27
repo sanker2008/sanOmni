@@ -1,4 +1,11 @@
 use serde::{Deserialize, Serialize};
+use super::{IpImage, Tag};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpImageWithTags {
+    pub ip_image: IpImage,
+    pub tags: Vec<Tag>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpAsset {
@@ -85,4 +92,5 @@ pub struct IpAssetDetail {
     pub emojis: Vec<IpEmoji>,
     pub platforms: Vec<IpStickerPackPlatform>,
     pub relations: Vec<IpRelation>,
+    pub ip_images: Vec<IpImageWithTags>,
 }

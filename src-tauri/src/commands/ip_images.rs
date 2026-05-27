@@ -23,6 +23,7 @@ pub struct UpdateIpImageRequest {
     pub has_watermark: Option<bool>,
     pub watermark_platform: Option<String>,
     pub naming_template: Option<String>,
+    pub associate_sticker_pack_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -217,52 +218,69 @@ pub async fn update_ip_image(
         None => return CommandResult::err("IP image not found".to_string()),
     };
 
-    // If the image is already archived and the primary IP has changed, move the physical file and update database paths
-    if current_image.status == "archived" && current_image.ip_id != request.primary_ip_id {
-        // Get library path by removing relative path suffix from absolute path
-        let library_path = if current_image.absolute_path.ends_with(&current_image.relative_path) {
-            let len = current_image.absolute_path.len() - current_image.relative_path.len();
-            current_image.absolute_path[..len].trim_end_matches('/').trim_end_matches('\\').to_string()
+    // Get library path by removing relative path suffix from absolute path
+    let library_path = if current_image.absolute_path.ends_with(&current_image.relative_path) {
+        let len = current_image.absolute_path.len() - current_image.relative_path.len();
+        current_image.absolute_path[..len].trim_end_matches('/').trim_end_matches('\\').to_string()
+    } else {
+        std::path::Path::new(&current_image.absolute_path)
+            .parent() // old_ip_path dir
+            .and_then(|p| p.parent()) // ip_archived dir
+            .and_then(|p| p.parent()) // library_path dir
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default()
+    };
+
+    let new_ip_path = fetch_ip_path(&conn, &request.primary_ip_id).unwrap_or_else(|| "unknown".to_string());
+
+    // 检测当前文件名是否不合规（包含大写、空格、非 [a-z0-9_-] 的特殊字符）
+    let current_filename_stem = std::path::Path::new(&current_image.filename)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    let is_filename_invalid = current_filename_stem.chars().any(|c| {
+        c.is_uppercase() || c.is_whitespace() || (!c.is_ascii_alphanumeric() && c != '-' && c != '_')
+    });
+
+    // 检测当前图片的相对路径目录是否与最新的 IP path 标识不匹配（例如 IP 的 path 从 Da da 变为了 da-da）
+    let expected_dir_prefix = format!("ip_archived/{}", new_ip_path);
+    let normalized_relative_path = current_image.relative_path.replace("\\", "/");
+    let is_path_mismatched = !normalized_relative_path.starts_with(&expected_dir_prefix);
+
+    let is_ip_changed = current_image.ip_id != request.primary_ip_id;
+    let need_rename = current_image.status == "archived" && (is_ip_changed || is_filename_invalid || is_path_mismatched);
+
+    if need_rename && !library_path.is_empty() {
+        let target_dir = std::path::PathBuf::from(&library_path).join("ip_archived").join(&new_ip_path);
+
+        let default_template = "{ip}-{date}-{index}".to_string();
+        let template = request.naming_template.clone().unwrap_or(default_template);
+
+        let ext = std::path::Path::new(&current_image.filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png");
+
+        let date = if current_image.created_at.len() >= 10 {
+            &current_image.created_at[..10]
         } else {
-            std::path::Path::new(&current_image.absolute_path)
-                .parent() // old_ip_path dir
-                .and_then(|p| p.parent()) // ip_archived dir
-                .and_then(|p| p.parent()) // library_path dir
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default()
+            "unknown"
         };
 
-        if !library_path.is_empty() {
-            let new_ip_path = fetch_ip_path(&conn, &request.primary_ip_id).unwrap_or_else(|| "unknown".to_string());
-            let target_dir = std::path::PathBuf::from(&library_path).join("ip_archived").join(&new_ip_path);
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM ip_images WHERE ip_id = ? AND status = 'archived'",
+            [&request.primary_ip_id],
+            |row| row.get(0),
+        ).unwrap_or(0);
 
-            let default_template = "{ip}-{date}-{index}".to_string();
-            let template = request.naming_template.clone().unwrap_or(default_template);
+        // 如果是本 IP 内部重命名且当前数据库中有记录，尽量排除本记录，避免 index 偏大
+        let index = if !is_ip_changed && count > 0 { count } else { count + 1 };
 
-            let ext = std::path::Path::new(&current_image.filename)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("png");
-
-            let ip_name = fetch_ip_name(&conn, &request.primary_ip_id).unwrap_or_else(|| "Unknown".to_string());
-            let date = if current_image.created_at.len() >= 10 {
-                &current_image.created_at[..10]
-            } else {
-                "unknown"
-            };
-
-            let count: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM ip_images WHERE ip_id = ? AND status = 'archived'",
-                [&request.primary_ip_id],
-                |row| row.get(0),
-            ).unwrap_or(0);
-            let index = count + 1;
-
-            let filename_candidate = template
-                .replace("{ip}", &ip_name)
-                .replace("{date}", date)
-                .replace("{index}", &format!("{:03}", index))
-                .replace("{original}", &current_image.original_filename);
+        let filename_candidate = template
+            .replace("{ip}", &new_ip_path)
+            .replace("{date}", date)
+            .replace("{index}", &format!("{:03}", index))
+            .replace("{original}", &current_image.original_filename);
 
             let mut path_file = std::path::PathBuf::from(&filename_candidate);
             if path_file.extension().is_none() {
@@ -303,6 +321,150 @@ pub async fn update_ip_image(
                             "UPDATE ip_images SET filename = ?, relative_path = ?, absolute_path = ? WHERE id = ?",
                             rusqlite::params![&unique_filename, &new_relative, &new_absolute, ip_image_id],
                         );
+                    }
+                }
+            }
+        }
+
+
+    // Dynamic Emoji packaging movement for Archived IP Images
+    if current_image.status == "archived" {
+        if let Some(pack_id) = &request.associate_sticker_pack_id {
+            if !pack_id.trim().is_empty() {
+                // Fetch updated paths in case IP migration occurred
+                let (mut current_absolute_path, _, mut current_filename) = conn.query_row(
+                    "SELECT absolute_path, relative_path, filename FROM ip_images WHERE id = ?",
+                    [ip_image_id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
+                ).unwrap_or_else(|_| (current_image.absolute_path.clone(), current_image.relative_path.clone(), current_image.filename.clone()));
+
+                // Fetch pack path and IP path
+                let ip_path = fetch_ip_path(&conn, &request.primary_ip_id).unwrap_or_else(|| "unknown".to_string());
+                let (pack_path, db_pack_id) = if pack_id == "ungrouped" {
+                    (None, None)
+                } else {
+                    let path_res = conn.query_row(
+                        "SELECT path FROM ip_sticker_packs WHERE id = ?",
+                        [pack_id],
+                        |row| row.get::<_, String>(0),
+                    ).ok();
+                    (path_res, Some(pack_id.clone()))
+                };
+
+                let custom_path: Option<String> = conn.query_row(
+                    "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+                    [],
+                    |row| row.get(0),
+                ).ok();
+
+                let db_path_obj = std::path::Path::new(&db_path);
+                if let Some(data_dir) = db_path_obj.parent() {
+                    if let Some(app_data_dir) = data_dir.parent() {
+                        let library_path = if let Some(ref path_str) = custom_path {
+                            if !path_str.trim().is_empty() {
+                                std::path::Path::new(path_str).to_path_buf()
+                            } else {
+                                app_data_dir.to_path_buf()
+                            }
+                        } else {
+                            app_data_dir.to_path_buf()
+                        };
+
+                        let target_dir = if let Some(ref pp) = pack_path {
+                            library_path.join("ip_archived").join(&ip_path).join("emojis").join(pp)
+                        } else {
+                            library_path.join("ip_archived").join(&ip_path).join("emojis")
+                        };
+                        let _ = std::fs::create_dir_all(&target_dir);
+
+                        let default_template = "{ip}-{date}-{index}".to_string();
+                        let template = request.naming_template.clone().unwrap_or(default_template);
+                        let date = &current_image.created_at[..10];
+                        let ext = std::path::Path::new(&current_filename)
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("png");
+
+                        let count: i64 = if db_pack_id.is_none() {
+                            conn.query_row(
+                                "SELECT COUNT(*) FROM ip_emojis WHERE ip_id = ? AND pack_id IS NULL",
+                                [&request.primary_ip_id],
+                                |row| row.get(0),
+                            ).unwrap_or(0)
+                        } else {
+                            conn.query_row(
+                                "SELECT COUNT(*) FROM ip_emojis WHERE ip_id = ? AND pack_id = ?",
+                                [&request.primary_ip_id, pack_id],
+                                |row| row.get(0),
+                            ).unwrap_or(0)
+                        };
+                        let index = count + 1;
+
+                        let filename_candidate = template
+                            .replace("{ip}", &ip_path)
+                            .replace("{date}", date)
+                            .replace("{index}", &format!("{:03}", index))
+                            .replace("{original}", &current_image.original_filename);
+
+                        let mut path_candidate = target_dir.join(&filename_candidate);
+                        if path_candidate.extension().is_none() {
+                            path_candidate.set_extension(ext);
+                        }
+
+                        let stem = path_candidate.file_stem().and_then(|s| s.to_str()).unwrap_or(&filename_candidate).to_string();
+                        let current_ext = path_candidate.extension().and_then(|e| e.to_str()).unwrap_or(ext).to_string();
+                        let mut unique_filename = path_candidate.file_name().and_then(|f| f.to_str()).unwrap_or(&filename_candidate).to_string();
+                        let mut target_path = target_dir.join(&unique_filename);
+                        let mut counter = 1;
+
+                        while target_path.exists() {
+                            if std::path::Path::new(&current_absolute_path) == target_path {
+                                break;
+                            }
+                            unique_filename = format!("{}_{}.{}", stem, counter, current_ext);
+                            target_path = target_dir.join(&unique_filename);
+                            counter += 1;
+                        }
+
+                        // Move physical file!
+                        let source = std::path::Path::new(&current_absolute_path);
+                        if source.exists() && source != target_path {
+                            if let Ok(_) = std::fs::rename(source, &target_path) {
+                                current_filename = unique_filename;
+                                let current_relative_path = if let Some(ref pp) = pack_path {
+                                    std::path::Path::new("ip_archived")
+                                        .join(&ip_path)
+                                        .join("emojis")
+                                        .join(pp)
+                                        .join(&current_filename)
+                                        .to_string_lossy()
+                                        .to_string()
+                                } else {
+                                    std::path::Path::new("ip_archived")
+                                        .join(&ip_path)
+                                        .join("emojis")
+                                        .join(&current_filename)
+                                        .to_string_lossy()
+                                        .to_string()
+                                };
+                                current_absolute_path = target_path.to_string_lossy().to_string();
+
+                                // Update database references in ip_images
+                                let _ = conn.execute(
+                                    "UPDATE ip_images SET filename = ?, relative_path = ?, absolute_path = ? WHERE id = ?",
+                                    rusqlite::params![&current_filename, &current_relative_path, &current_absolute_path, ip_image_id],
+                                );
+
+                                // Insert or replace into ip_emojis table
+                                let emoji_id = Uuid::new_v4().to_string().replace("-", "");
+                                let emoji_id = format!("emj_{}", &emoji_id[..12]);
+                                let _ = conn.execute(
+                                    "INSERT OR REPLACE INTO ip_emojis (id, ip_id, pack_id, image_path, trigger_word, sort_order, created_at)
+                                     VALUES (?, ?, ?, ?, NULL, 0, ?)",
+                                    rusqlite::params![&emoji_id, &request.primary_ip_id, db_pack_id, &current_absolute_path, &now],
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -436,8 +598,7 @@ pub async fn archive_ip_images(
             continue;
         }
 
-        // Get IP name & path
-        let ip_name = fetch_ip_name(&conn, &ip_image.ip_id).unwrap_or_else(|| "Unknown".to_string());
+        // Get IP path
         let ip_path = fetch_ip_path(&conn, &ip_image.ip_id).unwrap_or_else(|| "unknown".to_string());
 
         // Target directory: library_path/ip_archived/ip_path/
@@ -454,8 +615,8 @@ pub async fn archive_ip_images(
         let mut suffix_counter = 1;
 
         let (target_path, new_filename) = loop {
-            let mut filename_candidate = template.clone()
-                .replace("{ip}", &ip_name)
+            let filename_candidate = template.clone()
+                .replace("{ip}", &ip_path)
                 .replace("{date}", date)
                 .replace("{index}", &format!("{:03}", index))
                 .replace("{original}", &ip_image.original_filename);

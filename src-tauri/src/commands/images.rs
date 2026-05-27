@@ -360,9 +360,44 @@ pub async fn update_image(
         );
     }
 
-    // Rename file if vendor or model changed
-    if new_vendor_id != current_image.storage_vendor_id || 
-       new_primary_model_id != current_image.primary_model_id {
+    // Fetch vendor and model path
+    let vendor_path: String = conn.query_row(
+        "SELECT path FROM vendors WHERE id = ?",
+        [&new_vendor_id],
+        |row| row.get(0),
+    ).unwrap_or_else(|_| new_vendor_id.clone());
+
+    let model_path: String = conn.query_row(
+        "SELECT path FROM models WHERE id = ?",
+        [&new_primary_model_id],
+        |row| row.get(0),
+    ).unwrap_or_else(|_| new_primary_model_id.clone());
+
+    let is_vendor_changed = new_vendor_id != current_image.storage_vendor_id;
+    let is_model_changed = new_primary_model_id != current_image.primary_model_id;
+
+    // 检查文件名是否包含大写字母、空格、或是非 [a-z0-9_-] 的特殊字符
+    let current_filename_stem = std::path::Path::new(&current_image.filename)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    let is_filename_invalid = current_filename_stem.chars().any(|c| {
+        c.is_uppercase() || c.is_whitespace() || (!c.is_ascii_alphanumeric() && c != '-' && c != '_')
+    });
+
+    let is_path_mismatched = if current_image.status == "archived" {
+        let expected_dir_prefix = format!("archived/{}/{}", vendor_path, model_path);
+        let normalized_relative_path = current_image.relative_path.replace("\\", "/");
+        !normalized_relative_path.starts_with(&expected_dir_prefix)
+    } else {
+        let expected_prefix = format!("{}_{}_", new_vendor_id, new_primary_model_id);
+        !current_image.filename.starts_with(&expected_prefix)
+    };
+
+    let need_rename = is_vendor_changed || is_model_changed || is_filename_invalid || is_path_mismatched;
+
+    // Rename file if vendor or model changed, or naming invalidity/path mismatch detected
+    if need_rename {
         
         let old_path = std::path::Path::new(&current_image.absolute_path);
         if old_path.exists() {
@@ -376,19 +411,6 @@ pub async fn update_image(
             // Generate new filename and path based on status
             let (new_filename, new_path) = if current_image.status == "archived" {
                 // For archived images, move to new vendor/model directory
-                
-                // Get vendor and model paths
-                let vendor_path: String = conn.query_row(
-                    "SELECT path FROM vendors WHERE id = ?",
-                    [&new_vendor_id],
-                    |row| row.get(0),
-                ).unwrap_or_else(|_| new_vendor_id.clone());
-                
-                let model_path: String = conn.query_row(
-                    "SELECT path FROM models WHERE id = ?",
-                    [&new_primary_model_id],
-                    |row| row.get(0),
-                ).unwrap_or_else(|_| new_primary_model_id.clone());
                 
                 // Get library path from old path (go up to archived directory)
                 let library_path = if let Some(old_parent) = old_path.parent() {

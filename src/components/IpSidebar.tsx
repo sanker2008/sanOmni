@@ -38,7 +38,7 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
   );
 
   return (
-    <div className="w-64 border-r bg-muted/10 flex flex-col h-full">
+    <div className="w-64 border-r bg-muted/40 flex flex-col h-full">
       <div className="p-4 border-b">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

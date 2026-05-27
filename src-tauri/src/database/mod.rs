@@ -221,22 +221,6 @@ CREATE TABLE IF NOT EXISTS image_prompt_group_relations (
     FOREIGN KEY (prompt_group_id) REFERENCES prompt_groups(id) ON DELETE CASCADE
 );
 
--- Indexes for Prompt Domain
-CREATE INDEX IF NOT EXISTS idx_images_status ON images(status);
-CREATE INDEX IF NOT EXISTS idx_images_storage ON images(storage_vendor_id, storage_model_id);
-CREATE INDEX IF NOT EXISTS idx_images_primary_model ON images(primary_model_id);
-CREATE INDEX IF NOT EXISTS idx_images_imported ON images(imported_at DESC);
-CREATE INDEX IF NOT EXISTS idx_images_prompt ON images(prompt);
-CREATE INDEX IF NOT EXISTS idx_imr_model ON image_model_relations(model_id);
-CREATE INDEX IF NOT EXISTS idx_itr_tag ON image_tag_relations(tag_id);
-CREATE INDEX IF NOT EXISTS idx_ipgr_group ON image_prompt_group_relations(prompt_group_id);
-
--- Indexes for IP Domain
-CREATE INDEX IF NOT EXISTS idx_ip_images_status ON ip_images(status);
-CREATE INDEX IF NOT EXISTS idx_ip_images_ip ON ip_images(ip_id);
-CREATE INDEX IF NOT EXISTS idx_ip_images_imported ON ip_images(imported_at DESC);
-CREATE INDEX IF NOT EXISTS idx_ip_itr_tag ON ip_image_tag_relations(tag_id);
-
 -- AI IP Assets table
 CREATE TABLE IF NOT EXISTS ip_assets (
     id                  TEXT PRIMARY KEY,
@@ -339,6 +323,22 @@ CREATE TABLE IF NOT EXISTS ip_image_relations (
     FOREIGN KEY (ip_image_id) REFERENCES ip_images(id) ON DELETE CASCADE,
     FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE
 );
+
+-- Indexes for Prompt Domain
+CREATE INDEX IF NOT EXISTS idx_images_status ON images(status);
+CREATE INDEX IF NOT EXISTS idx_images_storage ON images(storage_vendor_id, storage_model_id);
+CREATE INDEX IF NOT EXISTS idx_images_primary_model ON images(primary_model_id);
+CREATE INDEX IF NOT EXISTS idx_images_imported ON images(imported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_images_prompt ON images(prompt);
+CREATE INDEX IF NOT EXISTS idx_imr_model ON image_model_relations(model_id);
+CREATE INDEX IF NOT EXISTS idx_itr_tag ON image_tag_relations(tag_id);
+CREATE INDEX IF NOT EXISTS idx_ipgr_group ON image_prompt_group_relations(prompt_group_id);
+
+-- Indexes for IP Domain
+CREATE INDEX IF NOT EXISTS idx_ip_images_status ON ip_images(status);
+CREATE INDEX IF NOT EXISTS idx_ip_images_ip ON ip_images(ip_id);
+CREATE INDEX IF NOT EXISTS idx_ip_images_imported ON ip_images(imported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ip_itr_tag ON ip_image_tag_relations(tag_id);
 
 -- Indexes for IP assets
 CREATE INDEX IF NOT EXISTS idx_ip_character_sheets_ip ON ip_character_sheets(ip_id);

@@ -70,7 +70,7 @@ function App() {
                 className="gap-2"
               >
                 <Users className="w-4 h-4" />
-                IP 形象管理
+                IP 资产管理
               </Button>
             </nav>
           </div>

@@ -5,7 +5,7 @@ use chrono::Utc;
 use crate::commands::CommandResult;
 use crate::models::{
     IpAsset, IpCharacterSheet, IpCreation, IpStickerPack, IpEmoji,
-    IpStickerPackPlatform, IpRelation, IpAssetDetail
+    IpStickerPackPlatform, IpRelation, IpAssetDetail, IpImage, IpImageWithTags, Tag
 };
 
 // 辅助函数：将选择的图片拷贝到 app_data_dir 的独立子目录中，并返回拷贝后的绝对路径
@@ -54,15 +54,76 @@ fn copy_to_ip_archived(
             ip_dir.join("emojis")
         }
     } else {
-        ip_dir.join("ip_assets")
+        ip_dir.clone()
     };
 
     std::fs::create_dir_all(&dest_dir)?;
     
     let src_path = Path::new(src_file_path);
-    let file_name = src_path.file_name().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid file name"))?;
-    let dest_file_path = dest_dir.join(file_name);
+    if src_path.exists() {
+        if let Ok(src_abs) = std::fs::canonicalize(src_path) {
+            if let Ok(dest_abs) = std::fs::canonicalize(&dest_dir) {
+                if src_abs.parent() == Some(&dest_abs) {
+                    return Ok(src_file_path.to_string());
+                }
+            }
+        }
+    }
     
+    // Fetch naming template from settings
+    let naming_template: String = {
+        if let Ok(conn) = Connection::open(db_path_obj) {
+            conn.query_row(
+                "SELECT value FROM settings WHERE key = 'ipNamingTemplate'",
+                [],
+                |row| row.get(0),
+            ).unwrap_or_else(|_| "{ip}-{date}-{index}".to_string())
+        } else {
+            "{ip}-{date}-{index}".to_string()
+        }
+    };
+
+    let date = Utc::now().format("%Y-%m-%d").to_string();
+    let ext = src_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
+    
+    // Count files already present in dest_dir to determine index
+    let index = if let Ok(entries) = std::fs::read_dir(&dest_dir) {
+        entries.filter_map(|e| e.ok())
+            .filter(|entry| entry.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .count() + 1
+    } else {
+        1
+    };
+
+    let original_stem = src_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    
+    let filename_candidate = naming_template
+        .replace("{ip}", ip_path)
+        .replace("{date}", &date)
+        .replace("{index}", &format!("{:03}", index))
+        .replace("{original}", original_stem);
+
+    let mut path_candidate = dest_dir.join(&filename_candidate);
+    if path_candidate.extension().is_none() {
+        path_candidate.set_extension(ext);
+    }
+
+    let stem = path_candidate.file_stem().and_then(|s| s.to_str()).unwrap_or(&filename_candidate).to_string();
+    let current_ext = path_candidate.extension().and_then(|e| e.to_str()).unwrap_or(ext).to_string();
+    let mut unique_filename = path_candidate.file_name().and_then(|f| f.to_str()).unwrap_or(&filename_candidate).to_string();
+    let mut dest_file_path = dest_dir.join(&unique_filename);
+    let mut counter = 1;
+
+    while dest_file_path.exists() {
+        // Check if it is the same file. If so, return it directly.
+        if src_path == dest_file_path {
+            break;
+        }
+        unique_filename = format!("{}_{}.{}", stem, counter, current_ext);
+        dest_file_path = dest_dir.join(&unique_filename);
+        counter += 1;
+    }
+
     // 如果源文件与目标文件路径完全一致，则直接返回
     if src_path == dest_file_path {
         return Ok(dest_file_path.to_str().unwrap().to_string());
@@ -110,6 +171,36 @@ pub fn get_ip_assets(db_path: String) -> CommandResult<Vec<IpAsset>> {
         }
         Err(e) => CommandResult::err(format!("查询 IP 列表失败: {}", e)),
     }
+}
+
+fn fetch_ip_image_tags(conn: &Connection, ip_image_id: &str) -> rusqlite::Result<Vec<Tag>> {
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.name, t.name_en, t.color, t.parent_id, t.use_count, t.is_builtin, t.created_at
+         FROM tags t
+         JOIN ip_image_tag_relations r ON t.id = r.tag_id
+         WHERE r.ip_image_id = ?"
+    )?;
+
+    let rows = stmt.query_map([ip_image_id], |row| {
+        Ok(Tag {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            name_en: row.get(2)?,
+            color: row.get(3)?,
+            parent_id: row.get(4)?,
+            use_count: row.get(5)?,
+            is_builtin: row.get::<_, i32>(6)? != 0,
+            created_at: row.get(7)?,
+        })
+    })?;
+
+    let mut tags = Vec::new();
+    for r in rows {
+        if let Ok(t) = r {
+            tags.push(t);
+        }
+    }
+    Ok(tags)
 }
 
 #[tauri::command]
@@ -300,6 +391,53 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
         Err(_) => Vec::new(),
     };
 
+    // 8. 获取关联的 IP 图片 (ip_images)
+    let mut stmt_ip_images = match conn.prepare(
+        "SELECT id, filename, original_filename, ip_id, relative_path, absolute_path,
+                status, file_size, width, height, file_hash, format,
+                has_watermark, watermark_platform, watermark_detected, watermark_removed,
+                created_at, imported_at, archived_at
+         FROM ip_images
+         WHERE ip_id = ? OR id IN (SELECT ip_image_id FROM ip_image_relations WHERE ip_id = ?)
+         ORDER BY imported_at DESC"
+    ) {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err(format!("查询关联图片准备失败: {}", e)),
+    };
+    let ip_images_mapped = stmt_ip_images.query_map(params![ip_id, ip_id], |row| {
+        Ok(IpImage {
+            id: row.get(0)?,
+            filename: row.get(1)?,
+            original_filename: row.get(2)?,
+            ip_id: row.get(3)?,
+            relative_path: row.get(4)?,
+            absolute_path: row.get(5)?,
+            status: row.get(6)?,
+            file_size: row.get(7)?,
+            width: row.get(8)?,
+            height: row.get(9)?,
+            file_hash: row.get(10)?,
+            format: row.get(11)?,
+            has_watermark: row.get::<_, i32>(12)? != 0,
+            watermark_platform: row.get(13)?,
+            watermark_detected: row.get::<_, i32>(14)? != 0,
+            watermark_removed: row.get::<_, i32>(15)? != 0,
+            created_at: row.get(16)?,
+            imported_at: row.get(17)?,
+            archived_at: row.get(18)?,
+        })
+    });
+    let ip_images: Vec<IpImageWithTags> = match ip_images_mapped {
+        Ok(m) => m
+            .filter_map(|r| r.ok())
+            .map(|ip_image| {
+                let tags = fetch_ip_image_tags(&conn, &ip_image.id).unwrap_or_default();
+                IpImageWithTags { ip_image, tags }
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+
     CommandResult::ok(IpAssetDetail {
         ip,
         character_sheets,
@@ -308,7 +446,29 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
         emojis,
         platforms,
         relations,
+        ip_images,
     })
+}
+
+fn sanitize_ip_path(path: &str) -> String {
+    let lowercase = path.trim().to_lowercase();
+    let mut result = String::new();
+    let mut last_was_dash = false;
+    for c in lowercase.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            result.push(c);
+            last_was_dash = false;
+        } else if c == '-' || c.is_whitespace() || c == '/' || c == '\\' {
+            if !last_was_dash && !result.is_empty() {
+                result.push('-');
+                last_was_dash = true;
+            }
+        }
+    }
+    while result.ends_with('-') {
+        result.pop();
+    }
+    result
 }
 
 #[tauri::command]
@@ -325,10 +485,10 @@ pub fn create_ip_asset(
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
 
-    // path 不能为空
-    let path = path.trim().to_string();
+    // 路径标识清洗
+    let path = sanitize_ip_path(&path);
     if path.is_empty() {
-        return CommandResult::err("路径标识不能为空".to_string());
+        return CommandResult::err("路径标识无可用的合法字符（限小写字母、数字、横杠、下划线组合）".to_string());
     }
 
     // 检查 path 唯一性
@@ -349,7 +509,7 @@ pub fn create_ip_asset(
             if src.trim().is_empty() {
                 None
             } else {
-                match copy_to_ip_archived(&db_path, &path, "ip_assets", None, &src) {
+                match copy_to_ip_archived(&db_path, &path, "root", None, &src) {
                     Ok(dest) => Some(dest),
                     Err(e) => return CommandResult::err(format!("拷贝头像文件失败: {}", e)),
                 }
@@ -385,7 +545,6 @@ pub fn create_ip_asset(
                     };
                     let target_dir = library_path.join("ip_archived").join(&path);
                     let _ = std::fs::create_dir_all(&target_dir);
-                    let _ = std::fs::create_dir_all(target_dir.join("ip_assets"));
                 }
             }
 
@@ -423,9 +582,10 @@ pub fn update_ip_asset(
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
 
-    let path = path.trim().to_string();
+    // 路径标识清洗
+    let path = sanitize_ip_path(&path);
     if path.is_empty() {
-        return CommandResult::err("路径标识不能为空".to_string());
+        return CommandResult::err("路径标识无可用的合法字符（限小写字母、数字、横杠、下划线组合）".to_string());
     }
 
     // 检查 path 唯一性（排除自身）
@@ -459,7 +619,7 @@ pub fn update_ip_asset(
             } else if Some(src.clone()) == old_avatar_path {
                 old_avatar_path
             } else {
-                match copy_to_ip_archived(&db_path, &path, "ip_assets", None, &src) {
+                match copy_to_ip_archived(&db_path, &path, "root", None, &src) {
                     Ok(dest) => Some(dest),
                     Err(e) => return CommandResult::err(format!("拷贝头像文件失败: {}", e)),
                 }
@@ -502,7 +662,6 @@ pub fn update_ip_asset(
                             let _ = std::fs::rename(&old_target_dir, &new_target_dir);
                         } else {
                             let _ = std::fs::create_dir_all(&new_target_dir);
-                            let _ = std::fs::create_dir_all(new_target_dir.join("ip_assets"));
                         }
 
                         // 数据库物理路径引用热更新（将包含 /ip_archived/old_path/ 字符的记录全局替换为新 path 结构）
@@ -528,7 +687,6 @@ pub fn update_ip_asset(
                     } else {
                         let target_dir = library_path.join("ip_archived").join(&path);
                         let _ = std::fs::create_dir_all(&target_dir);
-                        let _ = std::fs::create_dir_all(target_dir.join("ip_assets"));
                     }
                 }
             }
@@ -561,7 +719,7 @@ pub fn update_ip_asset(
 }
 
 #[tauri::command]
-pub fn delete_ip_asset(db_path: String, ip_id: String) -> CommandResult<bool> {
+pub fn delete_ip_asset(db_path: String, ip_id: String, keep_images: bool) -> CommandResult<bool> {
     if ip_id == "unknown" {
         return CommandResult::err("系统默认的未知形象不可删除".to_string());
     }
@@ -571,40 +729,133 @@ pub fn delete_ip_asset(db_path: String, ip_id: String) -> CommandResult<bool> {
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
 
-    // 在删除数据库项前，先删除磁盘上对应的 ip_archived/{ip_path} 目录
+    // 获取 library_path 以便做文件移动或彻底删除
+    let custom_path: Option<String> = conn.query_row(
+        "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+        [],
+        |row| row.get(0),
+    ).ok();
+
+    let db_path_buf = Path::new(&db_path);
+    let app_data_dir = match db_path_buf.parent().and_then(|d| d.parent()) {
+        Some(dir) => dir.to_path_buf(),
+        None => return CommandResult::err("获取应用程序数据目录失败".to_string()),
+    };
+
+    let library_path = if let Some(ref path_str) = custom_path {
+        if !path_str.trim().is_empty() {
+            Path::new(path_str).to_path_buf()
+        } else {
+            app_data_dir
+        }
+    } else {
+        app_data_dir
+    };
+
     let ip_path: Option<String> = conn.query_row(
         "SELECT path FROM ip_assets WHERE id = ?",
         params![ip_id],
         |row| row.get(0),
     ).ok();
 
-    if let Some(ref path) = ip_path {
-        let custom_path: Option<String> = conn.query_row(
-            "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+    if keep_images {
+        // 1. 查询该 IP 下的所有图片，准备迁移
+        let mut stmt = match conn.prepare("SELECT id, filename, absolute_path FROM ip_images WHERE ip_id = ?") {
+            Ok(s) => s,
+            Err(e) => return CommandResult::err(format!("准备迁移查询失败: {}", e)),
+        };
+        let rows = match stmt.query_map(params![ip_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        }) {
+            Ok(r) => r,
+            Err(e) => return CommandResult::err(format!("查询图片记录失败: {}", e)),
+        };
+
+        // 获取自定义 IP inbox 目录
+        let custom_inbox_path: Option<String> = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'customIpInboxPath'",
             [],
             |row| row.get(0),
         ).ok();
 
-        let db_path_buf = Path::new(&db_path);
-        if let Some(data_dir) = db_path_buf.parent() {
-            if let Some(app_data_dir) = data_dir.parent() {
-                let library_path = if let Some(ref path_str) = custom_path {
-                    if !path_str.trim().is_empty() {
-                        Path::new(path_str).to_path_buf()
-                    } else {
-                        app_data_dir.to_path_buf()
-                    }
-                } else {
-                    app_data_dir.to_path_buf()
-                };
-                let ip_dir = library_path.join("ip_archived").join(path);
-                if ip_dir.exists() {
-                    let _ = std::fs::remove_dir_all(ip_dir);
+        let ip_inbox_dir = if let Some(ref path_str) = custom_inbox_path {
+            if !path_str.trim().is_empty() {
+                Path::new(path_str).to_path_buf()
+            } else {
+                library_path.join("ip_inbox")
+            }
+        } else {
+            library_path.join("ip_inbox")
+        };
+
+        // 目标移动目录：ip_inbox/unknown
+        let inbox_dir = ip_inbox_dir.join("unknown");
+        let _ = std::fs::create_dir_all(&inbox_dir);
+
+        for row_res in rows {
+            if let Ok((img_id, filename, old_abs_path)) = row_res {
+                let old_path_buf = Path::new(&old_abs_path);
+
+                // 处理重名，如果有重名文件则自动递增追加后缀
+                let mut target_filename = filename.clone();
+                let mut target_path = inbox_dir.join(&target_filename);
+                let mut counter = 1;
+
+                let file_stem = Path::new(&filename)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("image");
+                let file_ext = Path::new(&filename)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("png");
+
+                while target_path.exists() {
+                    target_filename = format!("{}_{}.{}", file_stem, counter, file_ext);
+                    target_path = inbox_dir.join(&target_filename);
+                    counter += 1;
                 }
+
+                // 在磁盘上进行重命名与移动
+                if old_path_buf.exists() {
+                    let _ = std::fs::rename(old_path_buf, &target_path);
+                }
+
+                let new_relative = Path::new("inbox")
+                    .join("unknown")
+                    .join(&target_filename)
+                    .to_string_lossy()
+                    .to_string();
+                let new_absolute = target_path.to_string_lossy().to_string();
+
+                // 更新数据库状态：将该图归属移回默认角色 unknown，并且设为 inbox（待整理）状态，重置归档时间
+                let _ = conn.execute(
+                    "UPDATE ip_images SET ip_id = 'unknown', status = 'inbox', relative_path = ?, absolute_path = ?, archived_at = NULL WHERE id = ?",
+                    params![new_relative, new_absolute, img_id],
+                );
+
+                // 更新多 IP 关联记录中的本条记录，归属迁移到 unknown
+                let _ = conn.execute(
+                    "UPDATE ip_image_relations SET ip_id = 'unknown' WHERE ip_image_id = ? AND ip_id = ?",
+                    params![img_id, ip_id],
+                );
             }
         }
     }
 
+    // 2. 清理 ip_archived/{ip_path} 目录
+    if let Some(ref path) = ip_path {
+        let ip_dir = library_path.join("ip_archived").join(path);
+        if ip_dir.exists() {
+            let _ = std::fs::remove_dir_all(ip_dir);
+        }
+    }
+
+    // 3. 执行删除 IP
     match conn.execute("DELETE FROM ip_assets WHERE id = ?", params![ip_id]) {
         Ok(_) => CommandResult::ok(true),
         Err(e) => CommandResult::err(format!("删除 IP 失败: {}", e)),
@@ -640,8 +891,8 @@ pub fn add_ip_character_sheets(
     let now = Utc::now().to_rfc3339();
 
     for src_path in image_paths {
-        // 拷贝至设定图目录 ip_archived/{ip_path}/ip_assets/
-        let copied_path = match copy_to_ip_archived(&db_path, &ip_path, "ip_assets", None, &src_path) {
+        // 拷贝至设定图目录 ip_archived/{ip_path}/
+        let copied_path = match copy_to_ip_archived(&db_path, &ip_path, "root", None, &src_path) {
             Ok(p) => p,
             Err(e) => return CommandResult::err(format!("复制设定图失败 {}: {}", src_path, e)),
         };
@@ -728,8 +979,8 @@ pub fn add_ip_creations(
     let now = Utc::now().to_rfc3339();
 
     for (idx, src_path) in image_paths.iter().enumerate() {
-        // 拷贝至创作图片目录 ip_archived/{ip_path}/ip_assets/
-        let copied_path = match copy_to_ip_archived(&db_path, &ip_path, "ip_assets", None, src_path) {
+        // 拷贝至创作图片目录 ip_archived/{ip_path}/
+        let copied_path = match copy_to_ip_archived(&db_path, &ip_path, "root", None, src_path) {
             Ok(p) => p,
             Err(e) => return CommandResult::err(format!("复制创作图片失败 {}: {}", src_path, e)),
         };
@@ -1221,9 +1472,50 @@ pub fn add_ip_emojis(
         if let Err(e) = tx.execute(
             "INSERT INTO ip_emojis (id, ip_id, pack_id, image_path, trigger_word, sort_order, created_at)
              VALUES (?, ?, ?, ?, ?, 0, ?)",
-             params![id, ip_id, pack_id, copied_path, trigger_word, now],
+             params![id, ip_id, pack_id, &copied_path, trigger_word, &now],
         ) {
             return CommandResult::err(format!("添加表情图片失败: {}", e));
+        }
+
+        // 自动入库到 ip_images 表作为 IP 的核心资产
+        let uuid_str = Uuid::new_v4().to_string().replace("-", "");
+        let ip_image_id = format!("ipimg_{}", &uuid_str[..12]);
+        let copied_path_buf = Path::new(&copied_path);
+        let filename = copied_path_buf.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
+        let original_filename = Path::new(src_path).file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
+        
+        let relative_path = if let Some(ref pp) = pack_path {
+            Path::new("ip_archived")
+                .join(&ip_path)
+                .join("emojis")
+                .join(pp)
+                .join(&filename)
+        } else {
+            Path::new("ip_archived")
+                .join(&ip_path)
+                .join("emojis")
+                .join(&filename)
+        };
+        let relative_path_str = relative_path.to_string_lossy().to_string();
+        let file_size = copied_path_buf.metadata().map(|m| m.len() as i64).unwrap_or(0);
+        let format_upper = copied_path_buf.extension().and_then(|e| e.to_str()).unwrap_or("png").to_uppercase();
+
+        if let Err(e) = tx.execute(
+            "INSERT INTO ip_images (
+                id, filename, original_filename, ip_id,
+                relative_path, absolute_path,
+                status, file_size, format,
+                has_watermark, watermark_detected, watermark_removed,
+                created_at, imported_at, archived_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'archived', ?, ?, 0, 0, 0, ?, ?, ?)",
+            params![
+                ip_image_id, filename, original_filename, ip_id,
+                relative_path_str, copied_path,
+                file_size, format_upper,
+                now, now, now
+            ],
+        ) {
+            return CommandResult::err(format!("同步导入表情为 IP 资产失败: {}", e));
         }
     }
 
@@ -1285,6 +1577,12 @@ pub fn delete_ip_emojis(
 
         // 删除物理磁盘文件
         if let Some(path) = image_path {
+            // 同时清理关联的 ip_images 图片资产表中的记录
+            let _ = tx.execute(
+                "DELETE FROM ip_images WHERE absolute_path = ?",
+                params![&path],
+            );
+
             let fs_path = Path::new(&path);
             if fs_path.exists() {
                 let _ = std::fs::remove_file(fs_path);
