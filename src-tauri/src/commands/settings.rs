@@ -10,6 +10,8 @@ pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
 
+    let _ = crate::database::init_database(std::path::Path::new(&db_path));
+
     let mut stmt = match conn.prepare("SELECT key, value FROM settings") {
         Ok(s) => s,
         Err(e) => return CommandResult::err(format!("Failed to prepare query: {}", e)),
@@ -47,6 +49,8 @@ pub fn save_settings(
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
+
+    let _ = crate::database::init_database(std::path::Path::new(&db_path));
 
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -92,6 +96,8 @@ pub fn reset_general_settings(db_path: String) -> CommandResult<bool> {
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
 
+    let _ = crate::database::init_database(std::path::Path::new(&db_path));
+
     match conn.execute("DELETE FROM settings", []) {
         Ok(_) => CommandResult::ok(true),
         Err(e) => CommandResult::err(format!("重置设置失败: {}", e)),
@@ -104,6 +110,8 @@ pub fn reset_prompt_data(db_path: String, delete_files: bool) -> CommandResult<b
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
+
+    let _ = crate::database::init_database(std::path::Path::new(&db_path));
 
     if delete_files {
         // 1. 获取自定义目录设置
@@ -176,6 +184,8 @@ pub fn reset_ip_data(db_path: String, delete_files: bool) -> CommandResult<bool>
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
+
+    let _ = crate::database::init_database(std::path::Path::new(&db_path));
 
     if delete_files {
         // 1. 获取自定义目录设置

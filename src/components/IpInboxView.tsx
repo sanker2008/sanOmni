@@ -292,6 +292,7 @@ export default function IpInboxView() {
       const matchesSearch = keywords.every(keyword => {
         return (
           image.filename.toLowerCase().includes(keyword) ||
+          image.original_filename?.toLowerCase().includes(keyword) ||
           image.format?.toLowerCase().includes(keyword) ||
           image.watermark_platform?.toLowerCase().includes(keyword) ||
           image.tags.some((tag) => tag.name.toLowerCase().includes(keyword)) ||
@@ -385,7 +386,7 @@ export default function IpInboxView() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="搜索图片（文件名/模型/标签/格式...）"
+              placeholder="搜索图片 (文件名/IP形象/标签/格式/水印平台...)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 w-64"

@@ -513,8 +513,8 @@ applyTheme(loadTheme());
 
 interface UIStore {
   activeTab: "prompt" | "ip";
-  promptTab: "inbox" | "archived" | "templates" | "vendors";
-  ipTab: "inbox" | "archived" | "assets";
+  promptTab: "inbox" | "archived" | "templates";
+  ipTab: "inbox" | "archived";
   searchQuery: string;
   selectedVendorFilter: string | null;
   selectedModelFilter: string | null;
@@ -532,8 +532,8 @@ interface UIStore {
   selectedIpId: string | null;
 
   setActiveTab: (tab: "prompt" | "ip") => void;
-  setPromptTab: (tab: "inbox" | "archived" | "templates" | "vendors") => void;
-  setIpTab: (tab: "inbox" | "archived" | "assets") => void;
+  setPromptTab: (tab: "inbox" | "archived" | "templates") => void;
+  setIpTab: (tab: "inbox" | "archived") => void;
   setSearchQuery: (query: string) => void;
   setVendorFilter: (vendorId: string | null) => void;
   setModelFilter: (modelId: string | null) => void;
@@ -555,7 +555,7 @@ interface UIStore {
 export const useUIStore = create<UIStore>((set, get) => ({
   activeTab: "prompt",
   promptTab: "inbox",
-  ipTab: "assets",
+  ipTab: "inbox",
   searchQuery: "",
   selectedVendorFilter: null,
   selectedModelFilter: null,

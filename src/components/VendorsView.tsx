@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useVendorStore } from "@/stores";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -26,22 +25,19 @@ export default function VendorsView() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-4">
-      <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">厂商和模型管理</CardTitle>
-                  <CardDescription>
-                    管理所有 AI 图片生成厂商和对应的模型
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {vendors.map((vendor) => {
+    <div className="py-2 space-y-4">
+      <div className="space-y-3">
+                    {vendors.map((vendor, index) => {
                       const isExpanded = expandedVendors.has(vendor.id);
                       const isEditing = editingVendor === vendor.id;
 
                       return (
-                        <div key={vendor.id} className="border rounded-lg p-3">
+                        <div
+                          key={vendor.id}
+                          className={`border rounded-lg p-3 transition-colors ${
+                            index % 2 === 0 ? "bg-muted/30 dark:bg-muted/10" : "bg-background"
+                          }`}
+                        >
                           {/* Vendor Header */}
                           <div className="flex items-center gap-2">
                             <button
@@ -421,8 +417,6 @@ export default function VendorsView() {
                       </Button>
                     )}
                   </div>
-                </CardContent>
-              </Card>
 
       <Dialog open={!!modelToDelete} onOpenChange={(open) => !open && setModelToDelete(null)}>
         <DialogContent>

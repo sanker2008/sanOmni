@@ -26,11 +26,14 @@ import {
   Check,
   AlertCircle,
   RefreshCw,
+  Settings,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import VendorsView from "./VendorsView";
 
 export default function ArchivedView() {
   const { 
@@ -46,7 +49,7 @@ export default function ArchivedView() {
     updateImage,
   } = useImageStore();
 
-  const { searchQuery, setSearchQuery, openSettings, setSettingsTab, viewMode, setViewMode } = useUIStore();
+  const { searchQuery, setSearchQuery, viewMode, setViewMode } = useUIStore();
   const { vendors } = useVendorStore();
 
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
@@ -59,6 +62,7 @@ export default function ArchivedView() {
   const [batchDeleteStep, setBatchDeleteStep] = useState(0);
   const [sortBy, setSortBy] = useState<"time" | "size">("time");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [isVendorsDialogOpen, setIsVendorsDialogOpen] = useState(false);
 
   const handleBatchSetWatermark = async (hasWatermark: boolean) => {
     if (selectedImages.length === 0) return;
@@ -201,6 +205,31 @@ export default function ArchivedView() {
     });
     return result;
   }, [filteredImages, sortBy, sortOrder]);
+
+  const headerTitle = useMemo(() => {
+    if (selectedModel && selectedVendor) {
+      const vendorName = selectedVendor === "unknown"
+        ? "未知厂商"
+        : vendors.find((v) => v.id === selectedVendor)?.name || selectedVendor;
+        
+      let modelName = "";
+      if (selectedModel === "unknown") {
+        modelName = "未知模型";
+      } else {
+        const vendor = vendors.find((v) => v.id === selectedVendor);
+        modelName = vendor?.models.find((m) => m.id === selectedModel)?.name || selectedModel;
+      }
+      
+      return `${vendorName} / ${modelName}`;
+    }
+    if (selectedVendor) {
+      const vendorName = selectedVendor === "unknown"
+        ? "未知厂商"
+        : vendors.find((v) => v.id === selectedVendor)?.name || selectedVendor;
+      return vendorName;
+    }
+    return "全部";
+  }, [selectedVendor, selectedModel, vendors]);
 
   // Count by vendor/model
   const getVendorCount = (vendorId: string) =>
@@ -358,19 +387,16 @@ export default function ArchivedView() {
         <div className="p-3 border-b flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FolderTree className="w-4 h-4" />
-            厂商分类
+            厂商库
           </h3>
           <Button
             variant="ghost"
             size="icon"
             className="h-6 w-6"
-            onClick={() => {
-              setSettingsTab("vendors");
-              openSettings();
-            }}
+            onClick={() => setIsVendorsDialogOpen(true)}
             title="管理厂商"
           >
-            <Edit2 className="w-3.5 h-3.5" />
+            <Settings className="w-3.5 h-3.5" />
           </Button>
         </div>
         <ScrollArea className="flex-1">
@@ -447,7 +473,7 @@ export default function ArchivedView() {
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Archive className="w-5 h-5" />
-              已归档
+              {headerTitle}
             </h2>
             <Badge variant="secondary">{filteredImages.length} 张图片</Badge>
             <Button variant="outline" size="sm" className="gap-2" onClick={loadArchivedImages} disabled={isLoading}>
@@ -791,6 +817,18 @@ export default function ArchivedView() {
         onConfirm={executeBatchDelete}
         onCancel={() => setBatchDeleteStep(0)}
       />
+
+      {/* Vendors and Models Management Dialog */}
+      <Dialog open={isVendorsDialogOpen} onOpenChange={setIsVendorsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-6 overflow-hidden">
+          <DialogHeader className="pb-2 border-b">
+            <DialogTitle className="text-lg font-semibold">厂商与模型管理</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto pr-1">
+            <VendorsView />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
