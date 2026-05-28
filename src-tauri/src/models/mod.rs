@@ -118,3 +118,66 @@ pub struct PromptGroupWithImages {
 
 pub mod ip_assets;
 pub use ip_assets::*;
+
+// Works Collection Domain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Work {
+    pub id: String,
+    pub name: String,
+    pub work_type: String,
+    pub description: Option<String>,
+    pub release_date: Option<String>,
+    pub producer: Option<String>,
+    pub director_author: Option<String>,
+    pub status: Option<String>,
+    pub cover_path: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkWithRelations {
+    #[serde(flatten)]
+    pub work: Work,
+    pub tags: Vec<Tag>,
+    pub characters: Vec<CharacterWithRelations>,
+    pub character_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Character {
+    pub id: String,
+    pub work_id: String,
+    pub name: String,
+    pub character_type: Option<String>,
+    pub description: Option<String>,
+    pub appearance_info: Option<String>,
+    pub image_paths: Option<String>, // JSON array
+    pub ip_id: Option<String>,
+    pub ip_relation_note: Option<String>,
+    pub display_order: i32,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterWithRelations {
+    #[serde(flatten)]
+    pub character: Character,
+    pub work_name: String,
+    pub work_type: String,
+    pub ip_name: Option<String>,
+    pub ip_avatar_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkFilters {
+    pub search: Option<String>,
+    pub work_type: Option<String>,
+    pub status: Option<String>,
+    pub tag_ids: Option<Vec<String>>,
+    pub sort_by: Option<String>,
+    pub sort_order: Option<String>,
+}

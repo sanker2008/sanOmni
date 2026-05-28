@@ -106,6 +106,22 @@ pub fn run() {
             commands::ip_assets::update_ip_emoji_trigger_word,
             commands::ip_assets::delete_ip_emojis,
             commands::ip_assets::move_ip_emojis_to_pack,
+            commands::works::create_work,
+            commands::works::get_works,
+            commands::works::get_work_by_id,
+            commands::works::update_work,
+            commands::works::delete_work,
+            commands::works::upload_work_cover,
+            commands::works::add_work_tag,
+            commands::works::remove_work_tag,
+            commands::characters::create_character,
+            commands::characters::get_characters,
+            commands::characters::get_character_by_id,
+            commands::characters::update_character,
+            commands::characters::delete_character,
+            commands::characters::update_character_order,
+            commands::characters::upload_character_images,
+            commands::characters::get_ip_characters,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

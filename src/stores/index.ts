@@ -633,3 +633,150 @@ export const useUIStore = create<UIStore>((set, get) => ({
   },
   setSelectedIpId: (id) => set({ selectedIpId: id }),
 }));
+
+// Works Collection Types
+export type WorkType = 
+  | 'tv_series' | 'movie' | 'novel' | 'drama' 
+  | 'animation' | 'game' | 'comic' | 'other';
+
+export type WorkStatus = 
+  | 'planning' | 'in_production' | 'released' 
+  | 'completed' | 'cancelled';
+
+export type CharacterType = 
+  | 'protagonist' | 'supporting' | 'antagonist' 
+  | 'guest' | 'cameo' | 'other';
+
+export interface Work {
+  id: string;
+  name: string;
+  work_type: WorkType;
+  description?: string;
+  release_date?: string;
+  producer?: string;
+  director_author?: string;
+  status?: WorkStatus;
+  cover_path?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface Character {
+  id: string;
+  work_id: string;
+  name: string;
+  character_type?: CharacterType;
+  description?: string;
+  appearance_info?: string;
+  image_paths?: string;
+  ip_id?: string;
+  ip_relation_note?: string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface CharacterWithRelations extends Character {
+  work_name: string;
+  work_type: WorkType;
+  ip_name?: string;
+  ip_avatar_path?: string;
+}
+
+export interface WorkWithRelations extends Work {
+  tags: Tag[];
+  characters: CharacterWithRelations[];
+  character_count: number;
+}
+
+export interface WorkFilters {
+  search?: string;
+  work_type?: WorkType;
+  status?: WorkStatus;
+  tag_ids?: string[];
+  sort_by?: 'created_at' | 'updated_at' | 'release_date' | 'name';
+  sort_order?: 'asc' | 'desc';
+}
+
+// Works Store
+interface WorksStore {
+  works: WorkWithRelations[];
+  selectedWork: WorkWithRelations | null;
+  filters: WorkFilters;
+  loading: boolean;
+  
+  setWorks: (works: WorkWithRelations[]) => void;
+  selectWork: (work: WorkWithRelations | null) => void;
+  setFilters: (filters: Partial<WorkFilters>) => void;
+  setLoading: (loading: boolean) => void;
+  addWork: (work: WorkWithRelations) => void;
+  updateWork: (id: string, work: Partial<WorkWithRelations>) => void;
+  removeWork: (id: string) => void;
+}
+
+export const useWorksStore = create<WorksStore>((set) => ({
+  works: [],
+  selectedWork: null,
+  filters: {},
+  loading: false,
+  
+  setWorks: (works) => set({ works }),
+  selectWork: (work) => set({ selectedWork: work }),
+  setFilters: (filters) => set((state) => ({ filters: { ...state.filters, ...filters } })),
+  setLoading: (loading) => set({ loading }),
+  
+  addWork: (work) => set((state) => ({ works: [work, ...state.works] })),
+  
+  updateWork: (id, updates) => set((state) => ({
+    works: state.works.map((w) => w.id === id ? { ...w, ...updates } : w),
+    selectedWork: state.selectedWork?.id === id ? { ...state.selectedWork, ...updates } : state.selectedWork,
+  })),
+  
+  removeWork: (id) => set((state) => ({
+    works: state.works.filter((w) => w.id !== id),
+    selectedWork: state.selectedWork?.id === id ? null : state.selectedWork,
+  })),
+}));
+
+// Characters Store
+interface CharactersStore {
+  characters: CharacterWithRelations[];
+  loading: boolean;
+  
+  setCharacters: (characters: CharacterWithRelations[]) => void;
+  setLoading: (loading: boolean) => void;
+  addCharacter: (character: CharacterWithRelations) => void;
+  updateCharacter: (id: string, character: Partial<CharacterWithRelations>) => void;
+  removeCharacter: (id: string) => void;
+  reorderCharacters: (characterIds: string[]) => void;
+}
+
+export const useCharactersStore = create<CharactersStore>((set) => ({
+  characters: [],
+  loading: false,
+  
+  setCharacters: (characters) => set({ characters }),
+  setLoading: (loading) => set({ loading }),
+  
+  addCharacter: (character) => set((state) => ({ 
+    characters: [...state.characters, character].sort((a, b) => a.display_order - b.display_order)
+  })),
+  
+  updateCharacter: (id, updates) => set((state) => ({
+    characters: state.characters.map((c) => c.id === id ? { ...c, ...updates } : c),
+  })),
+  
+  removeCharacter: (id) => set((state) => ({
+    characters: state.characters.filter((c) => c.id !== id),
+  })),
+  
+  reorderCharacters: (characterIds) => set((state) => {
+    const ordered = characterIds.map((id, index) => {
+      const char = state.characters.find((c) => c.id === id);
+      return char ? { ...char, display_order: index } : null;
+    }).filter(Boolean) as CharacterWithRelations[];
+    return { characters: ordered };
+  }),
+}));

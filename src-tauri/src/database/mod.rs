@@ -346,6 +346,58 @@ CREATE INDEX IF NOT EXISTS idx_ip_sticker_packs_ip ON ip_sticker_packs(ip_id);
 CREATE INDEX IF NOT EXISTS idx_ip_emojis_pack ON ip_emojis(pack_id);
 CREATE INDEX IF NOT EXISTS idx_ip_spp_pack ON ip_sticker_pack_platforms(pack_id);
 CREATE INDEX IF NOT EXISTS idx_ip_ir_ip ON ip_image_relations(ip_id);
+
+-- Works Collection tables
+CREATE TABLE IF NOT EXISTS works (
+    id                  TEXT PRIMARY KEY,
+    name                TEXT NOT NULL,
+    work_type           TEXT NOT NULL,
+    description         TEXT,
+    release_date        TEXT,
+    producer            TEXT,
+    director_author     TEXT,
+    status              TEXT,
+    cover_path          TEXT,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    deleted_at          TEXT
+);
+
+CREATE TABLE IF NOT EXISTS characters (
+    id                  TEXT PRIMARY KEY,
+    work_id             TEXT NOT NULL,
+    name                TEXT NOT NULL,
+    character_type      TEXT,
+    description         TEXT,
+    appearance_info     TEXT,
+    image_paths         TEXT,
+    ip_id               TEXT,
+    ip_relation_note    TEXT,
+    display_order       INTEGER DEFAULT 0,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    deleted_at          TEXT,
+    FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+    FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS work_tags (
+    work_id             TEXT NOT NULL,
+    tag_id              TEXT NOT NULL,
+    PRIMARY KEY (work_id, tag_id),
+    FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
+-- Indexes for Works Collection
+CREATE INDEX IF NOT EXISTS idx_works_work_type ON works(work_type);
+CREATE INDEX IF NOT EXISTS idx_works_status ON works(status);
+CREATE INDEX IF NOT EXISTS idx_works_deleted_at ON works(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_characters_work_id ON characters(work_id);
+CREATE INDEX IF NOT EXISTS idx_characters_ip_id ON characters(ip_id);
+CREATE INDEX IF NOT EXISTS idx_characters_display_order ON characters(work_id, display_order);
+CREATE INDEX IF NOT EXISTS idx_characters_deleted_at ON characters(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_work_tags_tag_id ON work_tags(tag_id);
 "#;
 
 fn migrate_ip_images(conn: &Connection) -> Result<()> {

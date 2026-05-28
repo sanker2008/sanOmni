@@ -1054,3 +1054,112 @@ export const ipImageApi = {
     return result.data;
   },
 };
+
+// Works Collection API
+import type { Work, WorkWithRelations, WorkFilters, Character, CharacterWithRelations } from "@/stores";
+
+export async function createWork(params: {
+  name: string;
+  work_type: string;
+  description?: string;
+  release_date?: string;
+  producer?: string;
+  director_author?: string;
+  status?: string;
+}): Promise<Work> {
+  return await invoke("create_work", params);
+}
+
+export async function getWorks(filters?: WorkFilters): Promise<WorkWithRelations[]> {
+  return await invoke("get_works", { filters });
+}
+
+export async function getWorkById(id: string): Promise<WorkWithRelations> {
+  return await invoke("get_work_by_id", { id });
+}
+
+export async function updateWork(params: {
+  id: string;
+  name?: string;
+  work_type?: string;
+  description?: string;
+  release_date?: string;
+  producer?: string;
+  director_author?: string;
+  status?: string;
+}): Promise<Work> {
+  return await invoke("update_work", params);
+}
+
+export async function deleteWork(id: string): Promise<void> {
+  return await invoke("delete_work", { id });
+}
+
+export async function uploadWorkCover(
+  workId: string,
+  imageData: number[],
+  extension: string
+): Promise<string> {
+  return await invoke("upload_work_cover", { workId, imageData, extension });
+}
+
+export async function addWorkTag(workId: string, tagId: string): Promise<void> {
+  return await invoke("add_work_tag", { workId, tagId });
+}
+
+export async function removeWorkTag(workId: string, tagId: string): Promise<void> {
+  return await invoke("remove_work_tag", { workId, tagId });
+}
+
+// Characters API
+export async function createCharacter(params: {
+  work_id: string;
+  name: string;
+  character_type?: string;
+  description?: string;
+  appearance_info?: string;
+  ip_id?: string;
+  ip_relation_note?: string;
+}): Promise<Character> {
+  return await invoke("create_character", params);
+}
+
+export async function getCharacters(workId: string): Promise<CharacterWithRelations[]> {
+  return await invoke("get_characters", { workId });
+}
+
+export async function getCharacterById(id: string): Promise<CharacterWithRelations> {
+  return await invoke("get_character_by_id", { id });
+}
+
+export async function updateCharacter(params: {
+  id: string;
+  name?: string;
+  character_type?: string;
+  description?: string;
+  appearance_info?: string;
+  ip_id?: string;
+  ip_relation_note?: string;
+}): Promise<Character> {
+  return await invoke("update_character", params);
+}
+
+export async function deleteCharacter(id: string): Promise<void> {
+  return await invoke("delete_character", { id });
+}
+
+export async function updateCharacterOrder(characterIds: string[]): Promise<void> {
+  return await invoke("update_character_order", { characterIds });
+}
+
+export async function uploadCharacterImages(
+  characterId: string,
+  workId: string,
+  images: [number[], string][]
+): Promise<string[]> {
+  return await invoke("upload_character_images", { characterId, workId, images });
+}
+
+export async function getIpCharacters(ipId: string): Promise<CharacterWithRelations[]> {
+  return await invoke("get_ip_characters", { ipId });
+}

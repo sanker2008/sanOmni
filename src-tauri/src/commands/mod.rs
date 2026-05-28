@@ -38,3 +38,5 @@ pub mod scanner;
 pub mod prompt_groups;
 pub mod ip_assets;
 pub mod ip_images;
+pub mod works;
+pub mod characters;
