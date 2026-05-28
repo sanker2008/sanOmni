@@ -62,6 +62,16 @@ fn copy_to_ip_archived(
     let src_path = Path::new(src_file_path);
     if src_path.exists() {
         if let Ok(src_abs) = std::fs::canonicalize(src_path) {
+            // 检查文件是否已经在 ip_archived/{ip_path}/ 目录树下（包括子目录）
+            let ip_dir_abs = std::fs::canonicalize(&ip_dir).ok();
+            if let Some(ip_dir_canonical) = ip_dir_abs {
+                if src_abs.starts_with(&ip_dir_canonical) {
+                    // 文件已在 IP 目录树下，直接返回原路径
+                    return Ok(src_file_path.to_string());
+                }
+            }
+            
+            // 兼容旧逻辑：检查文件是否在目标目录的直接子文件
             if let Ok(dest_abs) = std::fs::canonicalize(&dest_dir) {
                 if src_abs.parent() == Some(&dest_abs) {
                     return Ok(src_file_path.to_string());

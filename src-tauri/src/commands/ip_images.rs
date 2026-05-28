@@ -455,14 +455,29 @@ pub async fn update_ip_image(
                                     rusqlite::params![&current_filename, &current_relative_path, &current_absolute_path, ip_image_id],
                                 );
 
-                                // Insert or replace into ip_emojis table
-                                let emoji_id = Uuid::new_v4().to_string().replace("-", "");
-                                let emoji_id = format!("emj_{}", &emoji_id[..12]);
-                                let _ = conn.execute(
-                                    "INSERT OR REPLACE INTO ip_emojis (id, ip_id, pack_id, image_path, trigger_word, sort_order, created_at)
-                                     VALUES (?, ?, ?, ?, NULL, 0, ?)",
-                                    rusqlite::params![&emoji_id, &request.primary_ip_id, db_pack_id, &current_absolute_path, &now],
-                                );
+                                // Check if emoji already exists for this image_path
+                                let existing_emoji_id: Option<String> = conn.query_row(
+                                    "SELECT id FROM ip_emojis WHERE image_path = ?",
+                                    [&current_absolute_path],
+                                    |row| row.get(0),
+                                ).ok();
+
+                                if let Some(existing_id) = existing_emoji_id {
+                                    // Update existing emoji record
+                                    let _ = conn.execute(
+                                        "UPDATE ip_emojis SET ip_id = ?, pack_id = ? WHERE id = ?",
+                                        rusqlite::params![&request.primary_ip_id, db_pack_id, &existing_id],
+                                    );
+                                } else {
+                                    // Insert new emoji record
+                                    let emoji_id = Uuid::new_v4().to_string().replace("-", "");
+                                    let emoji_id = format!("emj_{}", &emoji_id[..12]);
+                                    let _ = conn.execute(
+                                        "INSERT INTO ip_emojis (id, ip_id, pack_id, image_path, trigger_word, sort_order, created_at)
+                                         VALUES (?, ?, ?, ?, NULL, 0, ?)",
+                                        rusqlite::params![&emoji_id, &request.primary_ip_id, db_pack_id, &current_absolute_path, &now],
+                                    );
+                                }
                             }
                         }
                     }

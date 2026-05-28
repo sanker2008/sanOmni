@@ -19,7 +19,7 @@ export default function IpDomainView() {
           className={cn(
             "gap-2 h-8 transition-all duration-200 font-medium border border-transparent",
             ipTab === "inbox"
-              ? "bg-white text-zinc-900 border-zinc-200/85 shadow-sm dark:bg-zinc-800 dark:text-zinc-50 dark:border-zinc-700/50 hover:bg-zinc-50 dark:hover:bg-zinc-700/80"
+              ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:border-blue-600 dark:hover:bg-blue-700"
               : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
           )}
         >
@@ -33,7 +33,7 @@ export default function IpDomainView() {
           className={cn(
             "gap-2 h-8 transition-all duration-200 font-medium border border-transparent",
             ipTab === "archived"
-              ? "bg-white text-zinc-900 border-zinc-200/85 shadow-sm dark:bg-zinc-800 dark:text-zinc-50 dark:border-zinc-700/50 hover:bg-zinc-50 dark:hover:bg-zinc-700/80"
+              ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:border-blue-600 dark:hover:bg-blue-700"
               : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
           )}
         >

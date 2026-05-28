@@ -78,7 +78,14 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
               if (!p1 || !p2) return false;
               return p1.replace(/\\/g, "/").toLowerCase() === p2.replace(/\\/g, "/").toLowerCase();
             };
-            setIsAvatar(isSamePath(image.absolute_path, detail.ip.avatar_path));
+            const avatarMatch = isSamePath(image.absolute_path, detail.ip.avatar_path);
+            console.log('[ImageCard] 头像检查:', {
+              imageId: image.id,
+              imagePath: image.absolute_path,
+              avatarPath: detail.ip.avatar_path,
+              isMatch: avatarMatch
+            });
+            setIsAvatar(avatarMatch);
             setIsEmoji((detail.emojis || []).some((emoji) => isSamePath(image.absolute_path, emoji.image_path)));
           }
         }).catch((e) => {

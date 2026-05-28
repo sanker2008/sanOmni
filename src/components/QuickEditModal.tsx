@@ -85,6 +85,9 @@ export default function QuickEditModal() {
   const [associateStickerPack, setAssociateStickerPack] = useState(false);
   const [stickerPackId, setStickerPackId] = useState<string>("");
   const [availableStickerPacks, setAvailableStickerPacks] = useState<IpStickerPack[]>([]);
+  // 记录弹窗打开时的初始表情包关联状态，用于判断用户是否实际做了改动
+  const [initialAssociateStickerPack, setInitialAssociateStickerPack] = useState(false);
+  const [initialStickerPackId, setInitialStickerPackId] = useState<string>("");
 
   const isIpImage = ipInboxImages.some(img => img.id === editingImageId) || ipArchivedImages.some(img => img.id === editingImageId);
   const promptImage =
@@ -204,6 +207,8 @@ export default function QuickEditModal() {
           if (associatedEmoji) {
             setAssociateStickerPack(true);
             setStickerPackId(associatedEmoji.pack_id || "ungrouped");
+            setInitialAssociateStickerPack(true);
+            setInitialStickerPackId(associatedEmoji.pack_id || "ungrouped");
           } else {
             setAssociateStickerPack(false);
             if (packs.length > 0) {
@@ -211,6 +216,8 @@ export default function QuickEditModal() {
             } else {
               setStickerPackId("ungrouped");
             }
+            setInitialAssociateStickerPack(false);
+            setInitialStickerPackId("");
           }
         }
       }).catch((err) => {
@@ -225,7 +232,7 @@ export default function QuickEditModal() {
       setSetAsAvatar(false);
       setAssociateStickerPack(false);
     }
-  }, [primaryIpId, isIpImage, image]);
+  }, [primaryIpId, isIpImage, image, isQuickEditOpen]);
 
   const persistChanges = async (archiveAfterSave: boolean) => {
     if (!image) return;
@@ -248,7 +255,7 @@ export default function QuickEditModal() {
         associate_sticker_pack_id: associateStickerPack ? (stickerPackId || "ungrouped") : undefined,
       });
 
-      let finalAvatarPath = updatedIp.absolute_path;
+      let finalAvatarPath = updatedIp.absolute_path;  // 使用更新后的路径（可能被移动到 emojis/）
 
       if (archiveAfterSave) {
         const settings = useUIStore.getState().settings;
@@ -305,9 +312,12 @@ export default function QuickEditModal() {
 
         // 3. Associate with emoji pack
         if (associateStickerPack && stickerPackId) {
-          toast({
-            title: "✓ 已移动并分配至表情包分组",
-          });
+          const packChanged = associateStickerPack !== initialAssociateStickerPack || stickerPackId !== initialStickerPackId;
+          if (packChanged) {
+            toast({
+              title: "✓ 已移动并分配至表情包分组",
+            });
+          }
         }
       }
 

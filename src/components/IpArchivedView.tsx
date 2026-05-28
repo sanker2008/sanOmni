@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useIpImageStore, useUIStore, type IpAssetDetail, type IpStickerPack, type IpAsset } from "@/stores";
 import { ipImageApi, ipApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
@@ -155,7 +155,7 @@ export default function IpArchivedView() {
     updateImage,
   } = useIpImageStore();
 
-  const { searchQuery, setSearchQuery, viewMode, setViewMode } = useUIStore();
+  const { searchQuery, setSearchQuery, viewMode, setViewMode, isQuickEditOpen } = useUIStore();
 
   const [selectedIpId, setSelectedIpId] = useState<string | null>(null);
   const [ipDetail, setIpDetail] = useState<IpAssetDetail | null>(null);
@@ -630,6 +630,22 @@ export default function IpArchivedView() {
       setIpDetail(null);
     }
   }, [selectedIpId]);
+
+  // 当 QuickEditModal 关闭时，刷新侧边栏和 IP 详情（头像可能已更新）
+  const prevQuickEditOpen = useRef(false);
+  useEffect(() => {
+    if (prevQuickEditOpen.current && !isQuickEditOpen) {
+      // 弹窗刚关闭，刷新侧边栏 IP 列表
+      setSidebarKey(prev => prev + 1);
+      // 同时刷新当前选中 IP 的详情（顶部头像）
+      if (selectedIpId) {
+        loadIpDetail(selectedIpId);
+      }
+      // 重新加载图片列表，让 ImageCard 重新检查头像状态
+      loadArchivedImages();
+    }
+    prevQuickEditOpen.current = isQuickEditOpen;
+  }, [isQuickEditOpen]);
 
   const loadIpDetail = async (id: string) => {
     try {
