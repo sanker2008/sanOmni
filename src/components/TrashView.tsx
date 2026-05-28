@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Undo2, X, Loader2, FolderOpen, RefreshCw } from "lucide-react";
+import { Trash2, Undo2, X, Loader2, FolderOpen, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { toast } from "@/hooks/useToast";
 import { Command } from "@tauri-apps/plugin-shell";
 import ConfirmDialog from "./ConfirmDialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface TrashItem {
   filename: string;
@@ -22,6 +23,7 @@ export default function TrashView() {
   const [restoreItem, setRestoreItem] = useState<TrashItem | null>(null);
   const [deleteItem, setDeleteItem] = useState<TrashItem | null>(null);
   const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
+  const [previewItem, setPreviewItem] = useState<TrashItem | null>(null);
 
   useEffect(() => {
     loadTrashItems();
@@ -153,6 +155,10 @@ export default function TrashView() {
 
         // 刷新列表
         loadTrashItems();
+        // 关闭预览
+        if (previewItem?.path === item.path) {
+          setPreviewItem(null);
+        }
       } catch (error) {
         // 恢复失败，尝试回滚
         try {
@@ -190,6 +196,10 @@ export default function TrashView() {
       });
 
       loadTrashItems();
+      // 关闭预览
+      if (previewItem?.path === item.path) {
+        setPreviewItem(null);
+      }
     } catch (error) {
       console.error("Failed to delete:", error);
       toast({
@@ -199,6 +209,40 @@ export default function TrashView() {
       });
     }
   };
+
+  const handlePrevPreview = () => {
+    if (!previewItem) return;
+    const currentIndex = trashItems.findIndex(item => item.path === previewItem.path);
+    if (currentIndex > 0) {
+      setPreviewItem(trashItems[currentIndex - 1]);
+    }
+  };
+
+  const handleNextPreview = () => {
+    if (!previewItem) return;
+    const currentIndex = trashItems.findIndex(item => item.path === previewItem.path);
+    if (currentIndex < trashItems.length - 1) {
+      setPreviewItem(trashItems[currentIndex + 1]);
+    }
+  };
+
+  useEffect(() => {
+    if (!previewItem) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        handlePrevPreview();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        handleNextPreview();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setPreviewItem(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [previewItem, trashItems]);
 
   const handleEmptyTrash = () => {
     setShowEmptyConfirm(true);
@@ -356,15 +400,22 @@ export default function TrashView() {
                   className="flex items-center gap-3 p-3 rounded-md border bg-muted/30 hover:bg-muted/50 transition-colors"
                 >
                   {/* 缩略图 */}
-                  <div className="w-12 h-12 rounded overflow-hidden bg-muted flex-shrink-0">
+                  <div 
+                    className="w-12 h-12 rounded overflow-hidden bg-muted flex-shrink-0 cursor-pointer relative group"
+                    onClick={() => setPreviewItem(item)}
+                    title="点击放大查看"
+                  >
                     <img
                       src={convertFileSrc(item.path)}
                       alt={item.filename}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.display = "none";
                       }}
                     />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Eye className="w-4 h-4 text-white" />
+                    </div>
                   </div>
 
                   {/* 文件信息 */}
@@ -445,6 +496,102 @@ export default function TrashView() {
       onConfirm={executeEmptyTrash}
       onCancel={() => setShowEmptyConfirm(false)}
     />
+
+    {/* Trash Image Viewer Dialog */}
+    <Dialog open={previewItem !== null} onOpenChange={(open) => !open && setPreviewItem(null)}>
+      <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 overflow-hidden flex flex-col" hideClose>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-card shadow-sm z-10">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-semibold truncate" title={previewItem?.filename}>
+              {previewItem ? previewItem.filename.replace(/_\d+\./, ".") : ""}
+            </h2>
+            <div className="flex items-center gap-2 mt-1">
+              {previewItem && (
+                <>
+                  <span className="text-sm text-muted-foreground">
+                    {trashItems.findIndex(item => item.path === previewItem.path) + 1} / {trashItems.length}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatFileSize(previewItem.size)}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    删除时间: {formatDate(previewItem.timestamp)}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => previewItem && handleRestore(previewItem)}
+              title="恢复原图（替换当前去水印图片）"
+              className="h-8 gap-1.5"
+            >
+              <Undo2 className="w-4 h-4" />
+              <span>恢复原图</span>
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => previewItem && handleDelete(previewItem)}
+              title="永久删除"
+              className="h-8 gap-1.5"
+            >
+              <X className="w-4 h-4" />
+              <span>永久删除</span>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setPreviewItem(null)} className="h-8 w-8">
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Image Display */}
+        <div className="flex-1 relative bg-black/5 dark:bg-black/20 flex items-center justify-center p-4 min-h-[400px]">
+          {/* Navigation Buttons */}
+          {previewItem && trashItems.findIndex(item => item.path === previewItem.path) > 0 && (
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full shadow-lg"
+              onClick={handlePrevPreview}
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </Button>
+          )}
+          
+          {previewItem && trashItems.findIndex(item => item.path === previewItem.path) < trashItems.length - 1 && (
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full shadow-lg"
+              onClick={handleNextPreview}
+            >
+              <ChevronRight className="w-6 h-6" />
+            </Button>
+          )}
+
+          {/* Image */}
+          {previewItem && (
+            <img
+              src={convertFileSrc(previewItem.path)}
+              alt={previewItem.filename}
+              className="max-w-full max-h-full object-contain"
+              style={{ maxHeight: "calc(90vh - 120px)" }}
+            />
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-2 border-t bg-muted/30 text-xs text-muted-foreground text-center">
+          使用 ← → 键切换图片 · ESC 关闭
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }

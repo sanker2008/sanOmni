@@ -596,7 +596,10 @@ export const useUIStore = create<UIStore>((set, get) => ({
   openImageViewer: (imageId, customImages) => set({ isImageViewerOpen: true, viewingImageId: imageId, customViewerImages: customImages || null }),
   closeImageViewer: () => set({ isImageViewerOpen: false, viewingImageId: null, customViewerImages: null }),
   setViewingImageId: (imageId) => set({ viewingImageId: imageId }),
-  openSettings: () => set({ settingsOpen: true }),
+  openSettings: () => set((state) => ({
+    settingsOpen: true,
+    settingsTab: state.activeTab === "prompt" ? "prompt" : "ip",
+  })),
   closeSettings: () => set({ settingsOpen: false }),
   setSettingsTab: (tab) => set({ settingsTab: tab }),
   updateSetting: (key, value) => {

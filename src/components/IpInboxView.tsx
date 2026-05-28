@@ -390,7 +390,7 @@ export default function IpInboxView() {
               placeholder="搜索图片 (文件名/IP形象/标签/格式/水印平台...)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-9 w-64"
+              className="pl-9 pr-9 w-80"
             />
             {searchQuery && (
               <button
@@ -476,71 +476,53 @@ export default function IpInboxView() {
           <div className="grid grid-cols-3 gap-4">
             {/* Prompt 关联筛选 */}
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Prompt 关联</label>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={filterHasPrompt === true ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterHasPrompt(filterHasPrompt === true ? null : true)}
-                  className="flex-1 h-8 text-xs"
-                >
-                  已关联
-                </Button>
-                <Button
-                  variant={filterHasPrompt === false ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterHasPrompt(filterHasPrompt === false ? null : false)}
-                  className="flex-1 h-8 text-xs"
-                >
-                  未关联
-                </Button>
-              </div>
+              <label className="text-xs font-medium text-muted-foreground">Prompt 模板关联</label>
+              <select
+                value={filterHasPrompt === null ? "" : String(filterHasPrompt)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterHasPrompt(val === "" ? null : val === "true");
+                }}
+                className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+              >
+                <option value="">全部</option>
+                <option value="true">已关联</option>
+                <option value="false">未关联</option>
+              </select>
             </div>
 
             {/* Tags 筛选 */}
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground">标签</label>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={filterHasTags === true ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterHasTags(filterHasTags === true ? null : true)}
-                  className="flex-1 h-8 text-xs"
-                >
-                  有标签
-                </Button>
-                <Button
-                  variant={filterHasTags === false ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterHasTags(filterHasTags === false ? null : false)}
-                  className="flex-1 h-8 text-xs"
-                >
-                  无标签
-                </Button>
-              </div>
+              <select
+                value={filterHasTags === null ? "" : String(filterHasTags)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterHasTags(val === "" ? null : val === "true");
+                }}
+                className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+              >
+                <option value="">全部</option>
+                <option value="false">无标签</option>
+                <option value="true">有标签</option>
+              </select>
             </div>
 
             {/* 水印筛选 */}
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground">水印</label>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={filterHasWatermark === true ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterHasWatermark(filterHasWatermark === true ? null : true)}
-                  className="flex-1 h-8 text-xs"
-                >
-                  有水印
-                </Button>
-                <Button
-                  variant={filterHasWatermark === false ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterHasWatermark(filterHasWatermark === false ? null : false)}
-                  className="flex-1 h-8 text-xs"
-                >
-                  无水印
-                </Button>
-              </div>
+              <select
+                value={filterHasWatermark === null ? "" : String(filterHasWatermark)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterHasWatermark(val === "" ? null : val === "true");
+                }}
+                className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+              >
+                <option value="">全部</option>
+                <option value="true">有水印</option>
+                <option value="false">无水印</option>
+              </select>
             </div>
           </div>
         </div>
