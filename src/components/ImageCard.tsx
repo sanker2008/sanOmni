@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useImageStore, useUIStore, type ImageWithRelations, type IpImageWithRelations } from "@/stores";
+import { useImageStore, useIpImageStore, useUIStore, type ImageWithRelations, type IpImageWithRelations } from "@/stores";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi } from "@/services/tauri";
+import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi, ipApi } from "@/services/tauri";
 
 type AnyImage = ImageWithRelations | IpImageWithRelations;
 const isPromptImage = (img: AnyImage): img is ImageWithRelations => "models" in img;
@@ -45,7 +45,13 @@ interface ImageCardProps {
 }
 
 export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchive, listMode = false }: ImageCardProps) {
-  const { selectedImages, selectImage, deselectImage } = useImageStore();
+  const promptStore = useImageStore();
+  const ipStore = useIpImageStore();
+  const isPrompt = isPromptImage(image);
+
+  const selectedImages = isPrompt ? promptStore.selectedImages : ipStore.selectedImages;
+  const selectImage = isPrompt ? promptStore.selectImage : ipStore.selectImage;
+  const deselectImage = isPrompt ? promptStore.deselectImage : ipStore.deselectImage;
   const { openQuickEdit, openImageViewer, settings } = useUIStore();
   const showFullImage = settings.showFullImage ?? false;
   const showMenu = false;
@@ -57,6 +63,39 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
   const [clickTimeout, setClickTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
   const [imageTimestamp, setImageTimestamp] = useState(Date.now());
+  const [isAvatar, setIsAvatar] = useState(false);
+  const [isEmoji, setIsEmoji] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isPrompt) {
+      const ipImage = image as IpImageWithRelations;
+      const ipId = ipImage.ip_id || ipImage.primary_ip_id;
+      if (ipId && ipId !== "unknown") {
+        ipApi.getDetail(ipId).then((detail) => {
+          if (!cancelled) {
+            const isSamePath = (p1?: string, p2?: string) => {
+              if (!p1 || !p2) return false;
+              return p1.replace(/\\/g, "/").toLowerCase() === p2.replace(/\\/g, "/").toLowerCase();
+            };
+            setIsAvatar(isSamePath(image.absolute_path, detail.ip.avatar_path));
+            setIsEmoji((detail.emojis || []).some((emoji) => isSamePath(image.absolute_path, emoji.image_path)));
+          }
+        }).catch((e) => {
+          console.error("加载 IP 详情判定头像/表情失败:", e);
+        });
+      } else {
+        setIsAvatar(false);
+        setIsEmoji(false);
+      }
+    } else {
+      setIsAvatar(false);
+      setIsEmoji(false);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [image.absolute_path, isPrompt, image]);
 
   const handleWatermarkToggle = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent opening full view or selecting card
@@ -406,11 +445,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
 
   const getStatusBadge = () => {
     if (image.status === "archived") {
-      return (
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-          已归档
-        </Badge>
-      );
+      return null;
     }
     if (image.status === "tagged") {
       return (
@@ -477,6 +512,16 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               {getStatusBadge()}
+              {isAvatar && (
+                <Badge className="bg-primary text-primary-foreground font-semibold text-[10px] py-0.5 px-2 shadow-sm pointer-events-none select-none">
+                  头像
+                </Badge>
+              )}
+              {isEmoji && (
+                <Badge className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-[10px] py-0.5 px-2 shadow-sm pointer-events-none select-none border-none">
+                  表情
+                </Badge>
+              )}
               {image.format && (
                 <Badge variant="secondary" className="text-xs font-mono uppercase">
                   {image.format}
@@ -624,8 +669,18 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
         </button>
       </div>
 
-      {/* Watermark indicator */}
-      <div className="absolute top-2 right-2 z-10">
+      {/* Watermark and Avatar indicators */}
+      <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1.5">
+        {isAvatar && (
+          <Badge className="bg-primary hover:bg-primary text-primary-foreground pointer-events-none select-none text-[10px] py-0.5 px-2 shadow-sm font-semibold">
+            头像
+          </Badge>
+        )}
+        {isEmoji && (
+          <Badge className="bg-orange-500 hover:bg-orange-600 text-white pointer-events-none select-none text-[10px] py-0.5 px-2 shadow-sm font-semibold border-none animate-in fade-in zoom-in-95 duration-150">
+            表情
+          </Badge>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -704,7 +759,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
             />
           )}
           
-          {/* Format & Models badges */}
+          {/* Format, Models & Tags badges */}
           <div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-end gap-1.5 z-10 pointer-events-none px-1">
             {image.format && (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono uppercase bg-black/70 text-white border-0">
@@ -737,33 +792,20 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
                 </TooltipContent>
               </Tooltip>
             )}
-          </div>
-        </div>
-      </div>
-
-      {/* Hover overlay - covers entire card */}
-      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" />
-
-      {/* Info */}
-      <div className="p-3 space-y-2">
-        {/* Filename */}
-        <p className="text-sm font-medium truncate" title={image.filename}>
-          {image.filename}
-        </p>
-
-
-        {/* Tags */}
-        {image.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
             {image.tags.slice(0, 3).map((tag) => (
-              <Badge key={tag.id} variant="outline" className="text-xs">
+              <Badge 
+                key={tag.id} 
+                className="text-[9px] px-1.5 py-0 bg-primary/90 text-primary-foreground border-none shadow-sm pointer-events-auto"
+              >
                 {tag.name}
               </Badge>
             ))}
             {image.tags.length > 3 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="outline" className="text-xs cursor-help">
+                  <Badge 
+                    className="text-[9px] px-1.5 py-0 bg-primary/90 text-primary-foreground border-none cursor-help pointer-events-auto shadow-sm"
+                  >
                     +{image.tags.length - 3}
                   </Badge>
                 </TooltipTrigger>
@@ -780,7 +822,21 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
               </Tooltip>
             )}
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* Hover overlay - covers entire card */}
+      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10" />
+
+      {/* Info */}
+      <div className="p-3 space-y-2">
+        {/* Filename */}
+        <p className="text-sm font-medium truncate" title={image.filename}>
+          {image.filename}
+        </p>
+
+
+
 
         {/* Status & Size */}
         <div className="flex items-center justify-between">

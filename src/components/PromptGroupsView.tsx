@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search } from "lucide-react";
+import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { SmartPromptRenderer } from "./SmartPromptRenderer";
@@ -483,11 +483,23 @@ export function PromptGroupsView() {
         </Button>
       </div>
       
-      <Input
-        value={imageSearch}
-        onChange={(event) => setImageSearch(event.target.value)}
-        placeholder="搜索文件名或模型..."
-      />
+      <div className="relative">
+        <Input
+          value={imageSearch}
+          onChange={(event) => setImageSearch(event.target.value)}
+          placeholder="搜索文件名或模型..."
+          className="pr-9"
+        />
+        {imageSearch && (
+          <button
+            type="button"
+            onClick={() => setImageSearch("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
       <div className="text-xs text-muted-foreground">
         共 {images.length} 张图片
       </div>
@@ -595,8 +607,17 @@ export function PromptGroupsView() {
               placeholder="搜索 Prompt/描述/负面提示..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-64 h-9"
+              className="pl-9 pr-9 w-64 h-9"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <select

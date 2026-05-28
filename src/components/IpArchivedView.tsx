@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { useIpImageStore, useUIStore, type IpAssetDetail, type IpStickerPack } from "@/stores";
+import { useIpImageStore, useUIStore, type IpAssetDetail, type IpStickerPack, type IpAsset } from "@/stores";
 import { ipImageApi, ipApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,100 @@ import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
 
 import IpSidebar from "./IpSidebar";
+
+// 自动拷贝并归档头像到当前 IP 形象
+const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
+  try {
+    const { appDataDir, join } = await import("@tauri-apps/api/path");
+    const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
+    
+    const { settings } = useUIStore.getState();
+
+    // 1. 解析待整理收件箱路径
+    let inboxDir: string;
+    if (settings.customIpInboxPath) {
+      inboxDir = settings.customIpInboxPath;
+    } else {
+      const appDir = await appDataDir();
+      inboxDir = await join(appDir, "ip_inbox");
+    }
+
+    if (!(await exists(inboxDir))) {
+      await mkdir(inboxDir, { recursive: true });
+    }
+
+    // 2. 解析归档库路径
+    let libraryPath: string;
+    if (settings.customIpArchivedPath) {
+      libraryPath = settings.customIpArchivedPath;
+    } else {
+      libraryPath = await appDataDir();
+    }
+    const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+
+    const fileName = avatarPath.split(/[/\\]/).pop() || "avatar.png";
+
+    let fileSize = 0;
+    try {
+      const fileMeta = await stat(avatarPath);
+      fileSize = fileMeta.size;
+    } catch (error) {
+      console.error(`Failed to get metadata for ${avatarPath}:`, error);
+    }
+
+    const timestamp = Date.now();
+    const uniqueFileName = `${timestamp}_${fileName}`;
+    const targetPath = await join(inboxDir, uniqueFileName);
+
+    // 复制头像文件到收件箱
+    await copyFile(avatarPath, targetPath);
+
+    // 3. 导入至图库收件箱并关联 IP
+    const importResult = await ipImageApi.import({
+      file_path: targetPath,
+      file_name: fileName,
+      file_size: fileSize,
+      ip_id: ip.id,
+      tags: [],
+    });
+
+    let finalAvatarPath = targetPath;
+
+    // 4. 自动进行图库归档
+    try {
+      const archiveResult = await ipImageApi.archive([importResult.id], libraryPath, namingTemplate);
+      if (archiveResult.success_count > 0) {
+        try {
+          const archived = await ipImageApi.getArchivedImages();
+          const archivedImage = archived.find(x => x.id === importResult.id);
+          if (archivedImage) {
+            finalAvatarPath = archivedImage.absolute_path;
+          }
+        } catch (e) {
+          console.error("加载归档后的绝对路径失败:", e);
+        }
+      }
+    } catch (archiveError) {
+      console.error(`自动归档头像图片 ${importResult.id} 失败:`, archiveError);
+    }
+
+    // 5. 更新 IP 形象的头像路径为归档后的绝对路径
+    try {
+      await ipApi.update(
+        ip.id,
+        ip.name,
+        ip.path,
+        ip.inspiration || undefined,
+        ip.description || undefined,
+        finalAvatarPath
+      );
+    } catch (updateError) {
+      console.error("更新 IP 头像路径失败:", updateError);
+    }
+  } catch (error) {
+    console.error("自动归档头像失败:", error);
+  }
+};
 
 export default function IpArchivedView() {
   const { 
@@ -138,18 +232,25 @@ export default function IpArchivedView() {
     }
     try {
       if (editingIp) {
-        await ipApi.update(
+        const isAvatarChanged = ipAvatarPath && ipAvatarPath !== editingIp.avatar_path;
+
+        const updated = await ipApi.update(
           editingIp.id,
           ipName,
           finalPath,
           ipInspiration || undefined,
           ipDescription || undefined,
-          ipAvatarPath || undefined
+          isAvatarChanged ? undefined : (ipAvatarPath || undefined)
         );
+
+        if (isAvatarChanged && ipAvatarPath) {
+          await autoArchiveAvatar(ipAvatarPath, updated);
+        }
+
         toast({ title: "保存成功", description: "IP 形象已成功更新" });
         setIsIpModalOpen(false);
         setSidebarKey(prev => prev + 1);
-        if (selectedIpId) loadIpDetail(selectedIpId);
+        loadArchivedImages();
       }
     } catch (e) {
       console.error(e);
@@ -914,8 +1015,17 @@ export default function IpArchivedView() {
                       placeholder="搜索 (文件名/IP形象/标签/格式/水印平台...)"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 w-64"
+                      className="pl-9 pr-9 w-64"
                     />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
                   {/* 筛选按钮 */}

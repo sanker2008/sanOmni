@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { type IpAsset } from "@/stores";
 import { ipApi } from "@/services/tauri";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Users, ChevronRight, Archive, Plus } from "lucide-react";
+import { Search, Users, ChevronRight, Archive, Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,7 @@ interface IpSidebarProps {
 }
 
 // 自动拷贝并归档头像到当前 IP 形象
-const autoArchiveAvatar = async (avatarPath: string, ipId: string) => {
+const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
   try {
     const { appDataDir, join } = await import("@tauri-apps/api/path");
     const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
@@ -74,15 +74,42 @@ const autoArchiveAvatar = async (avatarPath: string, ipId: string) => {
       file_path: targetPath,
       file_name: fileName,
       file_size: fileSize,
-      ip_id: ipId,
-      tags: ["头像"],
+      ip_id: ip.id,
+      tags: [],
     });
+
+    let finalAvatarPath = targetPath;
 
     // 4. 自动进行图库归档
     try {
-      await ipImageApi.archive([importResult.id], libraryPath, namingTemplate);
+      const archiveResult = await ipImageApi.archive([importResult.id], libraryPath, namingTemplate);
+      if (archiveResult.success_count > 0) {
+        try {
+          const archived = await ipImageApi.getArchivedImages();
+          const archivedImage = archived.find(x => x.id === importResult.id);
+          if (archivedImage) {
+            finalAvatarPath = archivedImage.absolute_path;
+          }
+        } catch (e) {
+          console.error("加载归档后的绝对路径失败:", e);
+        }
+      }
     } catch (archiveError) {
       console.error(`自动归档头像图片 ${importResult.id} 失败:`, archiveError);
+    }
+
+    // 5. 更新 IP 形象的头像路径为归档后的绝对路径
+    try {
+      await ipApi.update(
+        ip.id,
+        ip.name,
+        ip.path,
+        ip.inspiration || undefined,
+        ip.description || undefined,
+        finalAvatarPath
+      );
+    } catch (updateError) {
+      console.error("更新 IP 头像路径失败:", updateError);
     }
   } catch (error) {
     console.error("自动归档头像失败:", error);
@@ -173,12 +200,12 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
         finalPath,
         ipInspiration || undefined,
         ipDescription || undefined,
-        ipAvatarPath || undefined
+        undefined
       );
 
-      // 如果上传了头像，自动归档该头像图片到新创建的 IP 形象下
+      // 如果上传了头像，自动归档该头像图片到新创建的 IP 形象下并更新其头像路径
       if (ipAvatarPath) {
-        await autoArchiveAvatar(ipAvatarPath, created.id);
+        await autoArchiveAvatar(ipAvatarPath, created);
       }
 
       toast({ title: "创建成功", description: "IP 形象已成功创建，头像已自动归档" });
@@ -215,10 +242,19 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="搜索 IP 名称/设定/故事..."
-            className="pl-9 h-9"
+            className="pl-9 pr-9 h-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
       

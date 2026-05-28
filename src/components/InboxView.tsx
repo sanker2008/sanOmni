@@ -23,6 +23,7 @@ import {
   Check,
   AlertCircle,
   RefreshCw,
+  X,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import DropZone from "./DropZone";
@@ -400,8 +401,17 @@ export default function InboxView() {
               placeholder="搜索图片（文件名/模型/标签/格式...）"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-64"
+              className="pl-9 pr-9 w-64"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <Button
