@@ -53,6 +53,7 @@ pub async fn detect_watermark(image_path: String) -> Result<WatermarkDetectionRe
         detect_gemini_watermark(&img),
         detect_dalle_watermark(&img),
         detect_midjourney_watermark(&img),
+        detect_doubao_watermark(&img),
     ];
     
     // Find the best match
@@ -772,6 +773,127 @@ fn detect_mj_pattern(img: &DynamicImage) -> f32 {
     } else {
         0.0
     }
+}
+
+/// Detect Doubao watermark (right-bottom corner text)
+fn detect_doubao_watermark(img: &DynamicImage) -> WatermarkDetectionResult {
+    let width = img.width();
+    let height = img.height();
+    
+    // Doubao watermark is in the bottom-right corner, typically 100-250px wide, 20-60px tall
+    let region_width = (width as f32 * 0.15).max(100.0).min(250.0) as u32;
+    let region_height = (height as f32 * 0.05).max(20.0).min(60.0) as u32;
+    
+    let start_x = width.saturating_sub(region_width);
+    let start_y = height.saturating_sub(region_height);
+    
+    let corner_region = img.crop_imm(start_x, start_y, region_width, region_height);
+    
+    let mut scores = Vec::new();
+    
+    // Strategy 1: Text edge detection (Doubao uses clear text)
+    let edge_score = detect_text_edges(&corner_region.to_luma8());
+    scores.push(edge_score * 0.3);
+    
+    // Strategy 2: Bimodal distribution detection (text + background)
+    let bimodal_score = detect_bimodal_distribution(&corner_region);
+    scores.push(bimodal_score * 0.25);
+    
+    // Strategy 3: Horizontal text line detection
+    let line_score = detect_horizontal_text_lines(&corner_region.to_luma8());
+    scores.push(line_score * 0.25);
+    
+    // Strategy 4: Small text features (Doubao uses relatively small font)
+    let small_text_score = detect_small_text_features(&corner_region);
+    scores.push(small_text_score * 0.2);
+    
+    let confidence = scores.iter().sum::<f32>().min(0.95);
+    
+    WatermarkDetectionResult {
+        has_watermark: confidence > 0.35,
+        platform: if confidence > 0.35 { Some("doubao".to_string()) } else { None },
+        confidence,
+        watermark_region: Some(WatermarkRegion {
+            x: start_x,
+            y: start_y,
+            width: region_width,
+            height: region_height,
+        }),
+        detection_method: "doubao_multi_strategy".to_string(),
+    }
+}
+
+/// Detect bimodal distribution (typical feature of text watermarks)
+fn detect_bimodal_distribution(img: &DynamicImage) -> f32 {
+    let mut histogram = vec![0u32; 256];
+    
+    for pixel in img.pixels() {
+        let brightness = (pixel.2[0] as u32 + pixel.2[1] as u32 + pixel.2[2] as u32) / 3;
+        histogram[brightness as usize] += 1;
+    }
+    
+    // Find two peaks (background and text)
+    let peaks = find_histogram_peaks(&histogram, 2);
+    
+    if peaks.len() >= 2 {
+        // Check if the two peaks are sufficiently separated
+        let separation = (peaks[1] as i32 - peaks[0] as i32).abs();
+        if separation > 80 {
+            return 0.9;
+        } else if separation > 50 {
+            return 0.6;
+        } else if separation > 30 {
+            return 0.3;
+        }
+    }
+    
+    0.0
+}
+
+/// Detect small text features
+fn detect_small_text_features(img: &DynamicImage) -> f32 {
+    let width = img.width();
+    let height = img.height();
+    
+    // Doubao text is usually 15-60 pixels in height
+    if height < 15 || height > 80 {
+        return 0.0;
+    }
+    
+    // Check text aspect ratio
+    let aspect_ratio = width as f32 / height as f32;
+    
+    // Text watermarks are usually horizontal, width is 3-10 times the height
+    if aspect_ratio > 3.0 && aspect_ratio < 10.0 {
+        0.8
+    } else if aspect_ratio > 2.0 && aspect_ratio < 12.0 {
+        0.5
+    } else if aspect_ratio > 1.5 && aspect_ratio < 15.0 {
+        0.2
+    } else {
+        0.0
+    }
+}
+
+/// Find peaks in histogram
+fn find_histogram_peaks(histogram: &[u32], num_peaks: usize) -> Vec<usize> {
+    let mut peaks = Vec::new();
+    let total: u32 = histogram.iter().sum();
+    let threshold = total / (histogram.len() as u32 * 10);
+    
+    for i in 1..histogram.len()-1 {
+        if histogram[i] > threshold 
+            && histogram[i] > histogram[i-1] 
+            && histogram[i] > histogram[i+1] {
+            peaks.push(i);
+        }
+    }
+    
+    // Return the highest peaks
+    peaks.sort_by(|a, b| histogram[*b].cmp(&histogram[*a]));
+    peaks.truncate(num_peaks);
+    peaks.sort();
+    peaks
 }
 
 /// Batch detect watermarks for multiple images
