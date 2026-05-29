@@ -19,6 +19,7 @@ export interface CanvasSettings {
   workspaceColor?: string;
   /** Background color of the right settings panel */
   panelColor?: string;
+  transparent?: boolean;
 }
 
 // ─── Layer Types ───────────────────────────────────────────
@@ -119,6 +120,7 @@ export const DEFAULT_CANVAS: CanvasSettings = {
   borderColor: '#FF6B00',
   workspaceColor: '',
   panelColor: '',
+  transparent: false,
 };
 
 export const DEFAULT_TEXT_LAYER: Omit<TextLayer, 'id'> = {

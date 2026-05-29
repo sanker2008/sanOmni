@@ -646,8 +646,10 @@ export default function CanvasPreview({
 
     // Clear and draw background
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = canvas.backgroundColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!canvas.transparent) {
+      ctx.fillStyle = canvas.backgroundColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     // Render layers bottom to top
     for (const layer of layers) {
@@ -1221,8 +1223,14 @@ export function exportCanvasToBlob(
     }
 
     // Background
-    ctx.fillStyle = canvasSettings.backgroundColor;
-    ctx.fillRect(0, 0, canvasSettings.width, canvasSettings.height);
+    if (!canvasSettings.transparent) {
+      ctx.fillStyle = canvasSettings.backgroundColor;
+      ctx.fillRect(0, 0, canvasSettings.width, canvasSettings.height);
+    } else if (canvasSettings.exportFormat === 'jpeg') {
+      // JPEG does not support transparency, fallback to the background color or white
+      ctx.fillStyle = canvasSettings.backgroundColor || '#FFFFFF';
+      ctx.fillRect(0, 0, canvasSettings.width, canvasSettings.height);
+    }
 
     // Render layers
     for (const layer of layers) {

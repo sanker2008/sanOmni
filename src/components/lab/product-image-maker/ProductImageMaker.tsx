@@ -543,7 +543,7 @@ export default function ProductImageMaker() {
         <div className="w-[300px] shrink-0 border-l border-border flex flex-col overflow-hidden">
           {/* Canvas settings section — distinct background */}
           <div
-            className="border-b-2 border-border overflow-y-auto"
+            className="border-b-2 border-border overflow-y-auto max-h-[60%] shrink-0"
             style={{ backgroundColor: canvas.panelColor || 'hsl(var(--muted) / 0.3)' }}
           >
             <div className="p-3">

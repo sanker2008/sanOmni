@@ -195,11 +195,30 @@ function CanvasSettingsPanel({
         max={4000}
         suffix="px"
       />
-      <ColorInput
-        label="背景色"
-        value={canvas.backgroundColor}
-        onChange={(v) => onUpdate({ backgroundColor: v })}
-      />
+      <div className="flex items-center justify-between">
+        <label className="text-xs text-muted-foreground w-14 shrink-0">透明背景</label>
+        <button
+          type="button"
+          onClick={() => onUpdate({ transparent: !canvas.transparent })}
+          className={`relative w-8 h-4 rounded-full transition-colors ${
+            canvas.transparent ? 'bg-primary' : 'bg-muted'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+              canvas.transparent ? 'translate-x-4' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {!canvas.transparent && (
+        <ColorInput
+          label="背景色"
+          value={canvas.backgroundColor}
+          onChange={(v) => onUpdate({ backgroundColor: v })}
+        />
+      )}
       <NumberInput
         label="描边粗细"
         value={canvas.borderWidth || 0}

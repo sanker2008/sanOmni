@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import ProductImageMaker from './product-image-maker/ProductImageMaker';
+import ImageSlicer from './image-slicer/ImageSlicer';
 import {
   ImageIcon,
   Scissors,
@@ -39,8 +40,8 @@ const LAB_TOOLS: LabTool[] = [
     name: '图片切割',
     description: '将图片按网格或自定义区域切割',
     icon: <Scissors className="w-4 h-4" />,
-    component: null,
-    available: false,
+    component: ImageSlicer,
+    available: true,
   },
   {
     id: 'image-compressor',
