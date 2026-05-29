@@ -8,11 +8,13 @@
 import { useState } from 'react';
 import ProductImageMaker from './product-image-maker/ProductImageMaker';
 import ImageSlicer from './image-slicer/ImageSlicer';
+import AiImageEditor from './ai-image-editor/AiImageEditor';
 import {
   ImageIcon,
   Scissors,
   Minimize2,
   FlaskConical,
+  Wand2,
 } from 'lucide-react';
 
 // ─── Tool Registry ─────────────────────────────────────────
@@ -27,6 +29,14 @@ interface LabTool {
 }
 
 const LAB_TOOLS: LabTool[] = [
+  {
+    id: 'ai-image-editor',
+    name: 'AI P图',
+    description: 'AI 驱动的图片编辑与遮罩涂鸦工具',
+    icon: <Wand2 className="w-4 h-4" />,
+    component: AiImageEditor,
+    available: true,
+  },
   {
     id: 'product-image-maker',
     name: '产品图制作',

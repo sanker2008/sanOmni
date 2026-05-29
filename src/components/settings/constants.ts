@@ -9,6 +9,11 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   lightThemeColor: "#2563eb",
   darkThemeColor: "#60a5fa",
 
+  // AI P图 设置
+  aiImageEditorProvider: "mock",          // 当前选择的供应商 id
+  aiImageEditorProviderConfig: {},        // 供应商特定参数 (动态 key-value)
+  aiImageEditorOutputPath: "",            // 自定义输出目录
+
   // 监控设置
   watchFolders: [],
   watchExtensions: "png,jpg,jpeg,webp,gif",
