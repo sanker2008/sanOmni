@@ -464,7 +464,7 @@ export default function CanvasPreview({
   const [isResizing, setIsResizing] = useState(false);
   const [handleCursor, setHandleCursor] = useState<string | null>(null);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
-  const [snapLines, setSnapLines] = useState<{ x?: number; y?: number } | null>(null);
+  const [snapLines, setSnapLines] = useState<{ x?: number; y?: number; xIsCenter?: boolean; yIsCenter?: boolean } | null>(null);
   const dragStartRef = useRef<{
     layerId: string;
     mode: 'move' | 'resize' | 'rotate';
@@ -526,7 +526,26 @@ export default function CanvasPreview({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    
+
+    let rafId: number | null = null;
+    let pendingScale: number | null = null;
+    let pendingPan: { x: number; y: number } | null = null;
+
+    const flush = () => {
+      rafId = null;
+      if (pendingScale !== null && pendingPan !== null) {
+        // Batch both updates into a single render cycle
+        setScale(pendingScale);
+        setPan(pendingPan);
+        stateRef.current = { scale: pendingScale, pan: pendingPan };
+      } else if (pendingPan !== null) {
+        setPan(pendingPan);
+        stateRef.current = { ...stateRef.current, pan: pendingPan };
+      }
+      pendingScale = null;
+      pendingPan = null;
+    };
+
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       const { scale: currentScale, pan: currentPan } = stateRef.current;
@@ -536,7 +555,7 @@ export default function CanvasPreview({
         const zoomSensitivity = 0.005;
         const zoomFactor = 1 - e.deltaY * zoomSensitivity;
         let newScale = currentScale * zoomFactor;
-        newScale = Math.max(0.05, Math.min(newScale, 10)); // 5% to 1000%
+        newScale = Math.max(0.05, Math.min(newScale, 10));
         
         const rect = container.getBoundingClientRect();
         const cursorX = e.clientX - rect.left;
@@ -545,16 +564,27 @@ export default function CanvasPreview({
         const newPanX = cursorX - ((cursorX - currentPan.x) / currentScale) * newScale;
         const newPanY = cursorY - ((cursorY - currentPan.y) / currentScale) * newScale;
         
-        setScale(newScale);
-        setPan({ x: newPanX, y: newPanY });
+        pendingScale = newScale;
+        pendingPan = { x: newPanX, y: newPanY };
+        // Update ref immediately so rapid successive events read correct values
+        stateRef.current = { scale: newScale, pan: { x: newPanX, y: newPanY } };
       } else {
         // Pan
-        setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
+        const newPan = { x: currentPan.x - e.deltaX, y: currentPan.y - e.deltaY };
+        pendingPan = newPan;
+        stateRef.current = { ...stateRef.current, pan: newPan };
+      }
+
+      if (rafId === null) {
+        rafId = requestAnimationFrame(flush);
       }
     };
     
     container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   // Keyboard Spacebar for panning
@@ -646,24 +676,25 @@ export default function CanvasPreview({
     if (selectedLayerId && selectedLayerId !== editingLayerId) {
       const selectedLayer = layers.find((l) => l.id === selectedLayerId);
       if (selectedLayer) {
-        renderSelectionIndicator(ctx, selectedLayer, scale);
+        renderSelectionIndicator(ctx, selectedLayer, stateRef.current.scale);
       }
     }
 
     // Snap lines
     if (snapLines && isDragging) {
       ctx.save();
-      ctx.strokeStyle = '#F87171'; // Tailwind red-400
-      ctx.lineWidth = 1 / scale;
-      ctx.setLineDash([4 / scale, 4 / scale]);
+      ctx.lineWidth = 1 / stateRef.current.scale;
+      ctx.setLineDash([4 / stateRef.current.scale, 4 / stateRef.current.scale]);
 
       if (snapLines.x !== undefined) {
+        ctx.strokeStyle = snapLines.xIsCenter ? '#60A5FA' : '#F87171'; // blue for center, red for layer
         ctx.beginPath();
         ctx.moveTo(snapLines.x, 0);
         ctx.lineTo(snapLines.x, canvas.height);
         ctx.stroke();
       }
       if (snapLines.y !== undefined) {
+        ctx.strokeStyle = snapLines.yIsCenter ? '#60A5FA' : '#F87171';
         ctx.beginPath();
         ctx.moveTo(0, snapLines.y);
         ctx.lineTo(canvas.width, snapLines.y);
@@ -671,7 +702,7 @@ export default function CanvasPreview({
       }
       ctx.restore();
     }
-  }, [canvas, layers, selectedLayerId, editingLayerId, snapLines, isDragging, scale]);
+  }, [canvas, layers, selectedLayerId, editingLayerId, snapLines, isDragging]);
 
   useEffect(() => {
     // Use requestAnimationFrame for smooth rendering
@@ -939,12 +970,22 @@ export default function CanvasPreview({
       let visualCenterX = newLayerX - offsetX;
       let visualCenterY = newLayerY - offsetY;
 
+      const canvasCenterX = canvas.width / 2;
+      const canvasCenterY = canvas.height / 2;
+
       let snapX: number | undefined;
       let snapY: number | undefined;
+      let snapXIsCenter = false;
+      let snapYIsCenter = false;
       const SNAP_THRESHOLD = 10 / scale;
       
-      const snapTargetsX = [canvas.width / 2];
-      const snapTargetsY = [canvas.height / 2];
+      // Canvas center targets (marked as center)
+      const snapTargetsX: { value: number; isCenter: boolean }[] = [
+        { value: canvasCenterX, isCenter: true },
+      ];
+      const snapTargetsY: { value: number; isCenter: boolean }[] = [
+        { value: canvasCenterY, isCenter: true },
+      ];
 
       const ctx = canvasRef.current?.getContext('2d');
       if (ctx) {
@@ -962,46 +1003,44 @@ export default function CanvasPreview({
         }
 
         for (let i = 0; i < otherLayerCenters.length; i++) {
-          snapTargetsX.push(otherLayerCenters[i].x);
-          snapTargetsY.push(otherLayerCenters[i].y);
+          snapTargetsX.push({ value: otherLayerCenters[i].x, isCenter: false });
+          snapTargetsY.push({ value: otherLayerCenters[i].y, isCenter: false });
           for (let j = i + 1; j < otherLayerCenters.length; j++) {
-            snapTargetsX.push((otherLayerCenters[i].x + otherLayerCenters[j].x) / 2);
-            snapTargetsY.push((otherLayerCenters[i].y + otherLayerCenters[j].y) / 2);
+            snapTargetsX.push({ value: (otherLayerCenters[i].x + otherLayerCenters[j].x) / 2, isCenter: false });
+            snapTargetsY.push({ value: (otherLayerCenters[i].y + otherLayerCenters[j].y) / 2, isCenter: false });
           }
         }
       }
 
       let minDiffX = Infinity;
-      let closestSnapX: number | undefined;
       for (const target of snapTargetsX) {
-        const diff = Math.abs(visualCenterX - target);
+        const diff = Math.abs(visualCenterX - target.value);
         if (diff < SNAP_THRESHOLD && diff < minDiffX) {
           minDiffX = diff;
-          closestSnapX = target;
+          snapX = target.value;
+          snapXIsCenter = target.isCenter;
         }
       }
-      if (closestSnapX !== undefined) {
-        visualCenterX = closestSnapX;
+      if (snapX !== undefined) {
+        visualCenterX = snapX;
         newLayerX = visualCenterX + offsetX;
-        snapX = closestSnapX;
       }
 
       let minDiffY = Infinity;
-      let closestSnapY: number | undefined;
       for (const target of snapTargetsY) {
-        const diff = Math.abs(visualCenterY - target);
+        const diff = Math.abs(visualCenterY - target.value);
         if (diff < SNAP_THRESHOLD && diff < minDiffY) {
           minDiffY = diff;
-          closestSnapY = target;
+          snapY = target.value;
+          snapYIsCenter = target.isCenter;
         }
       }
-      if (closestSnapY !== undefined) {
-        visualCenterY = closestSnapY;
+      if (snapY !== undefined) {
+        visualCenterY = snapY;
         newLayerY = visualCenterY + offsetY;
-        snapY = closestSnapY;
       }
 
-      setSnapLines({ x: snapX, y: snapY });
+      setSnapLines({ x: snapX, y: snapY, xIsCenter: snapXIsCenter, yIsCenter: snapYIsCenter });
       onMoveLayer(layerId, Math.round(newLayerX), Math.round(newLayerY));
     },
     [isDragging, isResizing, getCanvasCoords, onMoveLayer, onUpdateLayer, handleCanvasHover, canvas.width, canvas.height, scale, layers],
@@ -1017,9 +1056,10 @@ export default function CanvasPreview({
   return (
     <div
       ref={containerRef}
-      className="flex-1 bg-muted/30 overflow-hidden relative"
+      className="flex-1 overflow-hidden relative"
       style={{ 
         cursor: isSpacePressed ? 'grab' : (isPanning ? 'grabbing' : 'default'),
+        backgroundColor: canvas.workspaceColor || 'hsl(var(--muted) / 0.3)',
         backgroundImage: 'radial-gradient(hsl(var(--muted-foreground) / 0.2) 1px, transparent 1px)',
         backgroundSize: '24px 24px',
         backgroundPosition: `${pan.x}px ${pan.y}px`,

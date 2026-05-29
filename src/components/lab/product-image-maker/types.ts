@@ -15,6 +15,10 @@ export interface CanvasSettings {
   exportQuality: number;
   borderWidth: number;
   borderColor: string;
+  /** Background color of the workspace area behind the canvas */
+  workspaceColor?: string;
+  /** Background color of the right settings panel */
+  panelColor?: string;
 }
 
 // ─── Layer Types ───────────────────────────────────────────
@@ -113,6 +117,8 @@ export const DEFAULT_CANVAS: CanvasSettings = {
   exportQuality: 0.9,
   borderWidth: 0,
   borderColor: '#FF6B00',
+  workspaceColor: '',
+  panelColor: '',
 };
 
 export const DEFAULT_TEXT_LAYER: Omit<TextLayer, 'id'> = {

@@ -5,6 +5,7 @@
  * Supports both text layers and image layers with different property sets.
  */
 
+import { useState } from 'react';
 import type { Layer, TextLayer, ImageLayer, ShapeLayer, CanvasSettings } from './types';
 import { FONT_WEIGHT_OPTIONS, CANVAS_PRESETS } from './types';
 import FontSelector from './FontSelector';
@@ -13,6 +14,7 @@ import {
   AlignCenter,
   AlignRight,
   Minus,
+  ChevronDown,
 } from 'lucide-react';
 
 // ─── Reusable Input Components ─────────────────────────────
@@ -135,13 +137,22 @@ function CanvasSettingsPanel({
   canvas: CanvasSettings;
   onUpdate: (updates: Partial<CanvasSettings>) => void;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 mb-2">
+      <button
+        type="button"
+        onClick={() => setCollapsed(!collapsed)}
+        className="flex items-center gap-2 w-full group"
+      >
+        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${collapsed ? '-rotate-90' : ''}`} />
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           画布设置
         </span>
-      </div>
+      </button>
+
+      {!collapsed && (<>
 
       {/* Presets */}
       <div className="flex items-center gap-2">
@@ -237,6 +248,48 @@ function CanvasSettingsPanel({
           />
         )}
       </div>
+
+      <div className="pt-2 border-t border-border mt-3 space-y-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            界面外观
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <ColorInput
+            label="工作区"
+            value={canvas.workspaceColor || '#f5f5f5'}
+            onChange={(v) => onUpdate({ workspaceColor: v })}
+          />
+          {canvas.workspaceColor && (
+            <button
+              type="button"
+              onClick={() => onUpdate({ workspaceColor: '' })}
+              className="text-[10px] text-primary hover:underline shrink-0"
+            >
+              重置
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <ColorInput
+            label="面板区"
+            value={canvas.panelColor || '#f5f5f5'}
+            onChange={(v) => onUpdate({ panelColor: v })}
+          />
+          {canvas.panelColor && (
+            <button
+              type="button"
+              onClick={() => onUpdate({ panelColor: '' })}
+              className="text-[10px] text-primary hover:underline shrink-0"
+            >
+              重置
+            </button>
+          )}
+        </div>
+      </div>
+      </>)}
     </div>
   );
 }
@@ -715,9 +768,11 @@ export default function PropertyPanel({
       {/* Canvas settings always visible */}
       <CanvasSettingsPanel canvas={canvas} onUpdate={onUpdateCanvas} />
 
+      <hr className="border-border" />
+
       {/* Layer properties */}
-      {selectedLayer && (
-        <div className="pt-3 border-t border-border">
+      {selectedLayer ? (
+        <div>
           {selectedLayer.locked && (
             <div className="mb-4 p-2 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded text-xs flex items-center justify-center gap-2">
               <span className="shrink-0">🔒</span>
@@ -749,10 +804,7 @@ export default function PropertyPanel({
             )}
           </div>
         </div>
-      )}
-
-      {/* No selection hint */}
-      {!selectedLayer && (
+      ) : (
         <div className="text-center text-xs text-muted-foreground py-4">
           <Minus className="w-4 h-4 mx-auto mb-1 opacity-30" />
           选中一个图层以编辑属性

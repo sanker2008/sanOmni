@@ -542,7 +542,10 @@ export default function ProductImageMaker() {
         {/* Right: Sidebar */}
         <div className="w-[300px] shrink-0 border-l border-border flex flex-col overflow-hidden">
           {/* Canvas settings section — distinct background */}
-          <div className="bg-muted/30 border-b-2 border-border overflow-y-auto">
+          <div
+            className="border-b-2 border-border overflow-y-auto"
+            style={{ backgroundColor: canvas.panelColor || 'hsl(var(--muted) / 0.3)' }}
+          >
             <div className="p-3">
               <PropertyPanel
                 canvas={canvas}

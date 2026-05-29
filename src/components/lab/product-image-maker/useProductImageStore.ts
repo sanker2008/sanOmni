@@ -27,8 +27,8 @@ interface ProductImageStore {
   selectedLayerId: string | null;
 
   // History
-  past: { canvas: CanvasSettings; layers: Layer[] }[];
-  future: { canvas: CanvasSettings; layers: Layer[] }[];
+  past: Layer[][];
+  future: Layer[][];
   maxHistorySize: number;
   undo: () => void;
   redo: () => void;
@@ -79,41 +79,38 @@ export const useProductImageStore = create<ProductImageStore>((set, get) => ({
   setMaxHistorySize: (size) => set({ maxHistorySize: Math.max(1, Math.round(size)) }),
 
   pushHistory: () => {
-    const { canvas, layers, past, maxHistorySize } = get();
+    const { layers, past, maxHistorySize } = get();
     set({
-      past: [{ canvas: { ...canvas }, layers: [...layers] }, ...past].slice(0, maxHistorySize),
+      past: [[...layers], ...past].slice(0, maxHistorySize),
       future: [],
     });
   },
 
   undo: () => {
-    const { past, future, canvas, layers } = get();
+    const { past, future, layers } = get();
     if (past.length === 0) return;
     const previous = past[0];
     set({
       past: past.slice(1),
-      future: [{ canvas: { ...canvas }, layers: [...layers] }, ...future],
-      canvas: previous.canvas,
-      layers: previous.layers,
+      future: [[...layers], ...future],
+      layers: previous,
       selectedLayerId: null,
     });
   },
 
   redo: () => {
-    const { past, future, canvas, layers } = get();
+    const { past, future, layers } = get();
     if (future.length === 0) return;
     const next = future[0];
     set({
-      past: [{ canvas: { ...canvas }, layers: [...layers] }, ...past],
+      past: [[...layers], ...past],
       future: future.slice(1),
-      canvas: next.canvas,
-      layers: next.layers,
+      layers: next,
       selectedLayerId: null,
     });
   },
 
   updateCanvas: (updates) => {
-    get().pushHistory();
     set((state) => ({ canvas: { ...state.canvas, ...updates } }));
   },
 
