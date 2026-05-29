@@ -20,7 +20,7 @@ export default function PromptDomainView() {
           className={cn(
             "gap-2 h-8 transition-all duration-200 font-medium border border-transparent",
             promptTab === "inbox"
-              ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:border-blue-600 dark:hover:bg-blue-700"
+              ? "bg-primary text-primary-foreground border-primary shadow-md hover:bg-primary/90"
               : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
           )}
         >
@@ -34,7 +34,7 @@ export default function PromptDomainView() {
           className={cn(
             "gap-2 h-8 transition-all duration-200 font-medium border border-transparent",
             promptTab === "archived"
-              ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:border-blue-600 dark:hover:bg-blue-700"
+              ? "bg-primary text-primary-foreground border-primary shadow-md hover:bg-primary/90"
               : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
           )}
         >
@@ -48,7 +48,7 @@ export default function PromptDomainView() {
           className={cn(
             "gap-2 h-8 transition-all duration-200 font-medium border border-transparent",
             promptTab === "templates"
-              ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700 dark:bg-blue-600 dark:text-white dark:border-blue-600 dark:hover:bg-blue-700"
+              ? "bg-primary text-primary-foreground border-primary shadow-md hover:bg-primary/90"
               : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
           )}
         >

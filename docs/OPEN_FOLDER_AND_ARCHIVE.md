@@ -62,7 +62,7 @@
 #### 归档位置
 ```
 默认位置:
-%APPDATA%\com.sanmediabox.app\archived\<厂商>\<模型>\
+%APPDATA%\com.sanomni.app\archived\<厂商>\<模型>\
 
 自定义位置:
 <自定义归档路径>\archived\<厂商>\<模型>\
@@ -182,7 +182,7 @@ stable-diffusion-sdxl-2024-05-20-002.jpg
 
 ### Q: 归档后图片在哪里？
 **A:** 
-- 默认位置：`%APPDATA%\com.sanmediabox.app\archived\<厂商>\<模型>\`
+- 默认位置：`%APPDATA%\com.sanomni.app\archived\<厂商>\<模型>\`
 - 自定义位置：在设置中查看
 - 可以在"已归档"标签页查看
 

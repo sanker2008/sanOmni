@@ -84,7 +84,7 @@ IP 资产管理 (sanIPBox)
 当需要将作品集拆分为独立应用时：
 
 ```
-sanMediaBox (当前)
+sanOmni (当前)
 ├── IP 资产管理 (sanIPBox) - 核心：表情包
 │   └── 作品集 (内嵌扩展)
 └── 提示词管理 (sanPromptBox)

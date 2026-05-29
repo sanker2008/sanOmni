@@ -4,7 +4,7 @@ import { useFolderWatcher } from "@/hooks/useFolderWatcher";
 import PromptDomainView from "@/components/PromptDomainView";
 import QuickEditModal from "@/components/QuickEditModal";
 import ImageViewer from "@/components/ImageViewer";
-import SettingsView from "@/components/SettingsView";
+import SettingsView from "@/components/settings/SettingsView";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 
@@ -14,8 +14,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Settings, Sun, Moon, Monitor, LayoutTemplate, Users } from "lucide-react";
+import { Settings, Sun, Moon, Monitor, LayoutTemplate, Users, FlaskConical } from "lucide-react";
 import IpDomainView from "@/components/IpDomainView";
+import LabView from "@/components/lab/LabView";
 import type { Theme } from "@/stores";
 
 const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
@@ -49,8 +50,8 @@ function App() {
         <header className="border-b px-4 py-3 flex items-center justify-between bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 shadow-sm">
           <div className="flex items-center gap-6">
             <h1 className="text-xl font-semibold">
-              sanMediaBox
-              <span className="ml-2 text-sm font-normal text-muted-foreground">AI Image Manager</span>
+              sanOmni
+
             </h1>
 
             <nav className="flex items-center gap-1">
@@ -71,6 +72,15 @@ function App() {
               >
                 <Users className="w-4 h-4" />
                 IP 资产管理
+              </Button>
+              <Button
+                variant={activeTab === "labs" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTab("labs")}
+                className="gap-2"
+              >
+                <FlaskConical className="w-4 h-4" />
+                Labs
               </Button>
             </nav>
           </div>
@@ -104,8 +114,10 @@ function App() {
         <main className="flex-1 overflow-hidden relative">
             {activeTab === "prompt" ? (
               <PromptDomainView />
-            ) : (
+            ) : activeTab === "ip" ? (
               <IpDomainView />
+            ) : (
+              <LabView />
             )}
         </main>
 

@@ -5,7 +5,7 @@
 ### 应用数据目录
 在 Windows 系统上，`appDataDir()` 返回的路径是：
 ```
-C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
+C:\Users\<用户名>\AppData\Roaming\com.sanomni.app\
 ```
 
 ### 完整目录结构
@@ -124,7 +124,7 @@ console.log("Copying file to:", targetPath);
 ### 方法3：直接访问目录
 在文件资源管理器地址栏输入：
 ```
-%APPDATA%\com.sanmediabox.app
+%APPDATA%\com.sanomni.app
 ```
 
 ## 未来优化建议

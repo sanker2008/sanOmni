@@ -14,6 +14,24 @@ fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
     Connection::open(db_path).map_err(|e| e.to_string())
 }
 
+// Path resolver helper
+fn resolve_relative_paths_json(app_data_dir: &std::path::Path, paths_json: Option<String>) -> Option<String> {
+    if let Some(json_str) = paths_json {
+        if let Ok(paths) = serde_json::from_str::<Vec<String>>(&json_str) {
+            let abs_paths: Vec<String> = paths.into_iter().map(|p| {
+                let normalized = p.replace('/', &std::path::MAIN_SEPARATOR.to_string())
+                                  .replace('\\', &std::path::MAIN_SEPARATOR.to_string());
+                app_data_dir.join(normalized).to_string_lossy().to_string()
+            }).collect();
+            serde_json::to_string(&abs_paths).ok()
+        } else {
+            Some(json_str)
+        }
+    } else {
+        None
+    }
+}
+
 #[tauri::command]
 pub async fn create_character(
     app_handle: AppHandle,
@@ -53,6 +71,10 @@ pub async fn get_characters(
     work_id: String,
 ) -> Result<Vec<CharacterWithRelations>, String> {
     let conn = get_connection(&app_handle)?;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
         "SELECT c.id, c.work_id, c.name, c.character_type, c.description, c.appearance_info,
@@ -66,6 +88,8 @@ pub async fn get_characters(
     ).map_err(|e| e.to_string())?;
     
     let characters = stmt.query_map(params![work_id], |row| {
+        let image_paths_raw: Option<String> = row.get(6)?;
+        let resolved_image_paths = resolve_relative_paths_json(&app_data_dir, image_paths_raw);
         Ok(CharacterWithRelations {
             character: Character {
                 id: row.get(0)?,
@@ -74,7 +98,7 @@ pub async fn get_characters(
                 character_type: row.get(3)?,
                 description: row.get(4)?,
                 appearance_info: row.get(5)?,
-                image_paths: row.get(6)?,
+                image_paths: resolved_image_paths,
                 ip_id: row.get(7)?,
                 ip_relation_note: row.get(8)?,
                 display_order: row.get(9)?,
@@ -98,6 +122,10 @@ pub async fn get_character_by_id(
     id: String,
 ) -> Result<CharacterWithRelations, String> {
     let conn = get_connection(&app_handle)?;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
     
     conn.query_row(
         "SELECT c.id, c.work_id, c.name, c.character_type, c.description, c.appearance_info,
@@ -109,6 +137,8 @@ pub async fn get_character_by_id(
          WHERE c.id = ? AND c.deleted_at IS NULL",
         params![id],
         |row| {
+            let image_paths_raw: Option<String> = row.get(6)?;
+            let resolved_image_paths = resolve_relative_paths_json(&app_data_dir, image_paths_raw);
             Ok(CharacterWithRelations {
                 character: Character {
                     id: row.get(0)?,
@@ -117,7 +147,7 @@ pub async fn get_character_by_id(
                     character_type: row.get(3)?,
                     description: row.get(4)?,
                     appearance_info: row.get(5)?,
-                    image_paths: row.get(6)?,
+                    image_paths: resolved_image_paths,
                     ip_id: row.get(7)?,
                     ip_relation_note: row.get(8)?,
                     display_order: row.get(9)?,
@@ -235,28 +265,40 @@ pub async fn upload_character_images(
         .path()
         .app_data_dir()
         .map_err(|e| e.to_string())?;
-    let char_dir = app_data_dir.join("works").join(&work_id).join("characters");
+    
+    // Resolve path identifier
+    let conn = get_connection(&app_handle)?;
+    let path_ident: String = conn.query_row(
+        "SELECT path FROM works WHERE id = ?",
+        params![work_id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+    
+    let char_dir = app_data_dir.join("works").join(&path_ident).join("characters");
     std::fs::create_dir_all(&char_dir).map_err(|e| e.to_string())?;
     
-    let mut paths = Vec::new();
+    let mut paths_rel = Vec::new();
+    let mut paths_abs = Vec::new();
     for (index, (data, ext)) in images.iter().enumerate() {
         let filename = format!("{}_{}.{}", character_id, index, ext);
         let file_path = char_dir.join(&filename);
         std::fs::write(&file_path, data).map_err(|e| e.to_string())?;
         
-        let relative_path = format!("works/{}/characters/{}", work_id, filename);
-        paths.push(relative_path);
+        let relative_path = format!("works/{}/characters/{}", path_ident, filename);
+        paths_rel.push(relative_path.clone());
+        
+        let absolute_path = app_data_dir.join(&relative_path).to_string_lossy().to_string();
+        paths_abs.push(absolute_path);
     }
     
-    // Update database
-    let conn = get_connection(&app_handle)?;
-    let paths_json = serde_json::to_string(&paths).map_err(|e| e.to_string())?;
+    // Update database (still stores relative paths for portability)
+    let paths_json = serde_json::to_string(&paths_rel).map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE characters SET image_paths = ?1, updated_at = ?2 WHERE id = ?3",
         params![paths_json, Utc::now().to_rfc3339(), character_id],
     ).map_err(|e| e.to_string())?;
     
-    Ok(paths)
+    Ok(paths_abs)
 }
 
 #[tauri::command]
@@ -265,6 +307,10 @@ pub async fn get_ip_characters(
     ip_id: String,
 ) -> Result<Vec<CharacterWithRelations>, String> {
     let conn = get_connection(&app_handle)?;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
         "SELECT c.id, c.work_id, c.name, c.character_type, c.description, c.appearance_info,
@@ -274,10 +320,12 @@ pub async fn get_ip_characters(
          INNER JOIN works w ON c.work_id = w.id
          LEFT JOIN ip_assets ip ON c.ip_id = ip.id
          WHERE c.ip_id = ? AND c.deleted_at IS NULL
-         ORDER BY w.created_at DESC, c.display_order ASC"
+         ORDER BY c.display_order ASC"
     ).map_err(|e| e.to_string())?;
     
     let characters = stmt.query_map(params![ip_id], |row| {
+        let image_paths_raw: Option<String> = row.get(6)?;
+        let resolved_image_paths = resolve_relative_paths_json(&app_data_dir, image_paths_raw);
         Ok(CharacterWithRelations {
             character: Character {
                 id: row.get(0)?,
@@ -286,7 +334,7 @@ pub async fn get_ip_characters(
                 character_type: row.get(3)?,
                 description: row.get(4)?,
                 appearance_info: row.get(5)?,
-                image_paths: row.get(6)?,
+                image_paths: resolved_image_paths,
                 ip_id: row.get(7)?,
                 ip_relation_note: row.get(8)?,
                 display_order: row.get(9)?,
@@ -307,8 +355,8 @@ pub async fn get_ip_characters(
 // Helper functions
 fn cleanup_character_files(
     app_handle: &AppHandle,
-    work_id: &str,
-    character_id: &str,
+    _work_id: &str,
+    _character_id: &str,
     image_paths: Option<String>,
 ) -> Result<(), String> {
     if let Some(paths_json) = image_paths {
@@ -326,6 +374,5 @@ fn cleanup_character_files(
             }
         }
     }
-    
     Ok(())
 }

@@ -3,7 +3,7 @@
 ## Directory Layout
 
 ```
-sanMediaBox/
+sanOmni/
 ├── .kiro/                       # Kiro AI assistant configuration
 │   └── steering/               # AI guidance documents
 ├── src/                         # Frontend source code
@@ -205,7 +205,7 @@ The two domains are architecturally independent and may be split into separate s
 
 - **sanPromptBox**: Standalone prompt template management app
 - **sanIPBox**: Standalone IP character management app
-- **sanMediaBox**: Remains as the unified shell or is retired
+- **sanOmni**: Remains as the unified shell or is retired
 
 To facilitate this potential split, the following guidelines apply:
 

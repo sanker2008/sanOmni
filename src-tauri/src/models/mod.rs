@@ -124,6 +124,7 @@ pub use ip_assets::*;
 pub struct Work {
     pub id: String,
     pub name: String,
+    pub path: Option<String>,
     pub work_type: String,
     pub description: Option<String>,
     pub release_date: Option<String>,

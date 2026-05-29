@@ -10,8 +10,8 @@
 
 ### 应用安装目录（会被删除）
 ```
-C:\Program Files\sanMediaBox\          # 应用程序文件
-├── sanMediaBox.exe
+C:\Program Files\sanOmni\          # 应用程序文件
+├── sanOmni.exe
 ├── resources\
 └── ...
 ```
@@ -19,7 +19,7 @@ C:\Program Files\sanMediaBox\          # 应用程序文件
 
 ### 用户数据目录（不会被删除）
 ```
-C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
+C:\Users\<用户名>\AppData\Roaming\com.sanomni.app\
 ├── data\
 │   └── database.sqlite          # 数据库
 ├── inbox\                        # 待整理图片
@@ -35,7 +35,7 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 ```typescript
 const { appDataDir } = await import("@tauri-apps/api/path");
 const appDir = await appDataDir();
-// 返回: C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
+// 返回: C:\Users\<用户名>\AppData\Roaming\com.sanomni.app\
 ```
 
 这个目录是：
@@ -70,7 +70,7 @@ Windows 应用通常将用户数据存储在：
 ### ❌ 手动删除用户数据目录
 如果用户手动删除了：
 ```
-C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
+C:\Users\<用户名>\AppData\Roaming\com.sanomni.app\
 ```
 那么所有数据会丢失。
 
@@ -84,7 +84,7 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 1. 卸载应用
 2. 删除用户数据目录：
    ```
-   %APPDATA%\com.sanmediabox.app
+   %APPDATA%\com.sanomni.app
    ```
 
 ### 方法2：在应用中提供"重置"功能
@@ -97,7 +97,7 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 
 ### 重要数据位置
 ```
-C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
+C:\Users\<用户名>\AppData\Roaming\com.sanomni.app\
 ├── data\database.sqlite          # 最重要：包含所有元数据
 ├── archived\                     # 重要：已整理的图片
 └── inbox\                        # 可选：临时图片
@@ -138,13 +138,13 @@ C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\
 ## 常见问题
 
 ### Q: 卸载应用后数据还在吗？
-**A:** 是的，数据保留在 `%APPDATA%\com.sanmediabox.app\`
+**A:** 是的，数据保留在 `%APPDATA%\com.sanomni.app\`
 
 ### Q: 重装系统后数据会丢失吗？
 **A:** 是的，除非你备份了用户文件夹
 
 ### Q: 如何迁移到新电脑？
-**A:** 复制整个 `%APPDATA%\com.sanmediabox.app\` 目录到新电脑的相同位置
+**A:** 复制整个 `%APPDATA%\com.sanomni.app\` 目录到新电脑的相同位置
 
 ### Q: 数据占用多少空间？
 **A:** 

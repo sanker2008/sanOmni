@@ -270,8 +270,8 @@ function App() {
 ```batch
 @echo off
 REM 复制新图片到 inbox
-xcopy "D:\AI-Output\*.png" "%APPDATA%\com.sanmediabox.app\inbox\" /D /Y
-xcopy "D:\AI-Output\*.jpg" "%APPDATA%\com.sanmediabox.app\inbox\" /D /Y
+xcopy "D:\AI-Output\*.png" "%APPDATA%\com.sanomni.app\inbox\" /D /Y
+xcopy "D:\AI-Output\*.jpg" "%APPDATA%\com.sanomni.app\inbox\" /D /Y
 ```
 
 ### 方案3：使用第三方工具

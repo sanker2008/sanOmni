@@ -14,10 +14,37 @@ fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
     Connection::open(db_path).map_err(|e| e.to_string())
 }
 
+// Path resolver helpers
+fn resolve_relative_path(app_data_dir: &std::path::Path, relative_path: Option<String>) -> Option<String> {
+    relative_path.map(|p| {
+        let normalized = p.replace('/', &std::path::MAIN_SEPARATOR.to_string())
+                          .replace('\\', &std::path::MAIN_SEPARATOR.to_string());
+        app_data_dir.join(normalized).to_string_lossy().to_string()
+    })
+}
+
+fn resolve_relative_paths_json(app_data_dir: &std::path::Path, paths_json: Option<String>) -> Option<String> {
+    if let Some(json_str) = paths_json {
+        if let Ok(paths) = serde_json::from_str::<Vec<String>>(&json_str) {
+            let abs_paths: Vec<String> = paths.into_iter().map(|p| {
+                let normalized = p.replace('/', &std::path::MAIN_SEPARATOR.to_string())
+                                  .replace('\\', &std::path::MAIN_SEPARATOR.to_string());
+                app_data_dir.join(normalized).to_string_lossy().to_string()
+            }).collect();
+            serde_json::to_string(&abs_paths).ok()
+        } else {
+            Some(json_str)
+        }
+    } else {
+        None
+    }
+}
+
 #[tauri::command]
 pub async fn create_work(
     app_handle: AppHandle,
     name: String,
+    path: Option<String>,
     work_type: String,
     description: Option<String>,
     release_date: Option<String>,
@@ -29,11 +56,16 @@ pub async fn create_work(
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     
+    let final_path = match path {
+        Some(ref p) if !p.trim().is_empty() => p.trim().to_lowercase().replace(' ', "-"),
+        _ => id.clone(),
+    };
+    
     conn.execute(
-        "INSERT INTO works (id, name, work_type, description, release_date, 
+        "INSERT INTO works (id, name, path, work_type, description, release_date, 
          producer, director_author, status, created_at, updated_at) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        params![id, name, work_type, description, release_date, 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![id, name, final_path, work_type, description, release_date, 
                 producer, director_author, status, now, now],
     ).map_err(|e| e.to_string())?;
     
@@ -46,9 +78,13 @@ pub async fn get_works(
     filters: Option<WorkFilters>,
 ) -> Result<Vec<WorkWithRelations>, String> {
     let conn = get_connection(&app_handle)?;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
     
     let mut query = String::from(
-        "SELECT id, name, work_type, description, release_date, producer, 
+        "SELECT id, name, path, work_type, description, release_date, producer, 
          director_author, status, cover_path, created_at, updated_at, deleted_at
          FROM works WHERE deleted_at IS NULL"
     );
@@ -81,19 +117,22 @@ pub async fn get_works(
     let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     
     let works = stmt.query_map(param_refs.as_slice(), |row| {
+        let cover_raw: Option<String> = row.get(9)?;
+        let resolved_cover = resolve_relative_path(&app_data_dir, cover_raw);
         Ok(Work {
             id: row.get(0)?,
             name: row.get(1)?,
-            work_type: row.get(2)?,
-            description: row.get(3)?,
-            release_date: row.get(4)?,
-            producer: row.get(5)?,
-            director_author: row.get(6)?,
-            status: row.get(7)?,
-            cover_path: row.get(8)?,
-            created_at: row.get(9)?,
-            updated_at: row.get(10)?,
-            deleted_at: row.get(11)?,
+            path: row.get(2)?,
+            work_type: row.get(3)?,
+            description: row.get(4)?,
+            release_date: row.get(5)?,
+            producer: row.get(6)?,
+            director_author: row.get(7)?,
+            status: row.get(8)?,
+            cover_path: resolved_cover,
+            created_at: row.get(10)?,
+            updated_at: row.get(11)?,
+            deleted_at: row.get(12)?,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -101,7 +140,7 @@ pub async fn get_works(
     for work in works {
         let work = work.map_err(|e| e.to_string())?;
         let tags = get_work_tags(&conn, &work.id)?;
-        let characters = get_work_characters_internal(&conn, &work.id)?;
+        let characters = get_work_characters_internal(&conn, &work.id, &app_data_dir)?;
         let character_count = characters.len();
         
         result.push(WorkWithRelations {
@@ -121,32 +160,39 @@ pub async fn get_work_by_id(
     id: String,
 ) -> Result<WorkWithRelations, String> {
     let conn = get_connection(&app_handle)?;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
     
     let work = conn.query_row(
-        "SELECT id, name, work_type, description, release_date, producer, 
+        "SELECT id, name, path, work_type, description, release_date, producer, 
          director_author, status, cover_path, created_at, updated_at, deleted_at
          FROM works WHERE id = ? AND deleted_at IS NULL",
         params![id],
         |row| {
+            let cover_raw: Option<String> = row.get(9)?;
+            let resolved_cover = resolve_relative_path(&app_data_dir, cover_raw);
             Ok(Work {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                work_type: row.get(2)?,
-                description: row.get(3)?,
-                release_date: row.get(4)?,
-                producer: row.get(5)?,
-                director_author: row.get(6)?,
-                status: row.get(7)?,
-                cover_path: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
-                deleted_at: row.get(11)?,
+                path: row.get(2)?,
+                work_type: row.get(3)?,
+                description: row.get(4)?,
+                release_date: row.get(5)?,
+                producer: row.get(6)?,
+                director_author: row.get(7)?,
+                status: row.get(8)?,
+                cover_path: resolved_cover,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+                deleted_at: row.get(12)?,
             })
         },
     ).map_err(|e| e.to_string())?;
     
-    let tags = get_work_tags(&conn, &work.id)?;
-    let characters = get_work_characters_internal(&conn, &work.id)?;
+    let tags = get_work_tags(&conn, &id)?;
+    let characters = get_work_characters_internal(&conn, &id, &app_data_dir)?;
     let character_count = characters.len();
     
     Ok(WorkWithRelations {
@@ -162,6 +208,7 @@ pub async fn update_work(
     app_handle: AppHandle,
     id: String,
     name: Option<String>,
+    path: Option<String>,
     work_type: Option<String>,
     description: Option<String>,
     release_date: Option<String>,
@@ -169,15 +216,77 @@ pub async fn update_work(
     director_author: Option<String>,
     status: Option<String>,
 ) -> Result<Work, String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+
     {
         let conn = get_connection(&app_handle)?;
         let now = Utc::now().to_rfc3339();
+        
+        // 1. Get old path and cover path
+        let (old_path, old_cover_path): (String, Option<String>) = conn.query_row(
+            "SELECT path, cover_path FROM works WHERE id = ?",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).map_err(|e| e.to_string())?;
+        
+        // Determine final path
+        let final_path = match path {
+            Some(ref p) if !p.trim().is_empty() => p.trim().to_lowercase().replace(' ', "-"),
+            Some(_) => id.clone(),
+            None => old_path.clone(),
+        };
+        
+        // 2. If path changed, physically rename folder and update db references
+        if final_path != old_path {
+            let old_dir = app_data_dir.join("works").join(&old_path);
+            let new_dir = app_data_dir.join("works").join(&final_path);
+            
+            if old_dir.exists() {
+                std::fs::rename(&old_dir, &new_dir).map_err(|e| e.to_string())?;
+            } else {
+                std::fs::create_dir_all(&new_dir).map_err(|e| e.to_string())?;
+            }
+            
+            // Update works table cover_path references
+            if let Some(ref cover) = old_cover_path {
+                let new_cover_path = cover.replace(&format!("works/{}/", old_path), &format!("works/{}/", final_path));
+                conn.execute(
+                    "UPDATE works SET cover_path = ?1 WHERE id = ?2",
+                    params![new_cover_path, id],
+                ).map_err(|e| e.to_string())?;
+            }
+            
+            // Update characters table image_paths references
+            let mut stmt = conn.prepare("SELECT id, image_paths FROM characters WHERE work_id = ? AND deleted_at IS NULL").map_err(|e| e.to_string())?;
+            let rows = stmt.query_map(params![id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            }).map_err(|e| e.to_string())?;
+            
+            let mut char_updates = Vec::new();
+            for r in rows {
+                if let Ok((char_id, Some(img_paths_json))) = r {
+                    let new_json = img_paths_json.replace(&format!("works/{}/", old_path), &format!("works/{}/", final_path));
+                    char_updates.push((char_id, new_json));
+                }
+            }
+            
+            for (char_id, new_json) in char_updates {
+                conn.execute(
+                    "UPDATE characters SET image_paths = ?1 WHERE id = ?2",
+                    params![new_json, char_id],
+                ).map_err(|e| e.to_string())?;
+            }
+        }
         
         // Build update query
         let mut query = String::from("UPDATE works SET updated_at = ?1");
         let mut param_index = 2;
         
         if name.is_some() { query.push_str(&format!(", name = ?{}", param_index)); param_index += 1; }
+        query.push_str(&format!(", path = ?{}", param_index)); param_index += 1;
         if work_type.is_some() { query.push_str(&format!(", work_type = ?{}", param_index)); param_index += 1; }
         if description.is_some() { query.push_str(&format!(", description = ?{}", param_index)); param_index += 1; }
         if release_date.is_some() { query.push_str(&format!(", release_date = ?{}", param_index)); param_index += 1; }
@@ -192,6 +301,7 @@ pub async fn update_work(
         let mut params_vec: Vec<&dyn rusqlite::ToSql> = vec![&now];
         
         if let Some(ref v) = name { params_vec.push(v); }
+        params_vec.push(&final_path);
         if let Some(ref v) = work_type { params_vec.push(v); }
         if let Some(ref v) = description { params_vec.push(v); }
         if let Some(ref v) = release_date { params_vec.push(v); }
@@ -201,7 +311,7 @@ pub async fn update_work(
         params_vec.push(&id);
         
         stmt.execute(params_vec.as_slice()).map_err(|e| e.to_string())?;
-    } // conn and stmt dropped here
+    }
     
     get_work_by_id(app_handle, id).await.map(|w| w.work)
 }
@@ -242,22 +352,31 @@ pub async fn upload_work_cover(
         .path()
         .app_data_dir()
         .map_err(|e| e.to_string())?;
-    let work_dir = app_data_dir.join("works").join(&work_id);
+    
+    // Resolve path identifier
+    let conn = get_connection(&app_handle)?;
+    let path_ident: String = conn.query_row(
+        "SELECT path FROM works WHERE id = ?",
+        params![work_id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+    
+    let work_dir = app_data_dir.join("works").join(&path_ident);
     std::fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
     
     let cover_path = work_dir.join(format!("cover.{}", extension));
     std::fs::write(&cover_path, image_data).map_err(|e| e.to_string())?;
     
-    let relative_path = format!("works/{}/cover.{}", work_id, extension);
+    let relative_path = format!("works/{}/cover.{}", path_ident, extension);
     
     // Update database
-    let conn = get_connection(&app_handle)?;
     conn.execute(
         "UPDATE works SET cover_path = ?1, updated_at = ?2 WHERE id = ?3",
         params![relative_path, Utc::now().to_rfc3339(), work_id],
     ).map_err(|e| e.to_string())?;
     
-    Ok(relative_path)
+    let absolute_path = app_data_dir.join(&relative_path).to_string_lossy().to_string();
+    Ok(absolute_path)
 }
 
 #[tauri::command]
@@ -288,6 +407,39 @@ pub async fn remove_work_tag(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn delete_work_cover(
+    app_handle: AppHandle,
+    work_id: String,
+) -> Result<(), String> {
+    let conn = get_connection(&app_handle)?;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+        
+    let cover_raw: Option<String> = conn.query_row(
+        "SELECT cover_path FROM works WHERE id = ?",
+        params![work_id],
+        |row| row.get(0),
+    ).ok().flatten();
+    
+    if let Some(ref path) = cover_raw {
+        let abs_path = app_data_dir.join(&path.replace('/', &std::path::MAIN_SEPARATOR.to_string())
+                                              .replace('\\', &std::path::MAIN_SEPARATOR.to_string()));
+        if abs_path.exists() {
+            let _ = std::fs::remove_file(&abs_path);
+        }
+    }
+    
+    conn.execute(
+        "UPDATE works SET cover_path = NULL, updated_at = ?1 WHERE id = ?2",
+        params![Utc::now().to_rfc3339(), work_id],
+    ).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
 // Helper functions
 fn get_work_tags(conn: &Connection, work_id: &str) -> Result<Vec<Tag>, String> {
     let mut stmt = conn.prepare(
@@ -313,7 +465,7 @@ fn get_work_tags(conn: &Connection, work_id: &str) -> Result<Vec<Tag>, String> {
     tags.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
-fn get_work_characters_internal(conn: &Connection, work_id: &str) -> Result<Vec<CharacterWithRelations>, String> {
+fn get_work_characters_internal(conn: &Connection, work_id: &str, app_data_dir: &std::path::Path) -> Result<Vec<CharacterWithRelations>, String> {
     let mut stmt = conn.prepare(
         "SELECT c.id, c.work_id, c.name, c.character_type, c.description, c.appearance_info,
          c.image_paths, c.ip_id, c.ip_relation_note, c.display_order, c.created_at, c.updated_at, c.deleted_at,
@@ -326,6 +478,8 @@ fn get_work_characters_internal(conn: &Connection, work_id: &str) -> Result<Vec<
     ).map_err(|e| e.to_string())?;
     
     let characters = stmt.query_map(params![work_id], |row| {
+        let image_paths_raw: Option<String> = row.get(6)?;
+        let resolved_image_paths = resolve_relative_paths_json(app_data_dir, image_paths_raw);
         Ok(CharacterWithRelations {
             character: crate::models::Character {
                 id: row.get(0)?,
@@ -334,7 +488,7 @@ fn get_work_characters_internal(conn: &Connection, work_id: &str) -> Result<Vec<
                 character_type: row.get(3)?,
                 description: row.get(4)?,
                 appearance_info: row.get(5)?,
-                image_paths: row.get(6)?,
+                image_paths: resolved_image_paths,
                 ip_id: row.get(7)?,
                 ip_relation_note: row.get(8)?,
                 display_order: row.get(9)?,
@@ -357,10 +511,19 @@ fn cleanup_work_files(app_handle: &AppHandle, work_id: &str) -> Result<(), Strin
         .path()
         .app_data_dir()
         .map_err(|e| e.to_string())?;
-    let work_dir = app_data_dir.join("works").join(work_id);
     
-    if work_dir.exists() {
-        std::fs::remove_dir_all(&work_dir).map_err(|e| e.to_string())?;
+    let conn = get_connection(app_handle)?;
+    let path_ident: Option<String> = conn.query_row(
+        "SELECT path FROM works WHERE id = ?",
+        params![work_id],
+        |row| row.get(0),
+    ).ok();
+    
+    if let Some(ident) = path_ident {
+        let work_dir = app_data_dir.join("works").join(ident);
+        if work_dir.exists() {
+            std::fs::remove_dir_all(&work_dir).map_err(|e| e.to_string())?;
+        }
     }
     
     Ok(())

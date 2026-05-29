@@ -512,9 +512,9 @@ applyThemeColors(loadSettings());
 applyTheme(loadTheme());
 
 interface UIStore {
-  activeTab: "prompt" | "ip";
+  activeTab: "prompt" | "ip" | "labs";
   promptTab: "inbox" | "archived" | "templates";
-  ipTab: "inbox" | "archived";
+  ipTab: "inbox" | "archived" | "works";
   searchQuery: string;
   selectedVendorFilter: string | null;
   selectedModelFilter: string | null;
@@ -531,9 +531,9 @@ interface UIStore {
   viewMode: ViewMode;
   selectedIpId: string | null;
 
-  setActiveTab: (tab: "prompt" | "ip") => void;
+  setActiveTab: (tab: "prompt" | "ip" | "labs") => void;
   setPromptTab: (tab: "inbox" | "archived" | "templates") => void;
-  setIpTab: (tab: "inbox" | "archived") => void;
+  setIpTab: (tab: "inbox" | "archived" | "works") => void;
   setSearchQuery: (query: string) => void;
   setVendorFilter: (vendorId: string | null) => void;
   setModelFilter: (modelId: string | null) => void;
@@ -650,6 +650,7 @@ export type CharacterType =
 export interface Work {
   id: string;
   name: string;
+  path?: string;
   work_type: WorkType;
   description?: string;
   release_date?: string;
@@ -707,37 +708,118 @@ interface WorksStore {
   filters: WorkFilters;
   loading: boolean;
   
-  setWorks: (works: WorkWithRelations[]) => void;
+  fetchWorks: () => Promise<void>;
+  createWork: (work: { name: string; path?: string | null; work_type: string; description?: string | null; release_date?: string | null; producer?: string | null; director_author?: string | null; status?: string | null }) => Promise<Work>;
+  updateWork: (id: string, updates: { name?: string; path?: string | null; work_type?: string; description?: string | null; release_date?: string | null; producer?: string | null; director_author?: string | null; status?: string | null }) => Promise<Work>;
+  deleteWork: (id: string) => Promise<void>;
   selectWork: (work: WorkWithRelations | null) => void;
   setFilters: (filters: Partial<WorkFilters>) => void;
   setLoading: (loading: boolean) => void;
-  addWork: (work: WorkWithRelations) => void;
-  updateWork: (id: string, work: Partial<WorkWithRelations>) => void;
-  removeWork: (id: string) => void;
+  uploadCover: (workId: string, file: File) => Promise<string>;
+  deleteCover: (workId: string) => Promise<void>;
+  addTag: (workId: string, tagId: string) => Promise<void>;
+  removeTag: (workId: string, tagId: string) => Promise<void>;
 }
 
-export const useWorksStore = create<WorksStore>((set) => ({
+export const useWorksStore = create<WorksStore>((set, get) => ({
   works: [],
   selectedWork: null,
   filters: {},
   loading: false,
   
-  setWorks: (works) => set({ works }),
+  fetchWorks: async () => {
+    set({ loading: true });
+    try {
+      const { getWorks } = await import("@/services/tauri");
+      const data = await getWorks(get().filters);
+      set({ works: data });
+    } catch (e) {
+      console.error("Failed to fetch works:", e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  
+  createWork: async (params) => {
+    const { createWork, getWorkById } = await import("@/services/tauri");
+    const work = await createWork(params);
+    const fullWork = await getWorkById(work.id);
+    set((state) => ({ works: [fullWork, ...state.works] }));
+    return work;
+  },
+  
+  updateWork: async (id, updates) => {
+    const { updateWork, getWorkById } = await import("@/services/tauri");
+    const work = await updateWork({ id, ...updates });
+    const fullWork = await getWorkById(id);
+    set((state) => ({
+      works: state.works.map((w) => w.id === id ? fullWork : w),
+      selectedWork: state.selectedWork?.id === id ? fullWork : state.selectedWork,
+    }));
+    return work;
+  },
+  
+  deleteWork: async (id) => {
+    const { deleteWork } = await import("@/services/tauri");
+    await deleteWork(id);
+    set((state) => ({
+      works: state.works.filter((w) => w.id !== id),
+      selectedWork: state.selectedWork?.id === id ? null : state.selectedWork,
+    }));
+  },
+  
   selectWork: (work) => set({ selectedWork: work }),
-  setFilters: (filters) => set((state) => ({ filters: { ...state.filters, ...filters } })),
+  
+  setFilters: (newFilters) => {
+    set((state) => ({ filters: { ...state.filters, ...newFilters } }));
+    get().fetchWorks();
+  },
+  
   setLoading: (loading) => set({ loading }),
   
-  addWork: (work) => set((state) => ({ works: [work, ...state.works] })),
+  uploadCover: async (workId, file) => {
+    const { uploadWorkCover, getWorkById } = await import("@/services/tauri");
+    const arrayBuffer = await file.arrayBuffer();
+    const data = Array.from(new Uint8Array(arrayBuffer));
+    const ext = file.name.split('.').pop() || 'jpg';
+    const coverPath = await uploadWorkCover(workId, data, ext);
+    const fullWork = await getWorkById(workId);
+    set((state) => ({
+      works: state.works.map((w) => w.id === workId ? fullWork : w),
+      selectedWork: state.selectedWork?.id === workId ? fullWork : state.selectedWork,
+    }));
+    return coverPath;
+  },
   
-  updateWork: (id, updates) => set((state) => ({
-    works: state.works.map((w) => w.id === id ? { ...w, ...updates } : w),
-    selectedWork: state.selectedWork?.id === id ? { ...state.selectedWork, ...updates } : state.selectedWork,
-  })),
+  deleteCover: async (workId) => {
+    const { deleteWorkCover, getWorkById } = await import("@/services/tauri");
+    await deleteWorkCover(workId);
+    const fullWork = await getWorkById(workId);
+    set((state) => ({
+      works: state.works.map((w) => w.id === workId ? fullWork : w),
+      selectedWork: state.selectedWork?.id === workId ? fullWork : state.selectedWork,
+    }));
+  },
   
-  removeWork: (id) => set((state) => ({
-    works: state.works.filter((w) => w.id !== id),
-    selectedWork: state.selectedWork?.id === id ? null : state.selectedWork,
-  })),
+  addTag: async (workId, tagId) => {
+    const { addWorkTag, getWorkById } = await import("@/services/tauri");
+    await addWorkTag(workId, tagId);
+    const fullWork = await getWorkById(workId);
+    set((state) => ({
+      works: state.works.map((w) => w.id === workId ? fullWork : w),
+      selectedWork: state.selectedWork?.id === workId ? fullWork : state.selectedWork,
+    }));
+  },
+  
+  removeTag: async (workId, tagId) => {
+    const { removeWorkTag, getWorkById } = await import("@/services/tauri");
+    await removeWorkTag(workId, tagId);
+    const fullWork = await getWorkById(workId);
+    set((state) => ({
+      works: state.works.map((w) => w.id === workId ? fullWork : w),
+      selectedWork: state.selectedWork?.id === workId ? fullWork : state.selectedWork,
+    }));
+  },
 }));
 
 // Characters Store
@@ -745,38 +827,92 @@ interface CharactersStore {
   characters: CharacterWithRelations[];
   loading: boolean;
   
+  fetchCharacters: (workId: string) => Promise<void>;
+  createCharacter: (params: { work_id: string; name: string; character_type?: string | null; description?: string | null; appearance_info?: string | null; ip_id?: string | null; ip_relation_note?: string | null }) => Promise<Character>;
+  updateCharacter: (id: string, updates: { name?: string; character_type?: string | null; description?: string | null; appearance_info?: string | null; ip_id?: string | null; ip_relation_note?: string | null }) => Promise<Character>;
+  deleteCharacter: (id: string) => Promise<void>;
+  updateOrder: (characterIds: string[]) => Promise<void>;
+  uploadImages: (characterId: string, workId: string, files: File[]) => Promise<string[]>;
   setCharacters: (characters: CharacterWithRelations[]) => void;
   setLoading: (loading: boolean) => void;
-  addCharacter: (character: CharacterWithRelations) => void;
-  updateCharacter: (id: string, character: Partial<CharacterWithRelations>) => void;
-  removeCharacter: (id: string) => void;
-  reorderCharacters: (characterIds: string[]) => void;
 }
 
 export const useCharactersStore = create<CharactersStore>((set) => ({
   characters: [],
   loading: false,
   
+  fetchCharacters: async (workId) => {
+    set({ loading: true });
+    try {
+      const { getCharacters } = await import("@/services/tauri");
+      const data = await getCharacters(workId);
+      set({ characters: data });
+    } catch (e) {
+      console.error("Failed to fetch characters:", e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  
+  createCharacter: async (params) => {
+    const { createCharacter, getCharacterById } = await import("@/services/tauri");
+    const char = await createCharacter(params);
+    const fullChar = await getCharacterById(char.id);
+    set((state) => ({ 
+      characters: [...state.characters, fullChar].sort((a, b) => a.display_order - b.display_order)
+    }));
+    return char;
+  },
+  
+  updateCharacter: async (id, updates) => {
+    const { updateCharacter, getCharacterById } = await import("@/services/tauri");
+    await updateCharacter({ id, ...updates });
+    const fullChar = await getCharacterById(id);
+    set((state) => ({
+      characters: state.characters.map((c) => c.id === id ? fullChar : c),
+    }));
+    return fullChar;
+  },
+  
+  deleteCharacter: async (id) => {
+    const { deleteCharacter } = await import("@/services/tauri");
+    await deleteCharacter(id);
+    set((state) => ({
+      characters: state.characters.filter((c) => c.id !== id),
+    }));
+  },
+  
+  updateOrder: async (characterIds) => {
+    const { updateCharacterOrder } = await import("@/services/tauri");
+    await updateCharacterOrder(characterIds);
+    set((state) => {
+      const ordered = characterIds.map((id, index) => {
+        const char = state.characters.find((c) => c.id === id);
+        return char ? { ...char, display_order: index } : null;
+      }).filter(Boolean) as CharacterWithRelations[];
+      return { characters: ordered };
+    });
+  },
+  
+  uploadImages: async (characterId, workId, files) => {
+    const { uploadCharacterImages, getCharacterById } = await import("@/services/tauri");
+    const images: [number[], string][] = await Promise.all(
+      files.map(async (file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const data = Array.from(new Uint8Array(arrayBuffer));
+        const ext = file.name.split('.').pop() || 'jpg';
+        return [data, ext] as [number[], string];
+      })
+    );
+    const paths = await uploadCharacterImages(characterId, workId, images);
+    const fullChar = await getCharacterById(characterId);
+    set((state) => ({
+      characters: state.characters.map((c) => c.id === characterId ? fullChar : c),
+    }));
+    return paths;
+  },
+  
   setCharacters: (characters) => set({ characters }),
   setLoading: (loading) => set({ loading }),
-  
-  addCharacter: (character) => set((state) => ({ 
-    characters: [...state.characters, character].sort((a, b) => a.display_order - b.display_order)
-  })),
-  
-  updateCharacter: (id, updates) => set((state) => ({
-    characters: state.characters.map((c) => c.id === id ? { ...c, ...updates } : c),
-  })),
-  
-  removeCharacter: (id) => set((state) => ({
-    characters: state.characters.filter((c) => c.id !== id),
-  })),
-  
-  reorderCharacters: (characterIds) => set((state) => {
-    const ordered = characterIds.map((id, index) => {
-      const char = state.characters.find((c) => c.id === id);
-      return char ? { ...char, display_order: index } : null;
-    }).filter(Boolean) as CharacterWithRelations[];
-    return { characters: ordered };
-  }),
 }));
+

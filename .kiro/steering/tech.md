@@ -62,7 +62,7 @@
 ## Project Structure
 
 ```
-sanMediaBox/
+sanOmni/
 ├── src/                          # React frontend
 │   ├── components/              # React components
 │   │   ├── ui/                 # shadcn/ui components

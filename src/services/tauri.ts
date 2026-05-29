@@ -1060,14 +1060,24 @@ import type { Work, WorkWithRelations, WorkFilters, Character, CharacterWithRela
 
 export async function createWork(params: {
   name: string;
+  path?: string | null;
   work_type: string;
-  description?: string;
-  release_date?: string;
-  producer?: string;
-  director_author?: string;
-  status?: string;
+  description?: string | null;
+  release_date?: string | null;
+  producer?: string | null;
+  director_author?: string | null;
+  status?: string | null;
 }): Promise<Work> {
-  return await invoke("create_work", params);
+  return await invoke("create_work", {
+    name: params.name,
+    path: params.path,
+    workType: params.work_type,
+    description: params.description,
+    releaseDate: params.release_date,
+    producer: params.producer,
+    directorAuthor: params.director_author,
+    status: params.status,
+  });
 }
 
 export async function getWorks(filters?: WorkFilters): Promise<WorkWithRelations[]> {
@@ -1081,14 +1091,25 @@ export async function getWorkById(id: string): Promise<WorkWithRelations> {
 export async function updateWork(params: {
   id: string;
   name?: string;
+  path?: string | null;
   work_type?: string;
-  description?: string;
-  release_date?: string;
-  producer?: string;
-  director_author?: string;
-  status?: string;
+  description?: string | null;
+  release_date?: string | null;
+  producer?: string | null;
+  director_author?: string | null;
+  status?: string | null;
 }): Promise<Work> {
-  return await invoke("update_work", params);
+  return await invoke("update_work", {
+    id: params.id,
+    name: params.name,
+    path: params.path,
+    workType: params.work_type,
+    description: params.description,
+    releaseDate: params.release_date,
+    producer: params.producer,
+    directorAuthor: params.director_author,
+    status: params.status,
+  });
 }
 
 export async function deleteWork(id: string): Promise<void> {
@@ -1103,6 +1124,10 @@ export async function uploadWorkCover(
   return await invoke("upload_work_cover", { workId, imageData, extension });
 }
 
+export async function deleteWorkCover(workId: string): Promise<void> {
+  return await invoke("delete_work_cover", { workId });
+}
+
 export async function addWorkTag(workId: string, tagId: string): Promise<void> {
   return await invoke("add_work_tag", { workId, tagId });
 }
@@ -1115,13 +1140,21 @@ export async function removeWorkTag(workId: string, tagId: string): Promise<void
 export async function createCharacter(params: {
   work_id: string;
   name: string;
-  character_type?: string;
-  description?: string;
-  appearance_info?: string;
-  ip_id?: string;
-  ip_relation_note?: string;
+  character_type?: string | null;
+  description?: string | null;
+  appearance_info?: string | null;
+  ip_id?: string | null;
+  ip_relation_note?: string | null;
 }): Promise<Character> {
-  return await invoke("create_character", params);
+  return await invoke("create_character", {
+    workId: params.work_id,
+    name: params.name,
+    characterType: params.character_type,
+    description: params.description,
+    appearanceInfo: params.appearance_info,
+    ipId: params.ip_id,
+    ipRelationNote: params.ip_relation_note,
+  });
 }
 
 export async function getCharacters(workId: string): Promise<CharacterWithRelations[]> {
@@ -1135,13 +1168,21 @@ export async function getCharacterById(id: string): Promise<CharacterWithRelatio
 export async function updateCharacter(params: {
   id: string;
   name?: string;
-  character_type?: string;
-  description?: string;
-  appearance_info?: string;
-  ip_id?: string;
-  ip_relation_note?: string;
+  character_type?: string | null;
+  description?: string | null;
+  appearance_info?: string | null;
+  ip_id?: string | null;
+  ip_relation_note?: string | null;
 }): Promise<Character> {
-  return await invoke("update_character", params);
+  return await invoke("update_character", {
+    id: params.id,
+    name: params.name,
+    characterType: params.character_type,
+    description: params.description,
+    appearanceInfo: params.appearance_info,
+    ipId: params.ip_id,
+    ipRelationNote: params.ip_relation_note,
+  });
 }
 
 export async function deleteCharacter(id: string): Promise<void> {

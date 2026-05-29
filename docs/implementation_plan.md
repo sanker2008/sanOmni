@@ -1,6 +1,6 @@
 # AI IP 资产管理系统实施计划
 
-本项目设计并规划了在 **sanMediaBox** 中整合 AI IP 形象资产管理系统的具体方案。该系统允许用户管理 AI 生成的 IP 角色、记录角色的背景故事与灵感由来、选择三视图/角色卡、分类关联相关的创作，并对角色生成的表情包进行分组管理，跟踪其在各个平台（如微信、抖音等）的发布规格和分发状态。
+本项目设计并规划了在 **sanOmni** 中整合 AI IP 形象资产管理系统的具体方案。该系统允许用户管理 AI 生成的 IP 角色、记录角色的背景故事与灵感由来、选择三视图/角色卡、分类关联相关的创作，并对角色生成的表情包进行分组管理，跟踪其在各个平台（如微信、抖音等）的发布规格和分发状态。
 
 ---
 
@@ -103,19 +103,19 @@ erDiagram
 
 ### 1. 后端实现 (Rust & Tauri)
 
-#### [修改] [mod.rs](file:///D:/dev/san/sanMediaBox/src-tauri/src/database/mod.rs)
+#### [修改] [mod.rs](file:///D:/dev/san/sanOmni/src-tauri/src/database/mod.rs)
 - 在 `SCHEMA` 批处理 SQL 字符串中添加 `ip_assets`、`ip_character_sheets`、`ip_creations`、`ip_sticker_packs`、`ip_emojis`、`ip_sticker_pack_platforms` 和 `ip_relations` 的路径化创建语句。
 - 在 `init_database` 中加入开发过渡期安全 DROP，防止字段冲突。
 
-#### [修改] [ip_assets.rs](file:///D:/dev/san/sanMediaBox/src-tauri/src/models/ip_assets.rs)
+#### [修改] [ip_assets.rs](file:///D:/dev/san/sanOmni/src-tauri/src/models/ip_assets.rs)
 - 定义 Rust 侧序列化结构体，去掉对图片 ID 映射，统一使用 `avatar_path` 与 `image_path` 代表物理绝对路径。
 
-#### [修改] [ip_assets.rs](file:///D:/dev/san/sanMediaBox/src-tauri/src/commands/ip_assets.rs)
+#### [修改] [ip_assets.rs](file:///D:/dev/san/sanOmni/src-tauri/src/commands/ip_assets.rs)
 - 编写辅助拷贝函数 `copy_to_ip_assets_dir`，通过 SQLite `db_path` 自动向上逆推 app 数据存储目录，并对文件进行归类物理拷贝与命名。
 - 实现 `add_ip_character_sheets`、`add_ip_creations`、`add_ip_emojis` 时自动拷贝源文件并写入目的绝对路径。
 - 实现 `remove` 类似命令时，同步从磁盘物理移除拷贝过的图片文件以防存储泄漏。
 
-#### [修改] [lib.rs](file:///D:/dev/san/sanMediaBox/src-tauri/src/lib.rs)
+#### [修改] [lib.rs](file:///D:/dev/san/sanOmni/src-tauri/src/lib.rs)
 - 暴露 `commands`、`models` 等模块的 `pub` 属性，供 binary 检测脚本引用。
 - 在 `.invoke_handler[...]` 中注册全部后台命令。
 
@@ -123,13 +123,13 @@ erDiagram
 
 ### 2. 前端实现 (React & TypeScript)
 
-#### [修改] [index.ts](file:///D:/dev/san/sanMediaBox/src/stores/index.ts)
+#### [修改] [index.ts](file:///D:/dev/san/sanOmni/src/stores/index.ts)
 - 声明 TypeScript 接口以适配 `avatar_path` 和 `image_path` 结构。
 
-#### [修改] [tauri.ts](file:///D:/dev/san/sanMediaBox/src/services/tauri.ts)
+#### [修改] [tauri.ts](file:///D:/dev/san/sanOmni/src/services/tauri.ts)
 - 封装 `ipApi` 交互服务，参数更名为 `avatarPath`、`imagePaths`，对应 Tauri Rust 后台。
 
-#### [修改] [IPManagementView.tsx](file:///D:/dev/san/sanMediaBox/src/components/IPManagementView.tsx)
+#### [修改] [IPManagementView.tsx](file:///D:/dev/san/sanOmni/src/components/IPManagementView.tsx)
 - 去除了原来的媒体库弹窗选择逻辑，直接调用 Tauri 的 `open` 选图 Dialog。
 - 选择本地路径后传给 `ipApi` 拷贝和导入。
 - 大图渲染直接使用 `convertFileSrc(image_path)` 解决本地绝对路径的渲染阻碍。

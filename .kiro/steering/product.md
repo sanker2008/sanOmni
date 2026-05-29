@@ -1,6 +1,6 @@
 # Product Overview
 
-sanMediaBox is an AI-powered creative asset management desktop application that combines two independent functional domains under a unified interface: **Prompt Template Management** (sanPromptBox) and **IP Character Management** (sanIPBox).
+sanOmni is an AI-powered creative asset management desktop application that combines two independent functional domains under a unified interface: **Prompt Template Management** (sanPromptBox) and **IP Character Management** (sanIPBox).
 
 > **Note**: The two domains are architecturally independent and may be split into separate standalone applications (sanPromptBox and sanIPBox) in the future.
 

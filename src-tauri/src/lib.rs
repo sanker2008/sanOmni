@@ -112,6 +112,7 @@ pub fn run() {
             commands::works::update_work,
             commands::works::delete_work,
             commands::works::upload_work_cover,
+            commands::works::delete_work_cover,
             commands::works::add_work_tag,
             commands::works::remove_work_tag,
             commands::characters::create_character,

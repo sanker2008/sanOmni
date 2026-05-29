@@ -88,7 +88,7 @@ xcode-select --install
 ### 2. 克隆并安装项目
 ```bash
 git clone <repository-url>
-cd sanMediaBox
+cd sanOmni
 npm install
 ```
 
@@ -217,12 +217,12 @@ let path = format!("archived/{}/{}", vendor, model);  // 可能有问题
 
 ### 应用数据目录
 不同平台的默认位置：
-- **Windows**: `%APPDATA%\com.sanmediabox.app\`
-  - 示例：`C:\Users\YourName\AppData\Roaming\com.sanmediabox.app\`
-- **macOS**: `~/Library/Application Support/com.sanmediabox.app/`
-  - 示例：`/Users/YourName/Library/Application Support/com.sanmediabox.app/`
-- **Linux**: `~/.local/share/com.sanmediabox.app/`
-  - 示例：`/home/yourname/.local/share/com.sanmediabox.app/`
+- **Windows**: `%APPDATA%\com.sanomni.app\`
+  - 示例：`C:\Users\YourName\AppData\Roaming\com.sanomni.app\`
+- **macOS**: `~/Library/Application Support/com.sanomni.app/`
+  - 示例：`/Users/YourName/Library/Application Support/com.sanomni.app/`
+- **Linux**: `~/.local/share/com.sanomni.app/`
+  - 示例：`/home/yourname/.local/share/com.sanomni.app/`
 
 ### 最近修复的跨平台问题
 

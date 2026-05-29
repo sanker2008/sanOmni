@@ -45,7 +45,7 @@ Processing path: C:\Users\...\test.png
 Extracted filename: test.png
 File size: 123456
 Copying file from: C:\Users\...\test.png
-Copying file to: C:\Users\...\AppData\Roaming\com.sanmediabox.app\inbox\1234567890_test.png
+Copying file to: C:\Users\...\AppData\Roaming\com.sanomni.app\inbox\1234567890_test.png
 File copied successfully
 Calling imageApi.import with: {...}
 Import result: {...}
@@ -58,7 +58,7 @@ Import result: {...}
 ### 4. 验证文件复制
 检查文件是否被复制到应用数据目录：
 ```
-%APPDATA%\com.sanmediabox.app\inbox\
+%APPDATA%\com.sanomni.app\inbox\
 ```
 
 应该能看到带时间戳前缀的图片文件。

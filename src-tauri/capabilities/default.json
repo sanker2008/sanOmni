@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for sanMediaBox",
+  "description": "Default capabilities for sanOmni",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -26,6 +26,9 @@
     "fs:allow-read-dir",
     "fs:allow-rename",
     "fs:allow-remove",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file",
+    "fs:allow-write-file",
     {
       "identifier": "fs:scope",
       "allow": [
@@ -38,7 +41,14 @@
     },
     "shell:default",
     "shell:allow-execute",
-    "shell:allow-open",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        {
+          "url": "^.*$"
+        }
+      ]
+    },
     {
       "identifier": "shell:allow-execute",
       "allow": [

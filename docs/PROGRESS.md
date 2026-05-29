@@ -144,7 +144,7 @@
 ## 九、项目文件结构
 
 ```
-sanMediaBox/
+sanOmni/
 ├── src/                              # React 前端
 │   ├── App.tsx                       # 主应用
 │   ├── main.tsx                      # 入口

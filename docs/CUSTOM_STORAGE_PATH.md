@@ -17,7 +17,7 @@
 
 #### 自定义 Inbox 路径
 - **作用：** 导入图片时的临时存储位置
-- **默认：** `C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\inbox`
+- **默认：** `C:\Users\<用户名>\AppData\Roaming\com.sanomni.app\inbox`
 - **设置方法：**
   1. 在"自定义 Inbox 路径"输入框中输入路径
   2. 或点击文件夹图标浏览选择
@@ -25,7 +25,7 @@
 
 #### 自定义归档路径
 - **作用：** 图片归档时的保存目录
-- **默认：** `C:\Users\<用户名>\AppData\Roaming\com.sanmediabox.app\archived`
+- **默认：** `C:\Users\<用户名>\AppData\Roaming\com.sanomni.app\archived`
 - **设置方法：**
   1. 在"自定义归档路径"输入框中输入路径
   2. 或点击文件夹图标浏览选择

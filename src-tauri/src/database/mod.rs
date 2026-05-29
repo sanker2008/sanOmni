@@ -44,6 +44,17 @@ pub fn init_database(db_path: &Path) -> Result<()> {
         [],
     );
     
+    // Add path column to works if not exists (migration for existing DBs)
+    let _ = conn.execute(
+        "ALTER TABLE works ADD COLUMN path TEXT",
+        [],
+    );
+    // Backfill path from id for existing works that have no path
+    let _ = conn.execute(
+        "UPDATE works SET path = id WHERE path IS NULL OR path = ''",
+        [],
+    );
+
     // Backfill existing ip_images records to ip_image_relations
     let _ = conn.execute(
         "INSERT OR IGNORE INTO ip_image_relations (ip_image_id, ip_id, is_primary)
@@ -351,6 +362,7 @@ CREATE INDEX IF NOT EXISTS idx_ip_ir_ip ON ip_image_relations(ip_id);
 CREATE TABLE IF NOT EXISTS works (
     id                  TEXT PRIMARY KEY,
     name                TEXT NOT NULL,
+    path                TEXT,
     work_type           TEXT NOT NULL,
     description         TEXT,
     release_date        TEXT,

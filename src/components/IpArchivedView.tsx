@@ -26,6 +26,7 @@ import {
   Users,
   BookOpen,
   Smile,
+  Film,
   Link,
   Sparkles,
   Plus,
@@ -46,6 +47,7 @@ import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
 
 import IpSidebar from "./IpSidebar";
+import { useWorksStore, type CharacterWithRelations } from "@/stores";
 
 // 自动拷贝并归档头像到当前 IP 形象
 const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
@@ -155,9 +157,7 @@ export default function IpArchivedView() {
     updateImage,
   } = useIpImageStore();
 
-  const { searchQuery, setSearchQuery, viewMode, setViewMode, isQuickEditOpen } = useUIStore();
-
-  const [selectedIpId, setSelectedIpId] = useState<string | null>(null);
+  const { searchQuery, setSearchQuery, viewMode, setViewMode, isQuickEditOpen, selectedIpId, setSelectedIpId } = useUIStore();
   const [ipDetail, setIpDetail] = useState<IpAssetDetail | null>(null);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [unarchiveResult, setUnarchiveResult] = useState<string | null>(null);
@@ -167,7 +167,10 @@ export default function IpArchivedView() {
   const [sortBy, setSortBy] = useState<"time" | "size">("time");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
-  const [activeTab, setActiveTab] = useState<"profile" | "emojis" | "creations" | "relations">("creations");
+  const [activeTab, setActiveTab] = useState<"profile" | "emojis" | "creations" | "relations" | "works">("creations");
+  const [ipRoles, setIpRoles] = useState<CharacterWithRelations[]>([]);
+  const [isLoadingIpRoles, setIsLoadingIpRoles] = useState(false);
+
 
   const [sidebarKey, setSidebarKey] = useState(0);
 
@@ -631,6 +634,31 @@ export default function IpArchivedView() {
     }
   }, [selectedIpId]);
 
+  useEffect(() => {
+    if (selectedIpId && activeTab === "works") {
+      loadIpRoles();
+    }
+  }, [selectedIpId, activeTab]);
+
+  const loadIpRoles = async () => {
+    if (!selectedIpId) return;
+    setIsLoadingIpRoles(true);
+    try {
+      const { getIpCharacters } = await import("@/services/tauri");
+      const roles = await getIpCharacters(selectedIpId);
+      setIpRoles(roles);
+    } catch (e) {
+      console.error("Failed to load IP roles:", e);
+      toast({
+        title: "加载失败",
+        description: "无法加载相关作品角色列表",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingIpRoles(false);
+    }
+  };
+
   // 当 QuickEditModal 关闭时，刷新侧边栏和 IP 详情（头像可能已更新）
   const prevQuickEditOpen = useRef(false);
   useEffect(() => {
@@ -971,6 +999,7 @@ export default function IpArchivedView() {
                 { id: "creations", label: "归档资产", icon: Sparkles },
                 { id: "emojis", label: "表情包管理", icon: Smile },
                 { id: "relations", label: "关系链谱", icon: Link },
+                ...((settings?.showIpWorksTab ?? true) ? [{ id: "works", label: "相关作品", icon: Film }] : []),
                 { id: "profile", label: "基本设定", icon: BookOpen },
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -996,8 +1025,9 @@ export default function IpArchivedView() {
 
         {/* Workspace area */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* === TAB: 归档资产 === */}
-          {(!selectedIpId || activeTab === "creations") && (
+            <>
+              {/* === TAB: 归档资产 === */}
+              {(!selectedIpId || activeTab === "creations") && (
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Header */}
               <div className="border-b px-4 py-3 flex items-center justify-between bg-card shadow-sm z-10 flex-shrink-0">
@@ -1655,6 +1685,93 @@ export default function IpArchivedView() {
               </div>
             </ScrollArea>
           )}
+
+          {/* === TAB: 相关作品 === */}
+          {selectedIpId && activeTab === "works" && (
+            <ScrollArea className="h-full p-6">
+              {isLoadingIpRoles ? (
+                <div className="flex flex-col gap-4">
+                  <Skeleton className="h-24 w-full animate-pulse" />
+                  <Skeleton className="h-24 w-full animate-pulse" />
+                </div>
+              ) : ipRoles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                  <Film className="w-16 h-16 mb-4 opacity-40" />
+                  <p className="text-sm">该 IP 暂无参演的角色作品记录</p>
+                  <p className="text-xs text-muted-foreground mt-1">您可以在作品集详情中为角色关联此 IP 资产</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl">
+                  {ipRoles.map((role) => (
+                    <Card
+                      key={role.id}
+                      onClick={async () => {
+                        // Click to jump to the work details!
+                        const { getWorkById } = await import("@/services/tauri");
+                        try {
+                          const workWithRelations = await getWorkById(role.work_id);
+                          const { selectWork } = useWorksStore.getState();
+                          const { setIpTab } = useUIStore.getState();
+                          selectWork(workWithRelations);
+                          setIpTab("works");
+                        } catch (e) {
+                          console.error("Failed to load work detail for jump:", e);
+                        }
+                      }}
+                      className="cursor-pointer hover:shadow-md transition-shadow group overflow-hidden border bg-card relative"
+                    >
+                      <CardContent className="p-4 flex gap-4">
+                        {/* 角色图片（首张） */}
+                        <div className="w-16 h-20 bg-muted rounded overflow-hidden flex-shrink-0 border flex items-center justify-center">
+                          {(() => {
+                            let imgUrl = "";
+                            if (role.image_paths) {
+                              try {
+                                const paths = JSON.parse(role.image_paths);
+                                if (Array.isArray(paths) && paths.length > 0) {
+                                  imgUrl = convertFileSrc(paths[0]);
+                                }
+                              } catch {}
+                            }
+                            return imgUrl ? (
+                              <img src={imgUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            ) : (
+                              <Users className="w-6 h-6 text-muted-foreground opacity-40" />
+                            );
+                          })()}
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between gap-2">
+                              <h3 className="font-semibold text-base truncate group-hover:text-primary transition-colors">{role.name}</h3>
+                              {role.character_type && (
+                                <Badge variant="outline" className="text-xs font-normal shrink-0">
+                                  {role.character_type === "protagonist" ? "主角" :
+                                   role.character_type === "supporting" ? "配角" :
+                                   role.character_type === "antagonist" ? "反派" :
+                                   role.character_type === "guest" ? "客串" : "其他"}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                              出演作品：《{role.work_name}》
+                            </p>
+                          </div>
+                          
+                          {role.appearance_info && (
+                            <p className="text-xs text-muted-foreground truncate italic">
+                              出场：{role.appearance_info}
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          )}
+            </>
         </div>
       </div>
       {/* Batch Edit Modal */}

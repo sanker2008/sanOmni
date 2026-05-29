@@ -137,6 +137,17 @@ type Toast = Omit<ToasterToast, "id">
 function toast({ ...props }: Toast) {
   const id = genId()
 
+  // Auto-detect success toasts if variant is not specified or is "default"
+  if (
+    (!props.variant || props.variant === "default") &&
+    (
+      (typeof props.title === "string" && (props.title.includes("成功") || props.title.includes("✓"))) ||
+      (typeof props.description === "string" && (props.description.includes("成功") || props.description.includes("✓")))
+    )
+  ) {
+    props.variant = "success"
+  }
+
   const update = (props: ToasterToast) =>
     dispatch({
       type: "UPDATE_TOAST",
