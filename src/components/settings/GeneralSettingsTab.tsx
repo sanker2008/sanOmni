@@ -9,12 +9,46 @@ import type { ResetType } from "./ResetConfirmDialog";
 interface GeneralSettingsTabProps {
   localSettings: Record<string, any>;
   handleLocalUpdate: (key: string, value: any) => void;
+  onSelectPath: (key: string) => Promise<void>;
   onTriggerReset: (type: ResetType) => void;
 }
 
-export default function GeneralSettingsTab({ localSettings, handleLocalUpdate, onTriggerReset }: GeneralSettingsTabProps) {
+export default function GeneralSettingsTab({ localSettings, handleLocalUpdate, onSelectPath, onTriggerReset }: GeneralSettingsTabProps) {
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            统一根目录
+          </CardTitle>
+          <CardDescription>
+            统一设置所有实验工具、图片资产、待整理和归档等功能的数据存储根目录。
+            如果单独配置了某个功能的路径，则优先使用单独的配置。留空则默认保存在系统 AppData 目录下。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              value={localSettings.unifiedRootPath || ""}
+              onChange={(e) => handleLocalUpdate("unifiedRootPath", e.target.value)}
+              placeholder="留空使用系统默认位置"
+              className="flex-1"
+            />
+            <Button 
+              variant="outline" 
+              onClick={() => onSelectPath("unifiedRootPath")}
+            >
+              浏览...
+            </Button>
+          </div>
+          {!localSettings.unifiedRootPath && (
+            <p className="text-xs text-muted-foreground mt-2">
+              默认：%APPDATA%\com.sanomni.app
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">主题色</CardTitle>

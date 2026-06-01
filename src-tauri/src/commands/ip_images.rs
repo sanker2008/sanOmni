@@ -359,7 +359,8 @@ pub async fn update_ip_image(
 
                 let db_path_obj = std::path::Path::new(&db_path);
                 if let Some(data_dir) = db_path_obj.parent() {
-                    if let Some(app_data_dir) = data_dir.parent() {
+                    if let Some(base_app_data_dir) = data_dir.parent() {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                         let library_path = if let Some(ref path_str) = custom_path {
                             if !path_str.trim().is_empty() {
                                 std::path::Path::new(path_str).to_path_buf()

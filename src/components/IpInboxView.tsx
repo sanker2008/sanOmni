@@ -136,8 +136,8 @@ export default function IpInboxView() {
         libraryPath = customPath;
         console.log("Using custom ip archived path:", libraryPath);
       } else {
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        libraryPath = await appDataDir();
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        libraryPath = await getAppRoot();
         console.log("Using default archived path:", libraryPath);
       }
 
@@ -255,8 +255,8 @@ export default function IpInboxView() {
       if (customPath) {
         libraryPath = customPath;
       } else {
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        libraryPath = await appDataDir();
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        libraryPath = await getAppRoot();
       }
 
       const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";

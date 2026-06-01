@@ -128,7 +128,8 @@ pub fn reset_prompt_data(db_path: String, delete_files: bool) -> CommandResult<b
         ).ok();
 
         let db_path_buf = std::path::Path::new(&db_path);
-        if let Some(app_data_dir) = db_path_buf.parent().and_then(|p| p.parent()) {
+        if let Some(base_app_data_dir) = db_path_buf.parent().and_then(|p| p.parent()) {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
             let inbox_dir = if let Some(ref path_str) = custom_inbox {
                 if !path_str.trim().is_empty() {
                     std::path::Path::new(path_str).to_path_buf()
@@ -202,7 +203,8 @@ pub fn reset_ip_data(db_path: String, delete_files: bool) -> CommandResult<bool>
         ).ok();
 
         let db_path_buf = std::path::Path::new(&db_path);
-        if let Some(app_data_dir) = db_path_buf.parent().and_then(|p| p.parent()) {
+        if let Some(base_app_data_dir) = db_path_buf.parent().and_then(|p| p.parent()) {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
             let inbox_dir = if let Some(ref path_str) = custom_inbox {
                 if !path_str.trim().is_empty() {
                     std::path::Path::new(path_str).to_path_buf()

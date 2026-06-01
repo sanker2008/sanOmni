@@ -131,7 +131,7 @@ export async function saveExport(filename: string, data: Uint8Array) {
   await writeFile(filePath, data, options);
 }
 
-import { appDataDir } from '@tauri-apps/api/path';
+import { getAppRoot } from "@/lib/pathUtils";
 
 export async function listExports() {
   const { root, options } = await getBaseConfig();
@@ -141,7 +141,7 @@ export async function listExports() {
     const exports = [];
     let appData = '';
     if (options.baseDir === BaseDirectory.AppData) {
-      appData = await appDataDir();
+      appData = await getAppRoot();
     }
     for (const e of entries) {
       if (e.isFile) {
@@ -186,7 +186,7 @@ export async function openExportFolder() {
   const { root, options } = await getBaseConfig();
   let dirPath = '';
   if (options.baseDir === BaseDirectory.AppData) {
-    const appData = await appDataDir();
+    const appData = await getAppRoot();
     dirPath = await join(appData, root, 'exports');
   } else {
     dirPath = await join(root, 'exports');

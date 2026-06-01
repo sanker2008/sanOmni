@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from '@tauri-apps/plugin-fs';
-import { join, appDataDir } from '@tauri-apps/api/path';
+import { join } from "@tauri-apps/api/path";
+import { getAppRoot } from "@/lib/pathUtils";
 import { useUIStore } from '@/stores';
 
 /**
@@ -12,7 +13,7 @@ export async function getDefaultExportPath(): Promise<string> {
   if (customRoot) {
     return await join(customRoot, 'image_slicer', 'exports');
   }
-  const appDir = await appDataDir();
+  const appDir = await getAppRoot();
   return await join(appDir, 'labs', 'image_slicer', 'exports');
 }
 

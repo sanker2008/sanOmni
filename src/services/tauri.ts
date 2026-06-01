@@ -43,10 +43,11 @@ interface CommandResult<T> {
 
 // Helper to get database path
 export async function getDbPath(): Promise<string> {
-  const { appDataDir, join } = await import("@tauri-apps/api/path");
+  const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
   const { exists, mkdir } = await import("@tauri-apps/plugin-fs");
   
-  const appDir = await appDataDir();
+  const appDir = await getAppRoot();
   const dataDir = await join(appDir, "data");
   
   // Ensure data directory exists

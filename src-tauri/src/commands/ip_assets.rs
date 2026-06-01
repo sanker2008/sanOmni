@@ -543,7 +543,8 @@ pub fn create_ip_asset(
 
             let db_path_obj = Path::new(&db_path);
             if let Some(data_dir) = db_path_obj.parent() {
-                if let Some(app_data_dir) = data_dir.parent() {
+                if let Some(base_app_data_dir) = data_dir.parent() {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                     let library_path = if let Some(ref path_str) = custom_path {
                         if !path_str.trim().is_empty() {
                             Path::new(path_str).to_path_buf()
@@ -654,7 +655,8 @@ pub fn update_ip_asset(
 
             let db_path_obj = Path::new(&db_path);
             if let Some(data_dir) = db_path_obj.parent() {
-                if let Some(app_data_dir) = data_dir.parent() {
+                if let Some(base_app_data_dir) = data_dir.parent() {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                     let library_path = if let Some(ref path_str) = custom_path {
                         if !path_str.trim().is_empty() {
                             Path::new(path_str).to_path_buf()
@@ -747,10 +749,11 @@ pub fn delete_ip_asset(db_path: String, ip_id: String, keep_images: bool) -> Com
     ).ok();
 
     let db_path_buf = Path::new(&db_path);
-    let app_data_dir = match db_path_buf.parent().and_then(|d| d.parent()) {
+    let base_app_data_dir = match db_path_buf.parent().and_then(|d| d.parent()) {
         Some(dir) => dir.to_path_buf(),
         None => return CommandResult::err("获取应用程序数据目录失败".to_string()),
     };
+    let app_data_dir = crate::commands::get_app_root(&conn, &base_app_data_dir);
 
     let library_path = if let Some(ref path_str) = custom_path {
         if !path_str.trim().is_empty() {
@@ -1151,7 +1154,8 @@ pub fn create_ip_sticker_pack(
 
             let db_path_obj = Path::new(&db_path);
             if let Some(data_dir) = db_path_obj.parent() {
-                if let Some(app_data_dir) = data_dir.parent() {
+                if let Some(base_app_data_dir) = data_dir.parent() {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                     let library_path = if let Some(ref path_str) = custom_path {
                         if !path_str.trim().is_empty() {
                             Path::new(path_str).to_path_buf()
@@ -1239,7 +1243,8 @@ pub fn update_ip_sticker_pack(
 
             let db_path_obj = Path::new(&db_path);
             if let Some(data_dir) = db_path_obj.parent() {
-                if let Some(app_data_dir) = data_dir.parent() {
+                if let Some(base_app_data_dir) = data_dir.parent() {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                     let library_path = if let Some(ref path_str) = custom_path {
                         if !path_str.trim().is_empty() {
                             Path::new(path_str).to_path_buf()
@@ -1310,7 +1315,8 @@ pub fn delete_ip_sticker_pack(db_path: String, pack_id: String) -> CommandResult
 
         let db_path_obj = Path::new(&db_path);
         if let Some(data_dir) = db_path_obj.parent() {
-            if let Some(app_data_dir) = data_dir.parent() {
+            if let Some(base_app_data_dir) = data_dir.parent() {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                 let library_path = if let Some(ref path_str) = custom_path {
                     if !path_str.trim().is_empty() {
                         Path::new(path_str).to_path_buf()

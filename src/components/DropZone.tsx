@@ -147,7 +147,8 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
     console.log("importPaths called with:", paths);
     setIsImporting(true);
     try {
-      const { appDataDir, join } = await import("@tauri-apps/api/path");
+      const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
       const { copyFile, exists, mkdir } = await import("@tauri-apps/plugin-fs");
       
       // 使用自定义路径或默认路径
@@ -157,7 +158,7 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
           inboxDir = settings.customIpInboxPath;
           console.log("Using custom ip inbox path:", inboxDir);
         } else {
-          const appDir = await appDataDir();
+          const appDir = await getAppRoot();
           inboxDir = await join(appDir, "ip_inbox");
           console.log("Using default ip inbox path:", inboxDir);
         }
@@ -166,7 +167,7 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
           inboxDir = settings.customInboxPath;
           console.log("Using custom prompt inbox path:", inboxDir);
         } else {
-          const appDir = await appDataDir();
+          const appDir = await getAppRoot();
           inboxDir = await join(appDir, "inbox");
           console.log("Using default prompt inbox path:", inboxDir);
         }

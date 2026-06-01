@@ -131,6 +131,7 @@ export default function SettingsView() {
               <GeneralSettingsTab 
                 localSettings={localSettings} 
                 handleLocalUpdate={handleLocalUpdate} 
+                onSelectPath={handleSelectCustomPath}
                 onTriggerReset={setResetType} 
               />
             )}

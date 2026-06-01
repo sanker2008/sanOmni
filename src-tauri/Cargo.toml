@@ -5,6 +5,11 @@ description = "sanOmni - Manage AI-generated images"
 authors = ["you"]
 edition = "2021"
 default-run = "sanomni"
+autobins = false
+
+[[bin]]
+name = "sanomni"
+path = "src/main.rs"
 
 [lib]
 name = "sanomni_lib"

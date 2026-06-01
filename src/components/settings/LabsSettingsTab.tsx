@@ -144,7 +144,7 @@ export default function LabsSettingsTab({ localSettings, handleLocalUpdate, onSe
           </div>
           {!localSettings.labsCustomRootPath && (
             <p className="text-xs text-muted-foreground mt-2">
-              默认为: APPDATA%\com.sanomni.app\labs
+              {localSettings.unifiedRootPath ? `默认：${localSettings.unifiedRootPath}\\labs` : '默认：%APPDATA%\\com.sanomni.app\\labs'}
             </p>
           )}
         </CardContent>

@@ -25,7 +25,8 @@ interface IpSidebarProps {
 // 自动拷贝并归档头像到当前 IP 形象
 const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
   try {
-    const { appDataDir, join } = await import("@tauri-apps/api/path");
+    const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
     const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
     
     const { settings } = useUIStore.getState();
@@ -35,7 +36,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
     if (settings.customIpInboxPath) {
       inboxDir = settings.customIpInboxPath;
     } else {
-      const appDir = await appDataDir();
+      const appDir = await getAppRoot();
       inboxDir = await join(appDir, "ip_inbox");
     }
 
@@ -48,7 +49,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
     if (settings.customIpArchivedPath) {
       libraryPath = settings.customIpArchivedPath;
     } else {
-      libraryPath = await appDataDir();
+      libraryPath = await getAppRoot();
     }
     const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
 

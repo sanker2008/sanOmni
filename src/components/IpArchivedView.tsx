@@ -52,7 +52,8 @@ import { useWorksStore, type CharacterWithRelations } from "@/stores";
 // 自动拷贝并归档头像到当前 IP 形象
 const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
   try {
-    const { appDataDir, join } = await import("@tauri-apps/api/path");
+    const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
     const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
     
     const { settings } = useUIStore.getState();
@@ -62,7 +63,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
     if (settings.customIpInboxPath) {
       inboxDir = settings.customIpInboxPath;
     } else {
-      const appDir = await appDataDir();
+      const appDir = await getAppRoot();
       inboxDir = await join(appDir, "ip_inbox");
     }
 
@@ -75,7 +76,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
     if (settings.customIpArchivedPath) {
       libraryPath = settings.customIpArchivedPath;
     } else {
-      libraryPath = await appDataDir();
+      libraryPath = await getAppRoot();
     }
     const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
 
@@ -547,8 +548,9 @@ export default function IpArchivedView() {
 
       if (success) {
         const { mkdir, exists, rename } = await import("@tauri-apps/plugin-fs");
-        const { appDataDir, join } = await import("@tauri-apps/api/path");
-        const appDir = await appDataDir();
+        const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
+        const appDir = await getAppRoot();
         const trashDir = await join(appDir, "trash");
         if (!(await exists(trashDir))) {
           await mkdir(trashDir, { recursive: true });
@@ -796,8 +798,8 @@ export default function IpArchivedView() {
       if (customPath) {
         inboxPath = customPath;
       } else {
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        inboxPath = await appDataDir();
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        inboxPath = await getAppRoot();
       }
 
       const result = await ipImageApi.archive(selectedImages, inboxPath);
@@ -840,8 +842,8 @@ export default function IpArchivedView() {
       if (customPath) {
         inboxPath = customPath;
       } else {
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        inboxPath = await appDataDir();
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        inboxPath = await getAppRoot();
       }
 
       const result = await ipImageApi.archive([imageId], inboxPath);

@@ -256,8 +256,8 @@ export default function ArchivedView() {
       if (customPath) {
         inboxPath = customPath;
       } else {
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        inboxPath = await appDataDir();
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        inboxPath = await getAppRoot();
       }
 
       const result = await imageApi.unarchive(selectedImages, inboxPath);
@@ -300,8 +300,8 @@ export default function ArchivedView() {
       if (customPath) {
         inboxPath = customPath;
       } else {
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        inboxPath = await appDataDir();
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        inboxPath = await getAppRoot();
       }
 
       const result = await imageApi.unarchive([imageId], inboxPath);

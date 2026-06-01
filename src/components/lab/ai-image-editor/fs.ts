@@ -2,7 +2,8 @@
  * fs.ts — 文件系统工具 & 项目持久化
  */
 import { mkdir, writeFile, readFile, readDir, remove } from '@tauri-apps/plugin-fs';
-import { join, appDataDir } from '@tauri-apps/api/path';
+import { join } from "@tauri-apps/api/path";
+import { getAppRoot } from "@/lib/pathUtils";
 import { useUIStore } from '@/stores';
 import type { ProjectData, ProjectMeta } from './types';
 
@@ -12,7 +13,7 @@ import type { ProjectData, ProjectMeta } from './types';
 export async function getBasePath(): Promise<string> {
   const customRoot = useUIStore.getState().settings.labsCustomRootPath;
   if (customRoot) return await join(customRoot, 'ai_image_editor');
-  const appDir = await appDataDir();
+  const appDir = await getAppRoot();
   return await join(appDir, 'labs', 'ai_image_editor');
 }
 

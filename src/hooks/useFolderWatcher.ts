@@ -89,7 +89,8 @@ export function useFolderWatcher() {
           }
 
           // 复制文件到 inbox
-          const { appDataDir, join } = await import("@tauri-apps/api/path");
+          const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
           const { copyFile, exists, mkdir } = await import("@tauri-apps/plugin-fs");
 
           // 使用自定义路径或默认路径
@@ -97,7 +98,7 @@ export function useFolderWatcher() {
           if (settings.customInboxPath) {
             inboxDir = settings.customInboxPath;
           } else {
-            const appDir = await appDataDir();
+            const appDir = await getAppRoot();
             inboxDir = await join(appDir, "inbox");
           }
 

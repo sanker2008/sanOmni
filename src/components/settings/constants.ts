@@ -1,5 +1,6 @@
 export const DEFAULT_SETTINGS: Record<string, any> = {
   // 通用设置
+  unifiedRootPath: "", // 统一根目录，代替默认的 AppData 目录
   namingTemplate: "{vendor}-{model}-{date}-{index}",
   customInboxPath: "",  // 自定义待整理路径（留空使用默认）
   customArchivedPath: "",  // 自定义 archived 路径（留空使用默认）

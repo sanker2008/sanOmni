@@ -144,8 +144,8 @@ export default function InboxView() {
         libraryPath = customPath;
         console.log("Using custom archived path:", libraryPath);
       } else {
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        libraryPath = await appDataDir();
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        libraryPath = await getAppRoot();
         console.log("Using default archived path:", libraryPath);
       }
 
@@ -261,8 +261,8 @@ export default function InboxView() {
       if (customPath) {
         libraryPath = customPath;
       } else {
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        libraryPath = await appDataDir();
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        libraryPath = await getAppRoot();
       }
 
       const result = await imageApi.archive([imageId], libraryPath);

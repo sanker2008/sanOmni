@@ -120,7 +120,7 @@ export default function IpSettingsTab({
                   </div>
                   {!localSettings.ipCustomInboxPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      默认：%APPDATA%\com.sanomni.app\ip_inbox
+                      {localSettings.unifiedRootPath ? `默认：${localSettings.unifiedRootPath}\\ip_inbox` : '默认：%APPDATA%\\com.sanomni.app\\ip_inbox'}
                     </p>
                   )}
                 </CardContent>
@@ -153,7 +153,7 @@ export default function IpSettingsTab({
                   </div>
                   {!localSettings.ipCustomArchivedPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      默认：%APPDATA%\com.sanomni.app\ip_archived
+                      {localSettings.unifiedRootPath ? `默认：${localSettings.unifiedRootPath}\\ip_archived` : '默认：%APPDATA%\\com.sanomni.app\\ip_archived'}
                     </p>
                   )}
                 </CardContent>
@@ -186,8 +186,9 @@ export default function IpSettingsTab({
                         if (customPath) {
                           inboxPath = customPath;
                         } else {
-                          const { appDataDir, join } = await import("@tauri-apps/api/path");
-                          const appDir = await appDataDir();
+                          const { getAppRoot } = await import("@/lib/pathUtils");
+                          const { join } = await import("@tauri-apps/api/path");
+                          const appDir = await getAppRoot();
                           inboxPath = await join(appDir, "ip_inbox");
                         }
 
@@ -278,8 +279,10 @@ export default function IpSettingsTab({
                         if (customPath) {
                           libraryPath = customPath;
                         } else {
-                          const { appDataDir } = await import("@tauri-apps/api/path");
-                          libraryPath = await appDataDir();
+                          const { getAppRoot } = await import("@/lib/pathUtils");
+                          const { join } = await import("@tauri-apps/api/path");
+                          const appDir = await getAppRoot();
+                          libraryPath = await join(appDir, "ip_archived");
                         }
                         
                         const result = await scannerApi.scanIpArchived(

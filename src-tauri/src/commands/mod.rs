@@ -25,6 +25,19 @@ impl<T> CommandResult<T> {
     }
 }
 
+pub fn get_app_root(conn: &rusqlite::Connection, default_app_data_dir: &std::path::Path) -> std::path::PathBuf {
+    if let Ok(unified) = conn.query_row(
+        "SELECT value FROM settings WHERE key = 'unifiedRootPath'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        if !unified.trim().is_empty() {
+            return std::path::PathBuf::from(unified.trim());
+        }
+    }
+    default_app_data_dir.to_path_buf()
+}
+
 pub mod images;
 pub mod vendors;
 pub mod tags;

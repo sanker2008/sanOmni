@@ -330,9 +330,10 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
         try {
           // 移动原图到应用回收站
           const { mkdir, exists, rename } = await import("@tauri-apps/plugin-fs");
-          const { appDataDir, join } = await import("@tauri-apps/api/path");
+          const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
           
-          const appDir = await appDataDir();
+          const appDir = await getAppRoot();
           const trashDir = await join(appDir, "trash");
           
           // 确保回收站目录存在

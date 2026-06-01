@@ -33,9 +33,10 @@ export default function TrashView() {
     setLoading(true);
     try {
       const { readDir, exists } = await import("@tauri-apps/plugin-fs");
-      const { appDataDir, join } = await import("@tauri-apps/api/path");
+      const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
       
-      const appDir = await appDataDir();
+      const appDir = await getAppRoot();
       const trashDir = await join(appDir, "trash");
       
       // 保存回收站路径
@@ -133,8 +134,8 @@ export default function TrashView() {
 
       // 创建临时备份（以防恢复失败）
       const { join } = await import("@tauri-apps/api/path");
-      const { appDataDir } = await import("@tauri-apps/api/path");
-      const appDir = await appDataDir();
+      const { getAppRoot } = await import("@/lib/pathUtils");
+      const appDir = await getAppRoot();
       const tempBackupPath = await join(appDir, `temp_backup_${Date.now()}.tmp`);
       
       try {
