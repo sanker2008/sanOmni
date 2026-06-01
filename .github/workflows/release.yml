@@ -12,7 +12,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [windows-latest]
+        include:
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+            rust_target: 'aarch64-apple-darwin, x86_64-apple-darwin'
+          - platform: 'windows-latest'
+            args: ''
+            rust_target: 'x86_64-pc-windows-msvc'
     runs-on: ${{ matrix.platform }}
 
     steps:
@@ -28,7 +34,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.rust_target }}
 
       - name: Install dependencies
         run: npm install
@@ -44,3 +50,4 @@ jobs:
           releaseBody: "请在下方 Assets 区域下载安装包。\n如果您已安装旧版，可在软件内点击检查更新自动安装。"
           releaseDraft: false
           prerelease: false
+          args: ${{ matrix.args }}

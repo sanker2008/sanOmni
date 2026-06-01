@@ -1,6 +1,6 @@
 [package]
 name = "sanomni"
-version = "0.1.2"
+version = "0.1.3"
 description = "sanOmni - Manage AI-generated images"
 authors = ["you"]
 edition = "2021"
