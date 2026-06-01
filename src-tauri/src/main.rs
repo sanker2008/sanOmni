@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    sanmediabox_lib::run()
+    sanomni_lib::run()
 }

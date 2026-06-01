@@ -38,9 +38,9 @@ fn main() {
     let image_path = if args.len() > 1 {
         &args[1]
     } else {
-        r#"C:\Users\Admin\AppData\Roaming\com.sanmediabox.app\inbox\1779446708315_Gemini_Generated_Image_tgzf02tgzf02tgzf (1).png"#
+        r#"C:\Users\Admin\AppData\Roaming\com.sanomni.app\inbox\1779446708315_Gemini_Generated_Image_tgzf02tgzf02tgzf (1).png"#
     };
-    let output_path = r#"C:\Users\Admin\AppData\Roaming\com.sanmediabox.app\inbox\test_output.png"#;
+    let output_path = r#"C:\Users\Admin\AppData\Roaming\com.sanomni.app\inbox\test_output.png"#;
 
     let start = std::time::Instant::now();
     

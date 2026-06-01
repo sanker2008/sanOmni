@@ -1,11 +1,11 @@
 # 按需打包与构建配置 (Feature Flags)
 
-由于 sanOmni 集成了三大核心功能域（Prompt 管理、IP 资产管理、Labs 工具箱），不同用户可能只需要其中的部分功能。为了满足轻量化、专属工具分发的需求，我们利用 Vite 的环境变量（Feature Flags）机制实现了**按需打包**。
+由于 sanOmni 集成了三大核心功能域（sanPrompt、sanIP、sanLabs 工具箱），不同用户可能只需要其中的部分功能。为了满足轻量化、专属工具分发的需求，我们利用 Vite 的环境变量（Feature Flags）机制实现了**按需打包**。
 
 ## 核心原理
 
 在前端 React/Vite 项目中，通过读取环境变量 `import.meta.env.VITE_APP_MODE` 来控制页面的渲染。
-当处于特定模式（如 `prompt_only`）时，未使用的功能（如 IP 资产管理和 Labs）及其相关组件，由于不可达，会在 Vite 打包时通过 **Tree-shaking (摇树优化)** 被彻底剔除。
+当处于特定模式（如 `prompt_only`）时，未使用的功能（如 sanIP 和 sanLabs）及其相关组件，由于不可达，会在 Vite 打包时通过 **Tree-shaking (摇树优化)** 被彻底剔除。
 
 这带来了两大好处：
 1. **纯净体验**：用户界面不再有无关的侧边栏、设置项和按钮。
@@ -53,7 +53,7 @@ npm run tauri:build:prompt
 
 ## 未来扩展
 
-如果未来需要增加“纯 IP 管理专属版”或者“纯 Labs 专属版”，只需：
+如果未来需要增加“纯 sanIP 专属版”或者“纯 sanLabs 专属版”，只需：
 1. 新建 `.env.ip`（内容：`VITE_APP_MODE=ip_only`）
 2. 在 `package.json` 增加脚本：`"tauri:build:ip": "vite build --mode ip && tauri build"`
 3. 在 `src/App.tsx` 和 `SettingsView.tsx` 中增加对应的条件过滤判断即可。

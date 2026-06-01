@@ -143,7 +143,7 @@ export default function PromptSettingsTab({
                   </div>
                   {!localSettings.customInboxPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      默认：%APPDATA%\com.sanmediabox.app\inbox
+                      默认：%APPDATA%\com.sanomni.app\inbox
                     </p>
                   )}
                 </CardContent>
@@ -176,7 +176,7 @@ export default function PromptSettingsTab({
                   </div>
                   {!localSettings.customArchivedPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      默认：%APPDATA%\com.sanmediabox.app\archived
+                      默认：%APPDATA%\com.sanomni.app\archived
                     </p>
                   )}
                 </CardContent>

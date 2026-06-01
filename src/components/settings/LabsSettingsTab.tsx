@@ -25,7 +25,7 @@ export default function LabsSettingsTab({ localSettings, handleLocalUpdate, onSe
 
   return (
     <div className="space-y-6">
-      <div className="text-lg font-semibold mb-4 border-b pb-2">Labs 配置</div>
+      <div className="text-lg font-semibold mb-4 border-b pb-2">sanLabs 配置</div>
       
       {/* AI P图 API 配置 */}
       <Card>
@@ -144,7 +144,7 @@ export default function LabsSettingsTab({ localSettings, handleLocalUpdate, onSe
           </div>
           {!localSettings.labsCustomRootPath && (
             <p className="text-xs text-muted-foreground mt-2">
-              默认为: APPDATA%\com.sanmediabox.app\labs
+              默认为: APPDATA%\com.sanomni.app\labs
             </p>
           )}
         </CardContent>

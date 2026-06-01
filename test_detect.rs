@@ -1,7 +1,7 @@
 use image::GenericImageView;
 
 fn main() {
-    let image_path = r#"C:\Users\Admin\AppData\Roaming\com.sanmediabox.app\inbox\1779446708315_Gemini_Generated_Image_tgzf02tgzf02tgzf (1).png"#;
+    let image_path = r#"C:\Users\Admin\AppData\Roaming\com.sanomni.app\inbox\1779446708315_Gemini_Generated_Image_tgzf02tgzf02tgzf (1).png"#;
     let img = image::open(image_path).unwrap();
     let width = img.width();
     let height = img.height();

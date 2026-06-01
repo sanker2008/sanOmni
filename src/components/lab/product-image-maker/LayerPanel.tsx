@@ -142,9 +142,9 @@ export default function LayerPanel({
   }, [getDropTarget, onReorderLayers]);
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full">
       {/* Header with add buttons */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 shrink-0">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           图层
         </span>
@@ -182,7 +182,7 @@ export default function LayerPanel({
       {/* Layer list (reverse order — top layer first) */}
       <div 
         ref={listRef}
-        className="space-y-0.5 max-h-[300px] overflow-y-auto pb-4"
+        className="space-y-0.5 overflow-y-auto pb-4 flex-1 custom-scrollbar"
       >
         {layers.length === 0 ? (
           <div className="text-center py-6 text-xs text-muted-foreground">

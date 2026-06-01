@@ -1,7 +1,7 @@
 /**
  * Product Image Maker — Google Fonts Configuration & Loader
  * 
- * Standalone module. No dependencies on sanMediaBox core.
+ * Standalone module. No dependencies on sanOmni core.
  * Fonts are loaded on-demand from Google Fonts CDN.
  */
 

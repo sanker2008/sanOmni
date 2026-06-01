@@ -1,7 +1,7 @@
 /**
  * Product Image Maker — State Management
  * 
- * Standalone Zustand store, completely independent from sanMediaBox stores.
+ * Standalone Zustand store, completely independent from sanOmni stores.
  * This store is only used by the product-image-maker components.
  */
 

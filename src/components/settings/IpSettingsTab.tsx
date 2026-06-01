@@ -120,7 +120,7 @@ export default function IpSettingsTab({
                   </div>
                   {!localSettings.ipCustomInboxPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      默认：%APPDATA%\com.sanmediabox.app\ip_inbox
+                      默认：%APPDATA%\com.sanomni.app\ip_inbox
                     </p>
                   )}
                 </CardContent>
@@ -153,7 +153,7 @@ export default function IpSettingsTab({
                   </div>
                   {!localSettings.ipCustomArchivedPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      默认：%APPDATA%\com.sanmediabox.app\ip_archived
+                      默认：%APPDATA%\com.sanomni.app\ip_archived
                     </p>
                   )}
                 </CardContent>

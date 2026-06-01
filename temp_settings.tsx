@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUIStore, useImageStore } from "@/stores";
 import { settingsApi, scannerApi } from "@/services/tauri";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -496,7 +496,7 @@ function SettingsView() {
                   </div>
                   {!localSettings.customInboxPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      榛樿锛?APPDATA%\com.sanmediabox.app\inbox
+                      榛樿锛?APPDATA%\com.sanomni.app\inbox
                     </p>
                   )}
                 </CardContent>
@@ -528,7 +528,7 @@ function SettingsView() {
                   </div>
                   {!localSettings.customArchivedPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      榛樿锛?APPDATA%\com.sanmediabox.app\archived
+                      榛樿锛?APPDATA%\com.sanomni.app\archived
                     </p>
                   )}
                 </CardContent>
@@ -973,7 +973,7 @@ function SettingsView() {
                   </div>
                   {!localSettings.ipCustomInboxPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      榛樿锛?APPDATA%\com.sanmediabox.app\ip_inbox
+                      榛樿锛?APPDATA%\com.sanomni.app\ip_inbox
                     </p>
                   )}
                 </CardContent>
@@ -1005,7 +1005,7 @@ function SettingsView() {
                   </div>
                   {!localSettings.ipCustomArchivedPath && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      榛樿锛?APPDATA%\com.sanmediabox.app\ip_archived
+                      榛樿锛?APPDATA%\com.sanomni.app\ip_archived
                     </p>
                   )}
                 </CardContent>

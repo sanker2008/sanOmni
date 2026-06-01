@@ -1,8 +1,8 @@
 use image::GenericImageView;
 
 fn main() {
-    let orig = image::open(r#"C:\Users\Admin\AppData\Roaming\com.sanmediabox.app\inbox\1779447215206_Gemini_Generated_Image_sidza0sidza0sidz.png"#).unwrap();
-    let proc = image::open(r#"C:\Users\Admin\AppData\Roaming\com.sanmediabox.app\inbox\test_output.png"#).unwrap();
+    let orig = image::open(r#"C:\Users\Admin\AppData\Roaming\com.sanomni.app\inbox\1779447215206_Gemini_Generated_Image_sidza0sidza0sidz.png"#).unwrap();
+    let proc = image::open(r#"C:\Users\Admin\AppData\Roaming\com.sanomni.app\inbox\test_output.png"#).unwrap();
     
     let mut max_diff = 0;
     let mut sum_diff = 0u64;

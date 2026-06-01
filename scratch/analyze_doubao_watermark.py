@@ -120,7 +120,7 @@ def analyze_watermark_region(image_path):
     print(f"可能的水印区域占比: {watermark_ratio:.2f}%")
 
 if __name__ == "__main__":
-    image_path = r"d:\dev\san\sanMediaBox\docs\doubao.png"
+    image_path = r"d:\dev\san\sanOmni\docs\doubao.png"
     
     if not Path(image_path).exists():
         print(f"错误: 文件不存在 {image_path}")

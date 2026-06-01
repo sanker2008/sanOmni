@@ -5,7 +5,7 @@
 ### 1. 编译项目
 
 ```bash
-cd d:\dev\san\sanMediaBox
+cd d:\dev\san\sanOmni
 npm run tauri:build
 ```
 
@@ -25,9 +25,9 @@ import { invoke } from '@tauri-apps/api/core';
 // 测试豆包水印检测
 const testDetection = async () => {
   const testImages = [
-    'D:\\dev\\san\\sanMediaBox\\docs\\doubao.png',
-    'D:\\dev\\san\\sanMediaBox\\docs\\doubao-black.png',
-    'D:\\dev\\san\\sanMediaBox\\docs\\doubao-white.png',
+    'D:\\dev\\san\\sanOmni\\docs\\doubao.png',
+    'D:\\dev\\san\\sanOmni\\docs\\doubao-black.png',
+    'D:\\dev\\san\\sanOmni\\docs\\doubao-white.png',
   ];
   
   for (const imagePath of testImages) {
@@ -47,7 +47,7 @@ testDetection();
 ```typescript
 // 测试豆包水印移除
 const testRemoval = async () => {
-  const imagePath = 'D:\\dev\\san\\sanMediaBox\\docs\\doubao.png';
+  const imagePath = 'D:\\dev\\san\\sanOmni\\docs\\doubao.png';
   
   // 1. 先检测水印
   const detection = await invoke('detect_watermark', { imagePath });
@@ -56,7 +56,7 @@ const testRemoval = async () => {
     console.log('检测到豆包水印，开始移除...');
     
     // 2. 移除水印
-    const outputPath = 'D:\\dev\\san\\sanMediaBox\\docs\\doubao_clean.png';
+    const outputPath = 'D:\\dev\\san\\sanOmni\\docs\\doubao_clean.png';
     const result = await invoke('remove_watermark', {
       imagePath,
       outputPath,
@@ -86,8 +86,8 @@ const batchTest = async () => {
   ];
   
   for (const { input, output } of images) {
-    const fullInput = `D:\\dev\\san\\sanMediaBox\\${input}`;
-    const fullOutput = `D:\\dev\\san\\sanMediaBox\\${output}`;
+    const fullInput = `D:\\dev\\san\\sanOmni\\${input}`;
+    const fullOutput = `D:\\dev\\san\\sanOmni\\${output}`;
     
     try {
       // 检测

@@ -1,13 +1,13 @@
 [package]
-name = "sanmediabox"
-version = "0.1.0"
+name = "sanomni"
+version = "0.1.2"
 description = "sanOmni - Manage AI-generated images"
 authors = ["you"]
 edition = "2021"
-default-run = "sanmediabox"
+default-run = "sanomni"
 
 [lib]
-name = "sanmediabox_lib"
+name = "sanomni_lib"
 crate-type = ["lib", "cdylib"]
 
 [build-dependencies]

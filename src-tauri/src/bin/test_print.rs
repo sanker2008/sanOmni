@@ -1,8 +1,8 @@
 use image::GenericImageView;
 
 fn main() {
-    let orig = image::open(r#"C:\Users\Admin\AppData\Roaming\com.sanmediabox.app\inbox\1779446708315_Gemini_Generated_Image_tgzf02tgzf02tgzf (1).png"#).unwrap();
-    let proc = image::open(r#"C:\Users\Admin\AppData\Roaming\com.sanmediabox.app\inbox\test_output.png"#).unwrap();
+    let orig = image::open(r#"C:\Users\Admin\AppData\Roaming\com.sanomni.app\inbox\1779446708315_Gemini_Generated_Image_tgzf02tgzf02tgzf (1).png"#).unwrap();
+    let proc = image::open(r#"C:\Users\Admin\AppData\Roaming\com.sanomni.app\inbox\test_output.png"#).unwrap();
     
     // Watermark is at 4048, 944, size 48
     let mut sum_diff = 0;

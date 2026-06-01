@@ -1,6 +1,6 @@
 import re
 
-with open("d:/dev/san/sanMediaBox/src/styles/globals.css", "r", encoding="utf-8") as f:
+with open("d:/dev/san/sanOmni/src/styles/globals.css", "r", encoding="utf-8") as f:
     content = f.read()
 
 # Light mode
@@ -17,5 +17,5 @@ content = re.sub(
     content
 )
 
-with open("d:/dev/san/sanMediaBox/src/styles/globals.css", "w", encoding="utf-8") as f:
+with open("d:/dev/san/sanOmni/src/styles/globals.css", "w", encoding="utf-8") as f:
     f.write(content)

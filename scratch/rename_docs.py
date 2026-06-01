@@ -2,7 +2,7 @@ import os
 import glob
 
 # Path to docs and README
-base_dir = "d:/dev/san/sanMediaBox"
+base_dir = "d:/dev/san/sanOmni"
 docs_dir = os.path.join(base_dir, "docs")
 readme_path = os.path.join(base_dir, "README.md")
 
@@ -21,8 +21,8 @@ for filepath in files_to_check:
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    if "sanMediaBox" in content or "sanmediabox" in content:
-        new_content = content.replace("sanMediaBox", "sanOmni").replace("sanmediabox", "sanomni")
+    if "sanOmni" in content or "sanomni" in content:
+        new_content = content.replace("sanOmni", "sanOmni").replace("sanomni", "sanomni")
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(new_content)
         replaced_files += 1

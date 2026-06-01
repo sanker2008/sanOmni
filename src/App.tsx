@@ -67,7 +67,7 @@ function App() {
                 className="gap-2"
               >
                 <LayoutTemplate className="w-4 h-4" />
-                Prompt 模板管理
+                sanPrompt
               </Button>
               {appMode !== "prompt_only" && (
                 <>
@@ -78,7 +78,7 @@ function App() {
                     className="gap-2"
                   >
                     <Users className="w-4 h-4" />
-                    IP 资产管理
+                    sanIP
                   </Button>
                   <Button
                     variant={activeTab === "labs" ? "default" : "ghost"}
@@ -87,7 +87,7 @@ function App() {
                     className="gap-2"
                   >
                     <FlaskConical className="w-4 h-4" />
-                    Labs
+                    sanLabs
                   </Button>
                 </>
               )}

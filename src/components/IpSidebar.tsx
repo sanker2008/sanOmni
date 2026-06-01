@@ -231,7 +231,7 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" />
-            IP 资产库
+            sanIP
           </h2>
           <Button size="icon" variant="ghost" onClick={handleOpenCreateIp} className="h-8 w-8">
             <Plus className="w-4 h-4" />

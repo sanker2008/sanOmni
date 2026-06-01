@@ -2,7 +2,7 @@
  * Product Image Maker — Type Definitions
  * 
  * Standalone types for the product image maker tool.
- * No dependencies on any existing sanMediaBox types.
+ * No dependencies on any existing sanOmni types.
  */
 
 // ─── Canvas Settings ───────────────────────────────────────

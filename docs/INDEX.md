@@ -4,7 +4,7 @@
 
 ## 🏗️ 架构设计
 
-- [架构文档](./ARCHITECTURE.md) - 双域架构设计、模块划分与未来拆分规划
+- [架构文档](./ARCHITECTURE.md) - 说明 sanPrompt, sanIP 与 sanLabs 的模块化设计、模块划分与未来拆分规划
 
 ## 📖 通用文档
 
@@ -26,18 +26,18 @@
 - [水印检测算法](./WATERMARK_DETECTION_ALGORITHM.md) - 水印检测
 - [水印检测测试](./WATERMARK_DETECTION_TESTING.md) - 测试指南
 
-## 📝 Prompt 模板管理
+## 📝 sanPrompt
 
 - [Prompt 对比](./PROMPT_COMPARISON.md) - Prompt 对比功能
 - [Prompt 对比快速开始](./PROMPT_COMPARISON_QUICKSTART.md) - 5 分钟上手
 - [Prompt 筛选](./PROMPT_FILTER_FEATURE.md) - 筛选功能
 - [厂商管理](./VENDOR_MANAGEMENT.md) - 厂商和模型管理
 
-## 🎭 IP 形象管理
+## 🎭 sanIP
 
 > IP 形象管理相关文档正在建设中，功能已上线，详细文档后续补充。
 
-## 🧪 Labs 实验室
+## 🧪 sanLabs 实验室
 
 - [产品图制作](./LAB_PRODUCT_IMAGE_MAKER.md) - 产品图推广制作工具
 - [图片切割](./LAB_IMAGE_SLICER.md) - 多功能可视化图片切割工具

@@ -1,4 +1,4 @@
-# Labs — 产品图制作工具 (Product Image Maker) Specs
+# sanLabs — 产品图制作工具 (Product Image Maker) Specs
 
 > **版本**: v1.0  
 > **最后更新**: 2026-05-29  
@@ -8,9 +8,9 @@
 
 ## 概述
 
-Labs 是 sanOmni 的第三个顶级功能域，作为独立的工具集合区域，容纳各种图片处理小工具。与 Prompt 模板管理和 IP 资产管理完全独立，**零后端依赖、零数据库依赖**。
+sanLabs 是 sanOmni 的第三个顶级功能域，作为独立的工具集合区域，容纳各种图片处理小工具。与 Prompt 模板管理和 IP 资产管理完全独立，**零后端依赖、零数据库依赖**。
 
-**产品图制作器**是 Labs 中的第一个工具，用于创建带文字叠加的产品推广图。
+**产品图制作器**是 sanLabs 中的第一个工具，用于创建带文字叠加的产品推广图。
 
 ---
 
@@ -25,7 +25,7 @@ Labs 是 sanOmni 的第三个顶级功能域，作为独立的工具集合区域
 │                                                         │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐│
 │  │  App A:      │ │  App B:      │ │  App C:          ││
-│  │  Prompt 模板  │ │  IP 形象     │ │  Labs 工具箱     ││
+│  │  Prompt 模板  │ │  IP 形象     │ │  sanLabs 工具箱     ││
 │  │  管理        │ │  管理        │ │                  ││
 │  │  ↕ Tauri后端  │ │  ↕ Tauri后端 │ │  纯前端，无后端   ││
 │  │  ↕ SQLite    │ │  ↕ SQLite   │ │  无数据库依赖     ││
@@ -58,7 +58,7 @@ Labs 是 sanOmni 的第三个顶级功能域，作为独立的工具集合区域
 
 ```
 src/components/lab/
-├── LabView.tsx                              # Labs 主视图容器
+├── LabView.tsx                              # sanLabs 主视图容器
 └── product-image-maker/
     ├── types.ts                             # 类型定义（Layer, Canvas 等）
     ├── fonts.ts                             # Google Fonts 配置与加载器
@@ -224,7 +224,7 @@ src/components/lab/
 - [ ] 渐变色文字
 - [ ] 阴影效果
 
-### 新增 Labs 工具
+### 新增 sanLabs 工具
 - [ ] 图片切割（网格切割 / 自定义区域切割）
 - [ ] 图片尺寸压缩（批量调整尺寸 / 文件大小优化）
 - [ ] 图片格式转换（PNG ↔ JPG ↔ WebP）

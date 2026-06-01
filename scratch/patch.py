@@ -1,4 +1,4 @@
-with open("d:/dev/san/sanMediaBox/src/styles/globals.css", "r", encoding="utf-8") as f:
+with open("d:/dev/san/sanOmni/src/styles/globals.css", "r", encoding="utf-8") as f:
     content = f.read()
 
 content = content.replace("--radius: 0.5rem;", "--radius: 0rem;")
@@ -35,5 +35,5 @@ new_tail = """@layer base {
 
 content = content.replace(old_tail, new_tail)
 
-with open("d:/dev/san/sanMediaBox/src/styles/globals.css", "w", encoding="utf-8") as f:
+with open("d:/dev/san/sanOmni/src/styles/globals.css", "w", encoding="utf-8") as f:
     f.write(content)

@@ -668,7 +668,7 @@ export default function ProductImageMaker() {
         <div className="w-[300px] shrink-0 border-l border-border flex flex-col overflow-hidden">
           {/* Canvas settings section — distinct background */}
           <div
-            className="border-b-2 border-border overflow-y-auto max-h-[60%] shrink-0"
+            className="flex-1 border-b-2 border-border overflow-y-auto"
             style={{ backgroundColor: canvas.panelColor || 'hsl(var(--muted) / 0.3)' }}
           >
             <div className="p-3">
@@ -683,8 +683,8 @@ export default function ProductImageMaker() {
           </div>
 
           {/* Layer panel section — slightly different background */}
-          <div className="flex-1 bg-card/80 overflow-y-auto">
-            <div className="p-3">
+          <div className="h-[350px] shrink-0 bg-card/80 flex flex-col overflow-hidden">
+            <div className="p-3 flex-1 flex flex-col overflow-hidden">
               <LayerPanel
                 layers={layers}
                 selectedLayerId={selectedLayerId}
