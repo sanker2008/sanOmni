@@ -179,7 +179,7 @@ export default function ProductImageMaker() {
         if (item.type === 'text/plain') {
           item.getAsString((text) => {
             if (text.trim()) {
-              addTextLayer({ text });
+              addTextLayer({ content: text });
             }
           });
           e.preventDefault();
