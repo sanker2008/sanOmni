@@ -6,32 +6,20 @@ import {
   writeFile,
   remove,
   rename,
-  BaseDirectory,
 } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
-import { useUIStore } from '@/stores';
+import { getLabsRoot } from "@/lib/pathUtils";
+import { open, Command } from '@tauri-apps/plugin-shell';
 
-/**
- * Helper to get the actual tool root directory and Tauri FS baseDir options.
- * If user set a custom absolute path, baseDir is undefined and root is the custom path.
- * If not, baseDir is AppData and root is relative 'labs'.
- */
 async function getBaseConfig() {
-  const customRoot = useUIStore.getState().settings.labsCustomRootPath;
-  if (customRoot) {
-    return {
-      root: await join(customRoot, 'product_image_maker'),
-      options: {} as any, // When baseDir is omitted, path is absolute
-    };
-  }
+  const labsRoot = await getLabsRoot();
   return {
-    root: await join('labs', 'product_image_maker'),
-    options: { baseDir: BaseDirectory.AppData },
+    root: await join(labsRoot, 'product_image_maker'),
   };
 }
 
 export async function ensureToolDirectories() {
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const dirs = [
     await join(root, 'projects'),
     await join(root, 'templates'),
@@ -39,7 +27,7 @@ export async function ensureToolDirectories() {
   ];
   for (const dir of dirs) {
     try {
-      await mkdir(dir, { ...options, recursive: true });
+      await mkdir(dir, { recursive: true });
     } catch (e: any) {
       if (!String(e).includes('exists') && !String(e).includes('存在')) {
         console.error('Failed to create dir:', dir, e);
@@ -56,7 +44,7 @@ export async function saveProject(
   data: any
 ) {
   await ensureToolDirectories();
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const filePath = await join(root, `${type}s`, `${id}.json`);
   const payload = {
     id,
@@ -65,28 +53,28 @@ export async function saveProject(
     canvas: data?.canvas || null,
     layers: data?.layers || [],
   };
-  await writeTextFile(filePath, JSON.stringify(payload, null, 2), options);
+  await writeTextFile(filePath, JSON.stringify(payload, null, 2));
 }
 
 export async function loadProject(type: 'project' | 'template', id: string) {
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const filePath = await join(root, `${type}s`, `${id}.json`);
-  const content = await readTextFile(filePath, options);
+  const content = await readTextFile(filePath);
   return JSON.parse(content);
 }
 
 export async function listProjects(type: 'project' | 'template') {
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const dirPath = await join(root, `${type}s`);
   try {
-    const entries = await readDir(dirPath, options);
+    const entries = await readDir(dirPath);
     const projects = [];
 
     for (const entry of entries) {
       if (entry.isFile && entry.name?.endsWith('.json')) {
         try {
           const filePath = await join(dirPath, entry.name);
-          const content = await readTextFile(filePath, options);
+          const content = await readTextFile(filePath);
           const parsed = JSON.parse(content);
           projects.push({
             id: parsed.id || entry.name.replace(/\.json$/, ''),
@@ -109,48 +97,37 @@ export async function listProjects(type: 'project' | 'template') {
 }
 
 export async function deleteFile(type: 'project' | 'template', id: string) {
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const filePath = await join(root, type === 'project' ? 'projects' : 'templates', `${id}.json`);
-  await remove(filePath, options);
+  await remove(filePath);
 }
 
 export async function renameFile(type: 'project' | 'template', id: string, newName: string) {
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const filePath = await join(root, `${type}s`, `${id}.json`);
-  const content = await readTextFile(filePath, options);
+  const content = await readTextFile(filePath);
   const parsed = JSON.parse(content);
   parsed.name = newName;
   parsed.updatedAt = Date.now();
-  await writeTextFile(filePath, JSON.stringify(parsed, null, 2), options);
+  await writeTextFile(filePath, JSON.stringify(parsed, null, 2));
 }
 
 export async function saveExport(filename: string, data: Uint8Array) {
   await ensureToolDirectories();
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const filePath = await join(root, 'exports', filename);
-  await writeFile(filePath, data, options);
+  await writeFile(filePath, data);
 }
 
-import { getAppRoot } from "@/lib/pathUtils";
-
 export async function listExports() {
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const dirPath = await join(root, 'exports');
   try {
-    const entries = await readDir(dirPath, options);
+    const entries = await readDir(dirPath);
     const exports = [];
-    let appData = '';
-    if (options.baseDir === BaseDirectory.AppData) {
-      appData = await getAppRoot();
-    }
     for (const e of entries) {
       if (e.isFile) {
-        let absPath = '';
-        if (options.baseDir === BaseDirectory.AppData) {
-          absPath = await join(appData, root, 'exports', e.name);
-        } else {
-          absPath = await join(root, 'exports', e.name);
-        }
+        let absPath = await join(root, 'exports', e.name);
         exports.push({ name: e.name, absolutePath: absPath });
       }
     }
@@ -162,45 +139,45 @@ export async function listExports() {
 }
 
 export async function renameExport(oldName: string, newName: string) {
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const oldPath = await join(root, 'exports', oldName);
   const newPath = await join(root, 'exports', newName);
-  // Rename options require baseDir specific to old and new paths.
-  // We can just spread options for both
-  const renameOptions = options.baseDir 
-    ? { oldPathBaseDir: options.baseDir, newPathBaseDir: options.baseDir }
-    : {};
-  await rename(oldPath, newPath, renameOptions);
+  await rename(oldPath, newPath);
 }
 
 export async function deleteExport(name: string) {
-  const { root, options } = await getBaseConfig();
+  const { root } = await getBaseConfig();
   const filePath = await join(root, 'exports', name);
-  await remove(filePath, options);
+  await remove(filePath);
 }
-
-import { open, Command } from '@tauri-apps/plugin-shell';
 
 export async function openExportFolder() {
   await ensureToolDirectories();
-  const { root, options } = await getBaseConfig();
-  let dirPath = '';
-  if (options.baseDir === BaseDirectory.AppData) {
-    const appData = await getAppRoot();
-    dirPath = await join(appData, root, 'exports');
-  } else {
-    dirPath = await join(root, 'exports');
-  }
+  const { root } = await getBaseConfig();
+  const dirPath = await join(root, 'exports');
   console.log('Opening export folder:', dirPath);
   
   try {
     await open(dirPath);
   } catch (e) {
-    console.error('Failed to open with open(), trying explorer...', e);
+    console.error('Failed to open with open(), trying OS fallback...', e);
     try {
-      const cmd = Command.create('explorer', [dirPath]);
+      const ua = navigator.userAgent.toLowerCase();
+      let cmdName = 'open'; // default to Mac
+      
+      if (ua.includes('win')) {
+        cmdName = 'explorer';
+      } else if (ua.includes('mac')) {
+        cmdName = 'open';
+      } else {
+        cmdName = 'xdg-open';
+      }
+
+      console.log(`Executing Tauri native command: ${cmdName} [${dirPath}]`);
+      const cmd = Command.create(cmdName, [dirPath]);
       await cmd.execute();
     } catch (e2) {
+      console.error('All folder opening methods failed:', e2);
       throw e2;
     }
   }

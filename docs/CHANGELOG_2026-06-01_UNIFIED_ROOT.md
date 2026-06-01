@@ -22,6 +22,10 @@
 ## 🐛 Bug 修复
 
 - 修复了版本检查更新失败（404）时，错误提示不够友好的问题。
+- **配置持久化问题**：修复了底层工具函数读取错误 localStorage 键名的问题（从 `san_settings` 更正为 `ai-image-manager-settings`），确保全局的统一根目录设置对所有依赖路径的模块生效。
+- **Labs 工具兼容性**：
+  - 重构了所有实验小工具（`ai-image-editor`, `image-compressor`, `image-slicer`, `product-image-maker`）的路径获取逻辑，统一调用 `getLabsRoot()`，使其完全支持自定义的 Labs 目录以及全局统一根目录。
+  - 修复了部分实验小工具（特别是商品图制作模块）硬编码使用 `explorer` 打开目录导致在 Mac 环境下出现 `os error 2` 的问题，现已全部更换为跨平台动态检测执行 `open`（Mac）或 `explorer`（Windows）的方案。
 
 ## 📝 文档更新
 

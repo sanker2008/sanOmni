@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
-import { getAppRoot } from "@/lib/pathUtils";
-import { useUIStore } from '@/stores';
+import { getLabsRoot } from "@/lib/pathUtils";
 
 /**
  * Get the default export path.
@@ -9,12 +8,8 @@ import { useUIStore } from '@/stores';
  * Otherwise, fallback to AppDataDir/labs/image_slicer/exports.
  */
 export async function getDefaultExportPath(): Promise<string> {
-  const customRoot = useUIStore.getState().settings.labsCustomRootPath;
-  if (customRoot) {
-    return await join(customRoot, 'image_slicer', 'exports');
-  }
-  const appDir = await getAppRoot();
-  return await join(appDir, 'labs', 'image_slicer', 'exports');
+  const labsRoot = await getLabsRoot();
+  return await join(labsRoot, 'image_slicer', 'exports');
 }
 
 /**

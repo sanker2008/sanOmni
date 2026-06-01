@@ -3,18 +3,15 @@
  */
 import { mkdir, writeFile, readFile, readDir, remove } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
-import { getAppRoot } from "@/lib/pathUtils";
-import { useUIStore } from '@/stores';
+import { getLabsRoot } from "@/lib/pathUtils";
 import type { ProjectData, ProjectMeta } from './types';
 
 // ─── 路径工具 ──────────────────────────────────────────────
 
 /** 获取 AI Image Editor 根目录 */
 export async function getBasePath(): Promise<string> {
-  const customRoot = useUIStore.getState().settings.labsCustomRootPath;
-  if (customRoot) return await join(customRoot, 'ai_image_editor');
-  const appDir = await getAppRoot();
-  return await join(appDir, 'labs', 'ai_image_editor');
+  const labsRoot = await getLabsRoot();
+  return await join(labsRoot, 'ai_image_editor');
 }
 
 /** 获取输出目录 */
@@ -221,7 +218,19 @@ export async function openOutputFolder(): Promise<void> {
     console.warn('openShell failed, trying fallback:', e);
     try {
       const { Command } = await import('@tauri-apps/plugin-shell');
-      const cmd = Command.create('open', [dir]);
+      const ua = navigator.userAgent.toLowerCase();
+      let cmdName = 'open'; // default to Mac
+      
+      if (ua.includes('win')) {
+        cmdName = 'explorer';
+      } else if (ua.includes('mac')) {
+        cmdName = 'open';
+      } else {
+        cmdName = 'xdg-open';
+      }
+
+      console.log(`Executing Tauri native command: ${cmdName} [${dir}]`);
+      const cmd = Command.create(cmdName, [dir]);
       await cmd.execute();
     } catch (e2) {
       console.error('All folder opening methods failed:', e2);

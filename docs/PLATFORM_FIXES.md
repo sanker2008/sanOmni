@@ -71,6 +71,33 @@ let relative_path = std::path::Path::new("inbox")
 
 ---
 
+### 4. fs.ts - 打开目录跨平台支持
+**文件**: `src/components/lab/*/fs.ts`
+
+**问题**:
+```typescript
+// ❌ 硬编码 Windows 独有的 explorer 命令，导致在 Mac 下提示 os error 2
+const cmd = Command.create('explorer', [dirPath]);
+await cmd.execute();
+```
+
+**修复**:
+```typescript
+// ✅ 动态检测操作系统使用对应命令
+const ua = navigator.userAgent.toLowerCase();
+let cmdName = 'open'; // Mac 默认
+if (ua.includes('win')) cmdName = 'explorer';
+else if (ua.includes('mac')) cmdName = 'open';
+else cmdName = 'xdg-open';
+
+const cmd = Command.create(cmdName, [dirPath]);
+await cmd.execute();
+```
+
+**影响**: 保证所有实验工具在点击“打开导出目录”失败回退时，能够正确使用平台对应的命令打开文件夹。
+
+---
+
 ## 📋 跨平台最佳实践
 
 ### TypeScript/React 代码
