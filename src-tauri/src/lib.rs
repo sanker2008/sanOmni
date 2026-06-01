@@ -10,6 +10,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(commands::watcher::WatcherState::new())
         .setup(|app| {
             // Use Tauri's app data directory
@@ -123,8 +125,6 @@ pub fn run() {
             commands::characters::update_character_order,
             commands::characters::upload_character_images,
             commands::characters::get_ip_characters,
-            commands::updater::check_for_update,
-            commands::updater::get_current_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

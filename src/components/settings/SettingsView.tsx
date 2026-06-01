@@ -108,10 +108,12 @@ export default function SettingsView() {
 
           {/* 标签栏 */}
           <div className="flex border-b px-6">
-            {SETTINGS_TABS.map((tab) => (
+            {SETTINGS_TABS.filter(tab => 
+              import.meta.env.VITE_APP_MODE !== "prompt_only" || !["ip", "labs"].includes(tab.key)
+            ).map((tab) => (
               <button
                 key={tab.key}
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors \${
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                   activeSettingsTab === tab.key
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -143,7 +145,7 @@ export default function SettingsView() {
               />
             )}
 
-            {activeSettingsTab === "ip" && (
+            {activeSettingsTab === "ip" && import.meta.env.VITE_APP_MODE !== "prompt_only" && (
               <IpSettingsTab 
                 localSettings={localSettings} 
                 handleLocalUpdate={handleLocalUpdate} 
@@ -153,7 +155,7 @@ export default function SettingsView() {
               />
             )}
 
-            {activeSettingsTab === "labs" && (
+            {activeSettingsTab === "labs" && import.meta.env.VITE_APP_MODE !== "prompt_only" && (
               <LabsSettingsTab 
                 localSettings={localSettings} 
                 handleLocalUpdate={handleLocalUpdate} 

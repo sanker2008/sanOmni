@@ -32,6 +32,8 @@ anyhow = "1"
 reqwest = { version = "0.12", features = ["json"] }
 semver = "1"
 thiserror = "1"
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"
 
 # Reduce memory usage during compilation
 [profile.dev]

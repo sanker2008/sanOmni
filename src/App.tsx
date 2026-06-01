@@ -29,6 +29,7 @@ const THEME_LABELS: Record<Theme, string> = {
 
 function App() {
   const { activeTab, setActiveTab, openSettings, theme, setTheme } = useUIStore();
+  const appMode = import.meta.env.VITE_APP_MODE || "all";
 
   // Register keyboard shortcuts
   useKeyboardShortcuts();
@@ -68,24 +69,28 @@ function App() {
                 <LayoutTemplate className="w-4 h-4" />
                 Prompt 模板管理
               </Button>
-              <Button
-                variant={activeTab === "ip" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setActiveTab("ip")}
-                className="gap-2"
-              >
-                <Users className="w-4 h-4" />
-                IP 资产管理
-              </Button>
-              <Button
-                variant={activeTab === "labs" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setActiveTab("labs")}
-                className="gap-2"
-              >
-                <FlaskConical className="w-4 h-4" />
-                Labs
-              </Button>
+              {appMode !== "prompt_only" && (
+                <>
+                  <Button
+                    variant={activeTab === "ip" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setActiveTab("ip")}
+                    className="gap-2"
+                  >
+                    <Users className="w-4 h-4" />
+                    IP 资产管理
+                  </Button>
+                  <Button
+                    variant={activeTab === "labs" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setActiveTab("labs")}
+                    className="gap-2"
+                  >
+                    <FlaskConical className="w-4 h-4" />
+                    Labs
+                  </Button>
+                </>
+              )}
             </nav>
           </div>
 
@@ -116,7 +121,9 @@ function App() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-hidden relative">
-            {activeTab === "prompt" ? (
+            {import.meta.env.VITE_APP_MODE === "prompt_only" ? (
+              <PromptDomainView />
+            ) : activeTab === "prompt" ? (
               <PromptDomainView />
             ) : activeTab === "ip" ? (
               <IpDomainView />

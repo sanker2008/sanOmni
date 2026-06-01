@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { ScanLine, Loader2, FolderOpen, AlertTriangle, Plus, X } from "lucide-react";
 import { scannerApi } from "@/services/tauri";
 import { useImageStore } from "@/stores";

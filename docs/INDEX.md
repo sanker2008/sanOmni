@@ -44,6 +44,7 @@
 
 ## 🔧 开发文档
 
+- [按需打包配置](./ON_DEMAND_PACKAGING.md) - 配置环境变量进行功能裁剪打包 🆕
 - [跨平台支持](./CROSS_PLATFORM.md) - 平台支持说明
 - [平台修复](./PLATFORM_FIXES.md) - 平台问题修复
 

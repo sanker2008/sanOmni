@@ -3,12 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { ScanLine, Loader2, FolderOpen, AlertTriangle, Plus, X, Trash2 } from "lucide-react";
+import { ScanLine, Loader2, FolderOpen, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { scannerApi } from "@/services/tauri";
-import { useImageStore } from "@/stores";
 import { toast } from "@/hooks/useToast";
 import type { ResetType } from "./ResetConfirmDialog";
 
@@ -27,26 +23,11 @@ export default function IpSettingsTab({
   onTriggerReset,
   activeWatchers,
 }: IpSettingsTabProps) {
-  const { setArchivedImages, setInboxImages } = useImageStore();
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [isCleaningInbox, setIsCleaningInbox] = useState(false);
   const [inboxCleanupResult, setInboxCleanupResult] = useState<any>(null);
   const [newWatchFolder, setNewWatchFolder] = useState("");
-
-  const handleAddWatchFolder = () => {
-    if (newWatchFolder.trim()) {
-      const folders = [...(localSettings.ipWatchFolders || []), newWatchFolder.trim()];
-      handleLocalUpdate("ipWatchFolders", folders);
-      setNewWatchFolder("");
-    }
-  };
-
-  const handleRemoveWatchFolder = (index: number) => {
-    const folders = [...(localSettings.ipWatchFolders || [])];
-    folders.splice(index, 1);
-    handleLocalUpdate("ipWatchFolders", folders);
-  };
 
   const handleSelectWatchFolder = async () => {
     try {

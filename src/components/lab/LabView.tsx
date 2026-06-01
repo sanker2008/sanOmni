@@ -9,6 +9,7 @@ import { useState } from 'react';
 import ProductImageMaker from './product-image-maker/ProductImageMaker';
 import ImageSlicer from './image-slicer/ImageSlicer';
 import AiImageEditor from './ai-image-editor/AiImageEditor';
+import ImageCompressor from './image-compressor/ImageCompressor';
 import {
   ImageIcon,
   Scissors,
@@ -58,8 +59,8 @@ const LAB_TOOLS: LabTool[] = [
     name: '图片压缩',
     description: '批量压缩图片尺寸和文件大小',
     icon: <Minimize2 className="w-4 h-4" />,
-    component: null,
-    available: false,
+    component: ImageCompressor,
+    available: true,
   },
 ];
 
