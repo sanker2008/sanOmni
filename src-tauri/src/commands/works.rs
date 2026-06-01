@@ -6,10 +6,7 @@ use chrono::Utc;
 use crate::models::{Work, WorkWithRelations, WorkFilters, Tag, CharacterWithRelations};
 
 fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("data").join("database.sqlite");
     Connection::open(db_path).map_err(|e| e.to_string())
 }
@@ -78,10 +75,8 @@ pub async fn get_works(
     filters: Option<WorkFilters>,
 ) -> Result<Vec<WorkWithRelations>, String> {
     let conn = get_connection(&app_handle)?;
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
     
     let mut query = String::from(
         "SELECT id, name, path, work_type, description, release_date, producer, 
@@ -160,10 +155,8 @@ pub async fn get_work_by_id(
     id: String,
 ) -> Result<WorkWithRelations, String> {
     let conn = get_connection(&app_handle)?;
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
     
     let work = conn.query_row(
         "SELECT id, name, path, work_type, description, release_date, producer, 
@@ -216,10 +209,8 @@ pub async fn update_work(
     director_author: Option<String>,
     status: Option<String>,
 ) -> Result<Work, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
 
     {
         let conn = get_connection(&app_handle)?;
@@ -348,10 +339,8 @@ pub async fn upload_work_cover(
     image_data: Vec<u8>,
     extension: String,
 ) -> Result<String, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
     
     // Resolve path identifier
     let conn = get_connection(&app_handle)?;
@@ -413,10 +402,8 @@ pub async fn delete_work_cover(
     work_id: String,
 ) -> Result<(), String> {
     let conn = get_connection(&app_handle)?;
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
         
     let cover_raw: Option<String> = conn.query_row(
         "SELECT cover_path FROM works WHERE id = ?",
@@ -507,10 +494,8 @@ fn get_work_characters_internal(conn: &Connection, work_id: &str, app_data_dir: 
 }
 
 fn cleanup_work_files(app_handle: &AppHandle, work_id: &str) -> Result<(), String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
     
     let conn = get_connection(app_handle)?;
     let path_ident: Option<String> = conn.query_row(

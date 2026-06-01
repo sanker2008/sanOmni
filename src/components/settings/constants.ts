@@ -4,6 +4,7 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   namingTemplate: "{vendor}-{model}-{date}-{index}",
   customInboxPath: "",  // 自定义待整理路径（留空使用默认）
   customArchivedPath: "",  // 自定义 archived 路径（留空使用默认）
+  customWorksPath: "",      // 自定义作品集路径
   labsCustomRootPath: "", // sanLabs 实验室工具自定义根目录
   canvasUndoMaxCount: 50,  // 产品图画布最大撤回次数
   showFullImage: false,  // 列表中是否显示完整图片（不裁剪）

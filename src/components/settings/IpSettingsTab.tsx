@@ -159,7 +159,40 @@ export default function IpSettingsTab({
                 </CardContent>
               </Card>
 
-              <div className="text-lg font-semibold mt-8 mb-4 border-b pb-2">自动化处理</div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">自定义作品集根目录</CardTitle>
+                  <CardDescription>
+                    作品及相关角色的存储位置。留空则使用默认位置（AppData/works）
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Input
+                      value={localSettings.customWorksPath || ""}
+                      onChange={(e) =>
+                        handleLocalUpdate("customWorksPath", e.target.value)
+                      }
+                      placeholder="留空使用默认位置"
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => onSelectPath("customWorksPath")}
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {!localSettings.customWorksPath && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {localSettings.unifiedRootPath ? `默认：${localSettings.unifiedRootPath}\\works` : '默认：%APPDATA%\\com.sanomni.app\\works'}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="text-lg font-semibold mb-4 mt-8 border-b pb-2">监控与自动化</div>
 
               <Card>
                 <CardHeader>

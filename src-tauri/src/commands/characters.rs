@@ -6,10 +6,7 @@ use chrono::Utc;
 use crate::models::{Character, CharacterWithRelations};
 
 fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("data").join("database.sqlite");
     Connection::open(db_path).map_err(|e| e.to_string())
 }
@@ -71,10 +68,8 @@ pub async fn get_characters(
     work_id: String,
 ) -> Result<Vec<CharacterWithRelations>, String> {
     let conn = get_connection(&app_handle)?;
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
     
     let mut stmt = conn.prepare(
         "SELECT c.id, c.work_id, c.name, c.character_type, c.description, c.appearance_info,
@@ -122,10 +117,8 @@ pub async fn get_character_by_id(
     id: String,
 ) -> Result<CharacterWithRelations, String> {
     let conn = get_connection(&app_handle)?;
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
     
     conn.query_row(
         "SELECT c.id, c.work_id, c.name, c.character_type, c.description, c.appearance_info,
@@ -261,10 +254,8 @@ pub async fn upload_character_images(
     work_id: String,
     images: Vec<(Vec<u8>, String)>, // (data, extension)
 ) -> Result<Vec<String>, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
     
     // Resolve path identifier
     let conn = get_connection(&app_handle)?;
@@ -307,10 +298,8 @@ pub async fn get_ip_characters(
     ip_id: String,
 ) -> Result<Vec<CharacterWithRelations>, String> {
     let conn = get_connection(&app_handle)?;
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
     
     let mut stmt = conn.prepare(
         "SELECT c.id, c.work_id, c.name, c.character_type, c.description, c.appearance_info,
@@ -361,10 +350,8 @@ fn cleanup_character_files(
 ) -> Result<(), String> {
     if let Some(paths_json) = image_paths {
         if let Ok(paths) = serde_json::from_str::<Vec<String>>(&paths_json) {
-            let app_data_dir = app_handle
-                .path()
-                .app_data_dir()
-                .map_err(|e| e.to_string())?;
+            let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
             
             for path in paths {
                 let file_path = app_data_dir.join(&path);

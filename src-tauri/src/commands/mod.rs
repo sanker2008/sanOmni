@@ -38,6 +38,33 @@ pub fn get_app_root(conn: &rusqlite::Connection, default_app_data_dir: &std::pat
     default_app_data_dir.to_path_buf()
 }
 
+pub fn get_app_root_from_handle(app_handle: &tauri::AppHandle, default_app_data_dir: &std::path::Path) -> std::path::PathBuf {
+    if let Ok(conn) = rusqlite::Connection::open(default_app_data_dir.join("data").join("database.sqlite")) {
+        return get_app_root(&conn, default_app_data_dir);
+    }
+    default_app_data_dir.to_path_buf()
+}
+
+pub fn get_works_base_path(conn: &rusqlite::Connection, default_app_data_dir: &std::path::Path) -> std::path::PathBuf {
+    if let Ok(works_path) = conn.query_row(
+        "SELECT value FROM settings WHERE key = 'customWorksPath'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        if !works_path.trim().is_empty() {
+            return std::path::PathBuf::from(works_path.trim());
+        }
+    }
+    get_app_root(conn, default_app_data_dir)
+}
+
+pub fn get_works_root_from_handle(app_handle: &tauri::AppHandle, default_app_data_dir: &std::path::Path) -> std::path::PathBuf {
+    if let Ok(conn) = rusqlite::Connection::open(default_app_data_dir.join("data").join("database.sqlite")) {
+        return get_works_base_path(&conn, default_app_data_dir);
+    }
+    default_app_data_dir.to_path_buf()
+}
+
 pub mod images;
 pub mod vendors;
 pub mod tags;
