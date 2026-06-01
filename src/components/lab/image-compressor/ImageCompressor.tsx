@@ -50,22 +50,33 @@ export default function ImageCompressor() {
     initPath();
   }, []);
 
-  const handleFiles = useCallback((selectedFiles: FileList | File[]) => {
+  const handleFiles = useCallback(async (selectedFiles: FileList | File[]) => {
     const newItems: FileItem[] = [];
-    for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i];
-      if (!file.type.startsWith('image/')) continue;
-
-      const dataUrl = URL.createObjectURL(file);
-      newItems.push({
-        id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        file,
-        name: file.name,
-        size: file.size,
-        dataUrl,
-        status: 'pending'
+    
+    const readPromises = Array.from(selectedFiles).map((file) => {
+      return new Promise<void>((resolve) => {
+        if (!file.type.startsWith('image/')) {
+          resolve();
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          newItems.push({
+            id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            file,
+            name: file.name,
+            size: file.size,
+            dataUrl: reader.result as string,
+            status: 'pending'
+          });
+          resolve();
+        };
+        reader.onerror = () => resolve();
+        reader.readAsDataURL(file);
       });
-    }
+    });
+
+    await Promise.all(readPromises);
 
     if (newItems.length > 0) {
       setFiles((prev) => [...prev, ...newItems]);

@@ -2,8 +2,10 @@
  * LayerPanel — Layer list management for the product image maker.
  * 
  * Shows all layers, supports selection, visibility toggle, reorder, and delete.
+ * Uses mouse-event-based drag (not HTML5 Drag API) for Tauri WebView2 compatibility.
  */
 
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Layer } from './types';
 import {
   Type,
@@ -21,6 +23,7 @@ import {
   Square,
   Circle,
   Triangle,
+  GripVertical,
 } from 'lucide-react';
 
 interface LayerPanelProps {
@@ -31,6 +34,7 @@ interface LayerPanelProps {
   onToggleLock: (id: string) => void;
   onRemoveLayer: (id: string) => void;
   onDuplicateLayer: (id: string) => void;
+  onReorderLayers: (fromIndex: number, toIndex: number) => void;
   onMoveUp: (id: string) => void;
   onMoveDown: (id: string) => void;
   onAddTextLayer: () => void;
@@ -46,12 +50,22 @@ export default function LayerPanel({
   onToggleLock,
   onRemoveLayer,
   onDuplicateLayer,
+  onReorderLayers,
   onMoveUp,
   onMoveDown,
   onAddTextLayer,
   onAddImageLayer,
   onAddShapeLayer,
 }: LayerPanelProps) {
+  // --- Mouse-based drag state ---
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const isDraggingRef = useRef(false);
+  const dragStartYRef = useRef(0);
+  const draggedRealIndexRef = useRef<number | null>(null);
+  const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const listRef = useRef<HTMLDivElement>(null);
+
   const getLayerPreview = (layer: Layer): string => {
     if (layer.type === 'text') {
       const text = layer.content || '空文本';
@@ -65,6 +79,67 @@ export default function LayerPanel({
     const name = layer.filename || '图片';
     return name.length > 16 ? name.slice(0, 16) + '…' : name;
   };
+
+  // Calculate which reversed index the mouse is currently over
+  const getDropTarget = useCallback((clientY: number): number | null => {
+    if (!listRef.current) return null;
+    const children = listRef.current.children;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i] as HTMLElement;
+      const rect = child.getBoundingClientRect();
+      if (clientY >= rect.top && clientY <= rect.bottom) {
+        // This is reversed index i, convert to realIndex
+        return layers.length - 1 - i;
+      }
+    }
+    return null;
+  }, [layers.length]);
+
+  const handleGripMouseDown = useCallback((e: React.MouseEvent, realIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingRef.current = true;
+    dragStartYRef.current = e.clientY;
+    draggedRealIndexRef.current = realIndex;
+    setDraggedIndex(realIndex);
+    setDropTargetIndex(null);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || draggedRealIndexRef.current === null) return;
+      
+      const target = getDropTarget(e.clientY);
+      if (target !== null && target !== draggedRealIndexRef.current) {
+        setDropTargetIndex(target);
+      } else if (target === draggedRealIndexRef.current) {
+        setDropTargetIndex(null);
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      
+      const fromIndex = draggedRealIndexRef.current;
+      const target = getDropTarget(e.clientY);
+      
+      if (fromIndex !== null && target !== null && fromIndex !== target) {
+        onReorderLayers(fromIndex, target);
+      }
+      
+      draggedRealIndexRef.current = null;
+      setDraggedIndex(null);
+      setDropTargetIndex(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [getDropTarget, onReorderLayers]);
 
   return (
     <div className="flex flex-col">
@@ -105,7 +180,10 @@ export default function LayerPanel({
       </div>
 
       {/* Layer list (reverse order — top layer first) */}
-      <div className="space-y-0.5 max-h-[300px] overflow-y-auto">
+      <div 
+        ref={listRef}
+        className="space-y-0.5 max-h-[300px] overflow-y-auto pb-4"
+      >
         {layers.length === 0 ? (
           <div className="text-center py-6 text-xs text-muted-foreground">
             暂无图层，点击上方按钮添加
@@ -114,18 +192,37 @@ export default function LayerPanel({
           [...layers].reverse().map((layer, reversedIndex) => {
             const realIndex = layers.length - 1 - reversedIndex;
             const isSelected = layer.id === selectedLayerId;
+            const isDragged = draggedIndex === realIndex;
+            const isDropTarget = dropTargetIndex === realIndex;
 
             return (
               <div
                 key={layer.id}
-                className={`group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
+                ref={(el) => {
+                  if (el) itemRefs.current.set(realIndex, el);
+                  else itemRefs.current.delete(realIndex);
+                }}
+                className={`group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors select-none ${
                   isSelected
                     ? 'bg-primary/10 ring-1 ring-primary/30'
                     : 'hover:bg-muted/50'
-                }`}
-                onClick={() => onSelectLayer(layer.id)}
+                } ${
+                  isDropTarget
+                    ? draggedIndex !== null && draggedIndex < realIndex
+                      ? 'border-t-2 border-t-primary'
+                      : 'border-b-2 border-b-primary'
+                    : 'border-t-2 border-b-2 border-transparent'
+                } ${isDragged ? 'opacity-40 bg-muted/30' : ''}`}
+                onClick={() => {
+                  if (!isDraggingRef.current) onSelectLayer(layer.id);
+                }}
               >
-                <span className="text-muted-foreground shrink-0">
+                {/* Drag handle */}
+                <span 
+                  className="text-muted-foreground shrink-0 cursor-grab active:cursor-grabbing flex items-center"
+                  onMouseDown={(e) => handleGripMouseDown(e, realIndex)}
+                >
+                  <GripVertical className="w-3.5 h-3.5 mr-1 opacity-20 group-hover:opacity-100 transition-opacity" />
                   {layer.type === 'text' ? (
                     <Type className="w-3.5 h-3.5" />
                   ) : layer.type === 'shape' ? (

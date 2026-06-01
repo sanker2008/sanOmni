@@ -5,7 +5,7 @@
  * Supports both text layers and image layers with different property sets.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Layer, TextLayer, ImageLayer, ShapeLayer, CanvasSettings } from './types';
 import { FONT_WEIGHT_OPTIONS, CANVAS_PRESETS } from './types';
 import FontSelector from './FontSelector';
@@ -128,16 +128,65 @@ function SliderInput({
   );
 }
 
+const BLEND_MODES = [
+  { value: 'source-over', label: '正常' },
+  { value: 'multiply', label: '正片叠底' },
+  { value: 'screen', label: '滤色' },
+  { value: 'overlay', label: '叠加' },
+  { value: 'darken', label: '变暗' },
+  { value: 'lighten', label: '变亮' },
+  { value: 'color-dodge', label: '颜色减淡' },
+  { value: 'color-burn', label: '颜色加深' },
+  { value: 'hard-light', label: '强光' },
+  { value: 'soft-light', label: '柔光' },
+  { value: 'difference', label: '差值' },
+  { value: 'exclusion', label: '排除' },
+];
+
+function BlendModeInput({
+  value,
+  onChange,
+}: {
+  value?: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <label className="text-xs text-muted-foreground w-14 shrink-0">混合模式</label>
+      <select
+        value={value || 'source-over'}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 px-2 py-1 text-xs bg-muted/50 rounded outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+      >
+        {BLEND_MODES.map((mode) => (
+          <option key={mode.value} value={mode.value}>
+            {mode.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 // ─── Canvas Settings Panel ─────────────────────────────────
 
 function CanvasSettingsPanel({
   canvas,
   onUpdate,
+  hasSelectedLayer,
 }: {
   canvas: CanvasSettings;
   onUpdate: (updates: Partial<CanvasSettings>) => void;
+  hasSelectedLayer: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+
+  // Auto-collapse when a layer is selected, auto-expand when deselected
+  useEffect(() => {
+    if (hasSelectedLayer) {
+      setCollapsed(true);
+    }
+  }, [hasSelectedLayer]);
 
   return (
     <div className="space-y-3">
@@ -426,6 +475,12 @@ function TextLayerProperties({
         onChange={(v) => onUpdate({ opacity: v })}
       />
 
+      {/* Blend Mode */}
+      <BlendModeInput
+        value={layer.blendMode}
+        onChange={(v) => onUpdate({ blendMode: v })}
+      />
+
       {/* Text align */}
       <div className="flex items-center gap-2">
         <label className="text-xs text-muted-foreground w-14 shrink-0">对齐</label>
@@ -564,6 +619,11 @@ function TextLayerProperties({
               value={layer.decorationLineColor}
               onChange={(v) => onUpdate({ decorationLineColor: v })}
             />
+            <SliderInput
+              label="线透明度"
+              value={layer.decorationLineOpacity ?? 1}
+              onChange={(v) => onUpdate({ decorationLineOpacity: v })}
+            />
             <NumberInput
               label="线宽"
               value={layer.decorationLineWidth}
@@ -690,6 +750,12 @@ function ImageLayerProperties({
         onChange={(v) => onUpdate({ opacity: v })}
       />
 
+      {/* Blend Mode */}
+      <BlendModeInput
+        value={layer.blendMode}
+        onChange={(v) => onUpdate({ blendMode: v })}
+      />
+
       {/* Position */}
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
@@ -785,7 +851,7 @@ export default function PropertyPanel({
   return (
     <div className="space-y-4">
       {/* Canvas settings always visible */}
-      <CanvasSettingsPanel canvas={canvas} onUpdate={onUpdateCanvas} />
+      <CanvasSettingsPanel canvas={canvas} onUpdate={onUpdateCanvas} hasSelectedLayer={!!selectedLayer} />
 
       <hr className="border-border" />
 
@@ -929,6 +995,11 @@ function ShapeLayerProperties({
         label="透明度"
         value={layer.opacity}
         onChange={(v) => onUpdate({ opacity: v })}
+      />
+
+      <BlendModeInput
+        value={layer.blendMode}
+        onChange={(v) => onUpdate({ blendMode: v })}
       />
 
       {/* Position */}

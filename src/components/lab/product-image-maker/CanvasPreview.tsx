@@ -57,6 +57,7 @@ function renderTextLayer(ctx: CanvasRenderingContext2D, layer: TextLayer) {
 
   ctx.save();
   ctx.globalAlpha = layer.opacity;
+  ctx.globalCompositeOperation = (layer.blendMode as GlobalCompositeOperation) || 'source-over';
   ctx.font = `${layer.fontWeight} ${layer.fontSize}px "${layer.fontFamily}"`;
   ctx.fillStyle = layer.color;
   ctx.textAlign = layer.textAlign;
@@ -76,6 +77,8 @@ function renderTextLayer(ctx: CanvasRenderingContext2D, layer: TextLayer) {
     const gap = layer.decorationLineGap ?? 20;
     const lineLength = layer.decorationLineLength ?? 60;
 
+    const decOpacity = layer.decorationLineOpacity ?? 1.0;
+    ctx.globalAlpha = layer.opacity * decOpacity;
     ctx.strokeStyle = layer.decorationLineColor;
     ctx.lineWidth = layer.decorationLineWidth;
 
@@ -160,6 +163,7 @@ function renderImageLayer(ctx: CanvasRenderingContext2D, layer: ImageLayer) {
 
   ctx.save();
   ctx.globalAlpha = layer.opacity;
+  ctx.globalCompositeOperation = (layer.blendMode as GlobalCompositeOperation) || 'source-over';
 
   // Draw image centered at (x, y)
   const drawX = layer.x - layer.width / 2;
@@ -181,8 +185,11 @@ function renderImageLayer(ctx: CanvasRenderingContext2D, layer: ImageLayer) {
 }
 
 function renderShapeLayer(ctx: CanvasRenderingContext2D, layer: ShapeLayer) {
+  if (!layer.visible) return;
+
   ctx.save();
   ctx.globalAlpha = layer.opacity ?? 1;
+  ctx.globalCompositeOperation = (layer.blendMode as GlobalCompositeOperation) || 'source-over';
 
   const w = layer.width ?? 200;
   const h = layer.height ?? 200;
@@ -286,6 +293,8 @@ function renderSelectionIndicator(
   layer: Layer,
   canvasScale: number,
 ) {
+  if (!layer.visible) return;
+
   const bounds = getLayerBounds(layer, ctx);
   if (!bounds) return;
 
@@ -459,6 +468,7 @@ export default function CanvasPreview({
   const lastPanMouse = useRef<{ x: number; y: number } | null>(null);
   const stateRef = useRef({ scale, pan });
   const isViewInitialized = useRef(false);
+  const lastMoveTimeRef = useRef<number>(0);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -874,6 +884,12 @@ export default function CanvasPreview({
       const drag = dragStartRef.current;
       if (!drag) return;
 
+      const now = performance.now();
+      if (now - lastMoveTimeRef.current < 16) {
+        return; // Throttle to ~60fps
+      }
+      lastMoveTimeRef.current = now;
+
       const coords = getCanvasCoords(e);
       const dx = coords.x - drag.startX;
       const dy = coords.y - drag.startY;
@@ -923,18 +939,27 @@ export default function CanvasPreview({
         if (affectsBottom) newH = Math.max(10, drag.layerH + dy);
         if (affectsTop)    newH = Math.max(10, drag.layerH - dy);
 
-        // For text & image: always maintain aspect ratio on corner handles
-        // For shape: maintain aspect ratio when Shift is held
+        // For text: always maintain aspect ratio since we only scale fontSize
+        // For image and shape: maintain aspect ratio ONLY when Shift is held
         const isCorner = ['nw', 'ne', 'se', 'sw'].includes(dir);
-        const keepRatio = isCorner && (layer.type === 'text' || layer.type === 'image' || e.shiftKey);
+        const keepRatio = (isCorner && layer.type === 'text') || e.shiftKey;
 
         if (keepRatio && drag.layerW > 0 && drag.layerH > 0) {
           const ratio = drag.layerW / drag.layerH;
-          // Use the axis with more movement as the leader
-          if (Math.abs(dx) > Math.abs(dy)) {
+          const isHorizontalEdge = dir === 'e' || dir === 'w';
+          const isVerticalEdge = dir === 'n' || dir === 's';
+
+          if (isHorizontalEdge) {
             newH = Math.max(10, Math.round(newW / ratio));
-          } else {
+          } else if (isVerticalEdge) {
             newW = Math.max(10, Math.round(newH * ratio));
+          } else {
+            // Corner handles
+            if (Math.abs(dx) > Math.abs(dy)) {
+              newH = Math.max(10, Math.round(newW / ratio));
+            } else {
+              newW = Math.max(10, Math.round(newH * ratio));
+            }
           }
         }
 

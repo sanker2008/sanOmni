@@ -12,8 +12,8 @@ import CanvasPreview, { exportCanvasToBlob } from './CanvasPreview';
 import LayerPanel from './LayerPanel';
 import PropertyPanel from './PropertyPanel';
 import FileManagerModal from './FileManagerModal';
-import { ensureToolDirectories, saveProject, loadProject, saveExport, listProjects, openExportFolder } from './fs';
-import { Download, RotateCcw, Save, FolderOpen, FileCode2, ChevronDown, Undo2, Redo2 } from 'lucide-react';
+import { ensureToolDirectories, saveProject, loadProject, saveExport, listProjects, openExportFolder, renameFile } from './fs';
+import { Download, RotateCcw, Save, FolderOpen, FileCode2, ChevronDown, Undo2, Redo2, Edit2 } from 'lucide-react';
 import { toast } from '@/hooks/useToast';
 import { useUIStore } from '@/stores';
 import {
@@ -47,6 +47,7 @@ export default function ProductImageMaker() {
     removeLayer,
     duplicateLayer,
     toggleLayerVisibility,
+    reorderLayers,
     moveLayerUp,
     moveLayerDown,
     setSelectedLayer,
@@ -69,9 +70,14 @@ export default function ProductImageMaker() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'blank' | 'template' | null>(null);
 
+  // Title editing state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleEditValue, setTitleEditValue] = useState('');
+
   // Save dialog state
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveDialogIsTemplate, setSaveDialogIsTemplate] = useState(false);
+  const [saveDialogIsSaveAs, setSaveDialogIsSaveAs] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState('');
   const [existingTemplates, setExistingTemplates] = useState<any[]>([]);
 
@@ -108,11 +114,83 @@ export default function ProductImageMaker() {
       ) {
         e.preventDefault();
         redo();
+      } else if (
+        e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight'
+      ) {
+        // Arrow keys to move the selected layer
+        const state = useProductImageStore.getState();
+        const { selectedLayerId, layers, updateLayer } = state;
+        if (selectedLayerId) {
+          const layer = layers.find((l) => l.id === selectedLayerId);
+          if (layer && !layer.locked) {
+            e.preventDefault();
+            const step = e.shiftKey ? 10 : 1;
+            let { x, y } = layer;
+            if (e.key === 'ArrowUp') y -= step;
+            if (e.key === 'ArrowDown') y += step;
+            if (e.key === 'ArrowLeft') x -= step;
+            if (e.key === 'ArrowRight') x += step;
+            updateLayer(selectedLayerId, { x, y });
+          }
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [undo, redo]);
+
+  // ─── Paste Handler ───────────────────────────────────────
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      // Prioritize images over text
+      let hasImage = false;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          
+          hasImage = true;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            const img = new Image();
+            img.onload = () => {
+              addImageLayer(dataUrl, file.name || 'Pasted Image', img.width, img.height);
+            };
+            img.src = dataUrl;
+          };
+          reader.readAsDataURL(file);
+          e.preventDefault();
+          break; // Process one image
+        }
+      }
+
+      if (hasImage) return;
+
+      // If no image, try to get text
+      for (const item of Array.from(items)) {
+        if (item.type === 'text/plain') {
+          item.getAsString((text) => {
+            if (text.trim()) {
+              addTextLayer({ text });
+            }
+          });
+          e.preventDefault();
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [addImageLayer, addTextLayer]);
 
   // ─── Image Upload Handler ──────────────────────────────
 
@@ -185,9 +263,9 @@ export default function ProductImageMaker() {
 
   const { currentProjectId, currentProjectName, loadProjectState, setCurrentProjectInfo } = useProductImageStore();
 
-  const executeSave = useCallback(async (isTemplate: boolean, nameToSave: string) => {
+  const executeSave = useCallback(async (isTemplate: boolean, nameToSave: string, isSaveAs: boolean = false) => {
     const type = isTemplate ? 'template' : 'project';
-    let idToSave = (!isTemplate && currentProjectId) ? currentProjectId : `proj_${Date.now()}`;
+    let idToSave = (!isTemplate && currentProjectId && !isSaveAs) ? currentProjectId : `proj_${Date.now()}`;
 
     if (isTemplate) {
       const existing = existingTemplates.find(t => t.name === nameToSave);
@@ -222,7 +300,7 @@ export default function ProductImageMaker() {
     }
   }, [currentProjectId, canvas, layers, setCurrentProjectInfo, existingTemplates]);
 
-  const handleSaveProjectClick = useCallback(async (isTemplate: boolean = false) => {
+  const handleSaveProjectClick = useCallback(async (isTemplate: boolean = false, isSaveAs: boolean = false) => {
     if (layers.length === 0) {
       toast({ title: '空画布无需保存', description: '请先添加图层后再保存', variant: 'destructive' });
       return;
@@ -230,9 +308,9 @@ export default function ProductImageMaker() {
 
     const defaultName = isTemplate 
       ? '新模板' 
-      : (currentProjectName || `项目-${new Date().toLocaleDateString().replace(/\//g, '-')}`);
+      : (isSaveAs ? `${currentProjectName}-副本` : (currentProjectName || `项目-${new Date().toLocaleDateString().replace(/\//g, '-')}`));
       
-    if (isTemplate || !currentProjectId) {
+    if (isTemplate || !currentProjectId || isSaveAs) {
       if (isTemplate) {
         try {
           const tpls = await listProjects('template');
@@ -242,10 +320,11 @@ export default function ProductImageMaker() {
         }
       }
       setSaveDialogIsTemplate(isTemplate);
+      setSaveDialogIsSaveAs(isSaveAs);
       setSaveDialogName(defaultName);
       setSaveDialogOpen(true);
     } else {
-      executeSave(false, defaultName);
+      executeSave(false, defaultName, false);
     }
   }, [layers.length, currentProjectId, currentProjectName, executeSave]);
 
@@ -367,7 +446,7 @@ export default function ProductImageMaker() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && saveDialogName.trim()) {
                   setSaveDialogOpen(false);
-                  executeSave(saveDialogIsTemplate, saveDialogName.trim());
+                  executeSave(saveDialogIsTemplate, saveDialogName.trim(), saveDialogIsSaveAs);
                 }
               }}
             />
@@ -394,7 +473,7 @@ export default function ProductImageMaker() {
             <Button onClick={() => {
               if (saveDialogName.trim()) {
                 setSaveDialogOpen(false);
-                executeSave(saveDialogIsTemplate, saveDialogName.trim());
+                executeSave(saveDialogIsTemplate, saveDialogName.trim(), saveDialogIsSaveAs);
               }
             }}>保存</Button>
           </DialogFooter>
@@ -404,8 +483,41 @@ export default function ProductImageMaker() {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/50">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold">{currentProjectName || '新建项目'}</h2>
-          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+          {isEditingTitle ? (
+            <Input
+              autoFocus
+              className="h-7 px-2 py-1 text-sm font-semibold w-40"
+              value={titleEditValue}
+              onChange={(e) => setTitleEditValue(e.target.value)}
+              onBlur={() => {
+                setIsEditingTitle(false);
+                const newName = titleEditValue.trim();
+                if (newName) {
+                  setCurrentProjectInfo(currentProjectId, newName);
+                  if (currentProjectId) {
+                    renameFile('project', currentProjectId, newName).catch(console.error);
+                  }
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+                if (e.key === 'Escape') setIsEditingTitle(false);
+              }}
+            />
+          ) : (
+            <div 
+              className="group flex items-center gap-1 cursor-text hover:bg-muted/50 px-1.5 py-0.5 rounded -ml-1.5 transition-colors"
+              onClick={() => {
+                setTitleEditValue(currentProjectName || '新建项目');
+                setIsEditingTitle(true);
+              }}
+              title="点击修改名称"
+            >
+              <h2 className="text-sm font-semibold">{currentProjectName || '新建项目'}</h2>
+              <Edit2 className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+          )}
+          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded ml-1">
             {layers.length} 个图层
           </span>
         </div>
@@ -452,16 +564,6 @@ export default function ProductImageMaker() {
           </button>
           
           <div className="w-px h-4 bg-border mx-1" />
-
-          <button
-            type="button"
-            onClick={() => handleSaveProjectClick(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-muted/50 hover:bg-muted rounded-md transition-colors text-muted-foreground"
-            title="保存为模板"
-          >
-            <FileCode2 className="w-3.5 h-3.5" />
-            存为模板
-          </button>
           
           <button
             type="button"
@@ -472,6 +574,29 @@ export default function ProductImageMaker() {
             <Save className="w-3.5 h-3.5" />
             保存
           </button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center px-1.5 py-1.5 text-xs bg-muted/50 hover:bg-muted rounded-md transition-colors text-muted-foreground -ml-1"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => handleSaveProjectClick(false, true)}>
+                <Save className="w-4 h-4 mr-2" />
+                另存为新项目...
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleSaveProjectClick(true)}>
+                <FileCode2 className="w-4 h-4 mr-2" />
+                存为模板...
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="w-px h-4 bg-border mx-1" />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -571,6 +696,7 @@ export default function ProductImageMaker() {
                 }}
                 onRemoveLayer={removeLayer}
                 onDuplicateLayer={duplicateLayer}
+                onReorderLayers={reorderLayers}
                 onMoveUp={moveLayerUp}
                 onMoveDown={moveLayerDown}
                 onAddTextLayer={addTextLayer}

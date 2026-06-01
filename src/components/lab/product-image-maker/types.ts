@@ -45,8 +45,10 @@ export interface TextLayer {
   decorationLineWidth: number;
   decorationLineLength: number;
   decorationLineGap: number;
+  decorationLineOpacity?: number;
   locked?: boolean;
   rotation?: number;
+  blendMode?: string;
 }
 
 export interface ImageLayer {
@@ -70,6 +72,7 @@ export interface ImageLayer {
   borderColor: string;
   locked?: boolean;
   rotation?: number;
+  blendMode?: string;
 }
 
 export interface ShapeLayer {
@@ -87,6 +90,7 @@ export interface ShapeLayer {
   visible: boolean;
   locked?: boolean;
   rotation?: number;
+  blendMode?: string;
 }
 
 export type Layer = TextLayer | ImageLayer | ShapeLayer;

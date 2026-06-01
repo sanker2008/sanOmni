@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileImage, LayoutTemplate, Trash2, Edit2, Play, Image as ImageIcon } from 'lucide-react';
 import { listProjects, deleteFile, renameFile, listExports, deleteExport } from './fs';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { useProductImageStore } from './useProductImageStore';
 import { open as openShell } from '@tauri-apps/plugin-shell';
 import { toast } from '@/hooks/useToast';
 
@@ -82,6 +83,9 @@ export default function FileManagerModal({ open, onOpenChange, onOpenProject, in
         toast({ title: '无法重命名', description: '暂不支持直接重命名导出文件', variant: 'destructive' });
       } else {
         await renameFile(activeTab, item.id, editName);
+        if (activeTab === 'project' && item.id === useProductImageStore.getState().currentProjectId) {
+          useProductImageStore.getState().setCurrentProjectInfo(item.id, editName);
+        }
         loadData();
       }
     } catch (e: any) {
