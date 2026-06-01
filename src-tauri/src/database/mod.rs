@@ -1,66 +1,157 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
 
+/// Auto-backup the database file before migrations.
+/// Copies database.sqlite to database_backup_{YYYYMMDD_HHMMSS}.sqlite.
+/// Keeps only the 3 most recent backups.
+fn backup_database(db_path: &Path) -> std::result::Result<(), std::io::Error> {
+    if !db_path.exists() {
+        return Ok(());
+    }
+
+    let parent = db_path.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "No parent directory for db")
+    })?;
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let backup_name = format!("database_backup_{}.sqlite", timestamp);
+    let backup_path = parent.join(&backup_name);
+
+    std::fs::copy(db_path, &backup_path)?;
+
+    // Cleanup old backups, keeping only the 3 most recent
+    let mut backups: Vec<String> = std::fs::read_dir(parent)?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("database_backup_") && name.ends_with(".sqlite") {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    backups.sort(); // Sorting by name works because timestamp format is sortable
+
+    if backups.len() > 3 {
+        let to_remove = backups.len() - 3;
+        for old_backup in backups.iter().take(to_remove) {
+            let _ = std::fs::remove_file(parent.join(old_backup));
+        }
+    }
+
+    Ok(())
+}
+
+/// Get the current database schema version from settings table.
+/// Returns 0 if not found or parse fails.
+fn get_db_version(conn: &Connection) -> i32 {
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = 'db_version'",
+        [],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|v| v.parse::<i32>().ok())
+    .unwrap_or(0)
+}
+
+/// Set the database schema version in settings table (upsert).
+fn set_db_version(conn: &Connection, version: i32) -> Result<()> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO settings (key, value, updated_at) VALUES ('db_version', ?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = ?1, updated_at = ?2",
+        rusqlite::params![version.to_string(), now],
+    )?;
+    Ok(())
+}
+
+/// Run incremental database migrations based on db_version.
+fn run_migrations(conn: &Connection) -> Result<()> {
+    let current_version = get_db_version(conn);
+
+    if current_version < 1 {
+        // v0 -> v1: All existing ALTER TABLE migrations
+
+        // Add template_schema column if not exists
+        let _ = conn.execute(
+            "ALTER TABLE prompt_groups ADD COLUMN template_schema TEXT",
+            [],
+        );
+
+        // Add name column if not exists
+        let _ = conn.execute(
+            "ALTER TABLE prompt_groups ADD COLUMN name TEXT",
+            [],
+        );
+
+        // Migration: Move IP images from images table to ip_images table
+        migrate_ip_images(conn)?;
+
+        // Add path column to ip_assets if not exists (migration for existing DBs)
+        let _ = conn.execute(
+            "ALTER TABLE ip_assets ADD COLUMN path TEXT",
+            [],
+        );
+        // Backfill path from name for existing rows that have no path
+        let _ = conn.execute(
+            "UPDATE ip_assets SET path = id WHERE path IS NULL OR path = ''",
+            [],
+        );
+
+        // Add path column to ip_sticker_packs if not exists (migration for existing DBs)
+        let _ = conn.execute(
+            "ALTER TABLE ip_sticker_packs ADD COLUMN path TEXT",
+            [],
+        );
+        // Backfill path from id for existing rows that have no path
+        let _ = conn.execute(
+            "UPDATE ip_sticker_packs SET path = id WHERE path IS NULL OR path = ''",
+            [],
+        );
+
+        // Add path column to works if not exists (migration for existing DBs)
+        let _ = conn.execute(
+            "ALTER TABLE works ADD COLUMN path TEXT",
+            [],
+        );
+        // Backfill path from id for existing works that have no path
+        let _ = conn.execute(
+            "UPDATE works SET path = id WHERE path IS NULL OR path = ''",
+            [],
+        );
+
+        // Backfill existing ip_images records to ip_image_relations
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO ip_image_relations (ip_image_id, ip_id, is_primary)
+             SELECT id, ip_id, 1 FROM ip_images WHERE ip_id IS NOT NULL",
+            [],
+        );
+
+        set_db_version(conn, 1)?;
+    }
+
+    // Future migrations go here:
+    // if current_version < 2 { ... set_db_version(conn, 2)?; }
+
+    Ok(())
+}
+
 pub fn init_database(db_path: &Path) -> Result<()> {
+    // Auto-backup before any changes
+    if let Err(e) = backup_database(db_path) {
+        eprintln!("Warning: database backup failed: {}", e);
+    }
+
     let conn = Connection::open(db_path)?;
 
     // Create tables
     conn.execute_batch(SCHEMA)?;
-    
-    // Add template_schema column if not exists
-    let _ = conn.execute(
-        "ALTER TABLE prompt_groups ADD COLUMN template_schema TEXT",
-        [],
-    );
 
-    // Add name column if not exists
-    let _ = conn.execute(
-        "ALTER TABLE prompt_groups ADD COLUMN name TEXT",
-        [],
-    );
-    
-    // Migration: Move IP images from images table to ip_images table
-    migrate_ip_images(&conn)?;
-
-    // Add path column to ip_assets if not exists (migration for existing DBs)
-    let _ = conn.execute(
-        "ALTER TABLE ip_assets ADD COLUMN path TEXT",
-        [],
-    );
-    // Backfill path from name for existing rows that have no path
-    let _ = conn.execute(
-        "UPDATE ip_assets SET path = id WHERE path IS NULL OR path = ''",
-        [],
-    );
-
-    // Add path column to ip_sticker_packs if not exists (migration for existing DBs)
-    let _ = conn.execute(
-        "ALTER TABLE ip_sticker_packs ADD COLUMN path TEXT",
-        [],
-    );
-    // Backfill path from id for existing rows that have no path
-    let _ = conn.execute(
-        "UPDATE ip_sticker_packs SET path = id WHERE path IS NULL OR path = ''",
-        [],
-    );
-    
-    // Add path column to works if not exists (migration for existing DBs)
-    let _ = conn.execute(
-        "ALTER TABLE works ADD COLUMN path TEXT",
-        [],
-    );
-    // Backfill path from id for existing works that have no path
-    let _ = conn.execute(
-        "UPDATE works SET path = id WHERE path IS NULL OR path = ''",
-        [],
-    );
-
-    // Backfill existing ip_images records to ip_image_relations
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO ip_image_relations (ip_image_id, ip_id, is_primary)
-         SELECT id, ip_id, 1 FROM ip_images WHERE ip_id IS NOT NULL",
-        [],
-    );
+    // Run versioned migrations
+    run_migrations(&conn)?;
     
     // Insert default vendors and models
     insert_defaults(&conn)?;

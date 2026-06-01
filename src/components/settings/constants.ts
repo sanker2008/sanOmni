@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   showIpWorksTab: true,
 };
 
-export type SettingsTab = "general" | "prompt" | "ip" | "labs" | "shortcuts" | "trash";
+export type SettingsTab = "general" | "prompt" | "ip" | "labs" | "shortcuts" | "trash" | "about";
 
 export const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "通用设置" },
@@ -37,4 +37,5 @@ export const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "labs", label: "Labs" },
   { key: "shortcuts", label: "快捷键" },
   { key: "trash", label: "回收站" },
+  { key: "about", label: "关于" },
 ];

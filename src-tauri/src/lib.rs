@@ -123,6 +123,8 @@ pub fn run() {
             commands::characters::update_character_order,
             commands::characters::upload_character_images,
             commands::characters::get_ip_characters,
+            commands::updater::check_for_update,
+            commands::updater::get_current_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

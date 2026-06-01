@@ -17,6 +17,7 @@ import {
 import { Settings, Sun, Moon, Monitor, LayoutTemplate, Users, FlaskConical } from "lucide-react";
 import IpDomainView from "@/components/IpDomainView";
 import LabView from "@/components/lab/LabView";
+import UpdateChecker from "@/components/UpdateChecker";
 import type { Theme } from "@/stores";
 
 const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
@@ -46,6 +47,9 @@ function App() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="h-screen bg-background flex flex-col overflow-hidden">
+        {/* Update Notification Banner */}
+        <UpdateChecker />
+
         {/* Header */}
         <header className="border-b px-4 py-3 flex items-center justify-between bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 shadow-sm">
           <div className="flex items-center gap-6">

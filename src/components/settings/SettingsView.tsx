@@ -10,6 +10,7 @@ import PromptSettingsTab from "./PromptSettingsTab";
 import IpSettingsTab from "./IpSettingsTab";
 import LabsSettingsTab from "./LabsSettingsTab";
 import ShortcutsTab from "./ShortcutsTab";
+import AboutTab from "./AboutTab";
 import TrashView from "@/components/TrashView";
 
 export default function SettingsView() {
@@ -167,6 +168,8 @@ export default function SettingsView() {
                 <TrashView />
               </div>
             )}
+
+            {activeSettingsTab === "about" && <AboutTab />}
           </div>
         </div>
       </div>
