@@ -38,7 +38,7 @@ export function IpAssociateCharacterModal({ ipId, ipName, open, onOpenChange, on
       const { invoke } = await import("@tauri-apps/api/core");
       const list: CharacterWithRelations[] = await invoke("get_all_characters");
       // Filter out characters that are already associated with this IP
-      setCharacters(list.filter(c => c.character.ip_id !== ipId));
+      setCharacters(list.filter(c => c.ip_id !== ipId));
     } catch (error) {
       console.error("Failed to load all characters:", error);
       toast({
@@ -69,16 +69,16 @@ export function IpAssociateCharacterModal({ ipId, ipName, open, onOpenChange, on
     setIsSaving(true);
     try {
       const { updateCharacter } = useCharactersStore.getState();
-      const selectedCharacters = characters.filter(c => selectedIds.has(c.character.id));
+      const selectedCharacters = characters.filter(c => selectedIds.has(c.id));
       
       for (const char of selectedCharacters) {
-        await updateCharacter(char.character.id, {
-          name: char.character.name,
-          character_type: char.character.character_type,
-          description: char.character.description,
-          appearance_info: char.character.appearance_info,
+        await updateCharacter(char.id, {
+          name: char.name,
+          character_type: char.character_type,
+          description: char.description,
+          appearance_info: char.appearance_info,
           ip_id: ipId,
-          ip_relation_note: char.character.ip_relation_note,
+          ip_relation_note: char.ip_relation_note,
         });
       }
       
@@ -101,7 +101,7 @@ export function IpAssociateCharacterModal({ ipId, ipName, open, onOpenChange, on
   };
 
   const filteredCharacters = characters.filter(c => 
-    c.character.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     (c.work_name && c.work_name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
@@ -141,14 +141,14 @@ export function IpAssociateCharacterModal({ ipId, ipName, open, onOpenChange, on
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {filteredCharacters.map(char => {
-                const images = char.character.image_paths ? JSON.parse(char.character.image_paths) : [];
+                const images = char.image_paths ? JSON.parse(char.image_paths) : [];
                 const firstImage = images.length > 0 ? convertFileSrc(images[0]) : null;
-                const isSelected = selectedIds.has(char.character.id);
+                const isSelected = selectedIds.has(char.id);
                 
                 return (
                   <div 
-                    key={char.character.id}
-                    onClick={() => toggleSelection(char.character.id)}
+                    key={char.id}
+                    onClick={() => toggleSelection(char.id)}
                     className={`
                       relative flex items-center p-2 gap-3 border rounded-lg cursor-pointer transition-colors
                       ${isSelected ? 'bg-primary/10 border-primary' : 'hover:bg-muted/50'}
@@ -156,7 +156,7 @@ export function IpAssociateCharacterModal({ ipId, ipName, open, onOpenChange, on
                   >
                     <div className="w-12 h-12 rounded-md overflow-hidden bg-muted flex-shrink-0">
                       {firstImage ? (
-                        <img src={firstImage} alt={char.character.name} className="w-full h-full object-cover" />
+                        <img src={firstImage} alt={char.name} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
                           无图
@@ -164,8 +164,8 @@ export function IpAssociateCharacterModal({ ipId, ipName, open, onOpenChange, on
                       )}
                     </div>
                     <div className="flex flex-col overflow-hidden">
-                      <span className="font-medium text-sm truncate" title={char.character.name}>
-                        {char.character.name}
+                      <span className="font-medium text-sm truncate" title={char.name}>
+                        {char.name}
                       </span>
                       <span className="text-xs text-muted-foreground truncate" title={char.work_name || "未知作品"}>
                         {char.work_name || "未知作品"}
