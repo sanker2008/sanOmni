@@ -16,7 +16,9 @@ import {
   Minimize2,
   FlaskConical,
   Wand2,
+  PenTool,
 } from 'lucide-react';
+import PngToSvg from './png-to-svg/PngToSvg';
 
 // ─── Tool Registry ─────────────────────────────────────────
 
@@ -36,6 +38,14 @@ const LAB_TOOLS: LabTool[] = [
     description: 'AI 驱动的图片编辑与遮罩涂鸦工具',
     icon: <Wand2 className="w-4 h-4" />,
     component: AiImageEditor,
+    available: true,
+  },
+  {
+    id: 'png-to-svg',
+    name: 'PNG 转 SVG',
+    description: '将位图转换为可缩放的矢量图',
+    icon: <PenTool className="w-4 h-4" />,
+    component: PngToSvg,
     available: true,
   },
   {

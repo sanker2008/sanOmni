@@ -1,6 +1,5 @@
 import { useUIStore } from "@/stores";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { useFolderWatcher } from "@/hooks/useFolderWatcher";
 import PromptDomainView from "@/components/PromptDomainView";
 import QuickEditModal from "@/components/QuickEditModal";
 import ImageViewer from "@/components/ImageViewer";
@@ -33,9 +32,6 @@ function App() {
 
   // Register keyboard shortcuts
   useKeyboardShortcuts();
-
-  // Start folder watchers
-  useFolderWatcher();
 
   const cycleTheme = () => {
     const idx = THEME_CYCLE.indexOf(theme);

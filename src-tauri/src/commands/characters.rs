@@ -6,8 +6,9 @@ use chrono::Utc;
 use crate::models::{Character, CharacterWithRelations};
 
 fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
-    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db_path = app_data_dir.join("data").join("database.sqlite");
+    let default_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_root = crate::commands::get_app_root_from_handle(app_handle, &default_app_data_dir);
+    let db_path = app_root.join("data").join("database.sqlite");
     Connection::open(db_path).map_err(|e| e.to_string())
 }
 
@@ -85,6 +86,53 @@ pub async fn get_characters(
     let characters = stmt.query_map(params![work_id], |row| {
         let image_paths_raw: Option<String> = row.get(6)?;
         let resolved_image_paths = resolve_relative_paths_json(&app_data_dir, image_paths_raw);
+        Ok(CharacterWithRelations {
+            character: Character {
+                id: row.get(0)?,
+                work_id: row.get(1)?,
+                name: row.get(2)?,
+                character_type: row.get(3)?,
+                description: row.get(4)?,
+                appearance_info: row.get(5)?,
+                image_paths: resolved_image_paths,
+                ip_id: row.get(7)?,
+                ip_relation_note: row.get(8)?,
+                display_order: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+                deleted_at: row.get(12)?,
+            },
+            work_name: row.get(13)?,
+            work_type: row.get(14)?,
+            ip_name: row.get(15)?,
+            ip_avatar_path: row.get(16)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    characters.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_all_characters(app_handle: AppHandle) -> Result<Vec<CharacterWithRelations>, String> {
+    let conn = get_connection(&app_handle)?;
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
+    
+    let mut stmt = conn.prepare(
+        "SELECT c.id, c.work_id, c.name, c.character_type, c.description, c.appearance_info,
+         c.image_paths, c.ip_id, c.ip_relation_note, c.display_order, c.created_at, c.updated_at, c.deleted_at,
+         w.name as work_name, w.work_type, ip.name as ip_name, ip.avatar_path as ip_avatar_path
+         FROM characters c
+         INNER JOIN works w ON c.work_id = w.id
+         LEFT JOIN ip_assets ip ON c.ip_id = ip.id
+         WHERE c.deleted_at IS NULL
+         ORDER BY w.created_at DESC, c.display_order ASC"
+    ).map_err(|e| e.to_string())?;
+
+    let characters = stmt.query_map([], |row| {
+        let image_paths_raw: Option<String> = row.get(6)?;
+        let resolved_image_paths = resolve_relative_paths_json(&app_data_dir, image_paths_raw);
+        
         Ok(CharacterWithRelations {
             character: Character {
                 id: row.get(0)?,

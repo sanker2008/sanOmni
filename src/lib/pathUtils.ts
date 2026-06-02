@@ -32,3 +32,30 @@ export async function getLabsRoot(): Promise<string> {
   const appRoot = await getAppRoot();
   return await join(appRoot, "labs");
 }
+
+export async function resolveSettingPath(settingKey: string, value: string, currentAppRoot: string): Promise<string> {
+  // 如果提供了有效值，则它本身就是绝对路径
+  if (value && value.trim()) {
+    return value.trim();
+  }
+
+  // 否则根据 key 返回默认路径
+  switch (settingKey) {
+    case "unifiedRootPath":
+      return await appDataDir();
+    case "customInboxPath":
+      return await join(currentAppRoot, "inbox");
+    case "customArchivedPath":
+      return await join(currentAppRoot, "archived");
+    case "customWorksPath":
+      return currentAppRoot;
+    case "labsCustomRootPath":
+      return await join(currentAppRoot, "labs");
+    case "ipCustomInboxPath":
+      return await join(currentAppRoot, "ip_inbox");
+    case "ipCustomArchivedPath":
+      return await join(currentAppRoot, "ip_archived");
+    default:
+      return "";
+  }
+}

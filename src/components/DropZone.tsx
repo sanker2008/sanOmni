@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useImageStore, useIpImageStore, useUIStore } from "@/stores";
 import { imageApi, ipImageApi, classifyApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
@@ -27,47 +27,47 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
   const { addImage: addIpImage } = useIpImageStore();
   const { settings } = useUIStore();
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let isMounted = true;
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-
-    const files = Array.from(e.dataTransfer.files).filter((file) =>
-      file.type.startsWith("image/")
-    );
-
-    if (files.length === 0) {
-      console.warn("No image files in drop");
-      return;
-    }
-
-    // In Tauri, dropped files have a 'path' property with the full path
-    const paths = files.map(file => {
-      // @ts-ignore - Tauri adds path property to File objects
-      const filePath = file.path;
-      if (!filePath) {
-        console.error("File has no path property:", file.name);
-        return null;
+    async function setupDragDrop() {
+      try {
+        const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+        const listener = await getCurrentWebviewWindow().onDragDropEvent((event) => {
+          if (event.payload.type === 'enter') {
+            setIsDragging(true);
+          } else if (event.payload.type === 'leave') {
+            setIsDragging(false);
+          } else if (event.payload.type === 'drop') {
+            setIsDragging(false);
+            const paths = event.payload.paths.filter(p => isImageFile(p));
+            if (paths.length > 0) {
+              importPaths(paths);
+            } else {
+              console.warn("No valid image files in drop");
+            }
+          }
+        });
+        
+        if (isMounted) {
+          unlisten = listener;
+        } else {
+          listener(); // unlisten immediately if component unmounted
+        }
+      } catch (error) {
+        console.error("Failed to setup Tauri drag drop event:", error);
       }
-      return filePath;
-    }).filter((p): p is string => p !== null);
-
-    if (paths.length === 0) {
-      console.error("No valid file paths found");
-      return;
     }
 
-    console.log("Importing dropped files:", paths);
-    await importPaths(paths);
+    setupDragDrop();
+
+    return () => {
+      isMounted = false;
+      if (unlisten) {
+        unlisten();
+      }
+    };
   }, []);
 
   const handleSelectFiles = async () => {
@@ -287,9 +287,6 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
       className={`flex-1 flex items-center justify-center p-8 ${
         isDragging ? "bg-primary/5" : ""
       }`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
     >
       <div
         className={`max-w-md text-center space-y-6 p-12 border-2 border-dashed rounded-xl transition-colors ${

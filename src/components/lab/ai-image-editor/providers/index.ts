@@ -9,6 +9,8 @@ import { REPLICATE_META, createReplicateProvider } from './replicate';
 import { STABILITY_META, createStabilityProvider } from './stability';
 import { FAL_META, createFalProvider } from './fal';
 import { GENERIC_META, createGenericProvider } from './generic';
+import { OPENAI_META, createOpenAIProvider } from './openai';
+import { GOOGLE_META, createGoogleProvider } from './google';
 
 /** 所有可用供应商元信息（有序） */
 export const ALL_PROVIDER_METAS: ProviderMeta[] = [
@@ -18,6 +20,8 @@ export const ALL_PROVIDER_METAS: ProviderMeta[] = [
   REPLICATE_META,
   STABILITY_META,
   FAL_META,
+  OPENAI_META,
+  GOOGLE_META,
   GENERIC_META,
 ];
 
@@ -31,6 +35,8 @@ const FACTORY_MAP: Record<string, ProviderFactory> = {
   stability: createStabilityProvider,
   fal: createFalProvider,
   generic: createGenericProvider,
+  openai: createOpenAIProvider,
+  google: createGoogleProvider,
 };
 
 /** 根据 id 创建供应商实例 */

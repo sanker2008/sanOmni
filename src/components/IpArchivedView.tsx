@@ -45,6 +45,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import ImageCard from "./ImageCard";
 import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
+import { IpAssociateCharacterModal } from "./IpAssociateCharacterModal";
 
 import IpSidebar from "./IpSidebar";
 import { useWorksStore, type CharacterWithRelations } from "@/stores";
@@ -161,6 +162,7 @@ export default function IpArchivedView() {
   const { searchQuery, setSearchQuery, viewMode, setViewMode, isQuickEditOpen, selectedIpId, setSelectedIpId } = useUIStore();
   const [ipDetail, setIpDetail] = useState<IpAssetDetail | null>(null);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
+  const [isQuickUploading, setIsQuickUploading] = useState(false);
   const [unarchiveResult, setUnarchiveResult] = useState<string | null>(null);
   const [showBatchEdit, setShowBatchEdit] = useState(false);
   const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
@@ -171,7 +173,7 @@ export default function IpArchivedView() {
   const [activeTab, setActiveTab] = useState<"profile" | "emojis" | "creations" | "relations" | "works">("creations");
   const [ipRoles, setIpRoles] = useState<CharacterWithRelations[]>([]);
   const [isLoadingIpRoles, setIsLoadingIpRoles] = useState(false);
-
+  const [isAssociateModalOpen, setIsAssociateModalOpen] = useState(false);
 
   const [sidebarKey, setSidebarKey] = useState(0);
 
@@ -614,14 +616,15 @@ export default function IpArchivedView() {
     });
   };
 
-  // 筛选器状态
   const [showFilters, setShowFilters] = useState(false);
-  const [filterHasPrompt, setFilterHasPrompt] = useState<boolean | null>(null);
-  const [filterHasTags, setFilterHasTags] = useState<boolean | null>(null);
+  const [filterEmojiPack, setFilterEmojiPack] = useState<string>("all");
+  const [filterTagId, setFilterTagId] = useState<string>("all");
   const [filterHasWatermark, setFilterHasWatermark] = useState<boolean | null>(null);
-  const activeFilterCount = [filterHasPrompt, filterHasTags, filterHasWatermark].filter(
-    (filter) => filter !== null
-  ).length;
+  const activeFilterCount = [
+    filterEmojiPack !== "all",
+    filterTagId !== "all",
+    filterHasWatermark !== null
+  ].filter(Boolean).length;
 
   useEffect(() => {
     loadArchivedImages();
@@ -653,7 +656,7 @@ export default function IpArchivedView() {
       console.error("Failed to load IP roles:", e);
       toast({
         title: "加载失败",
-        description: "无法加载相关作品角色列表",
+        description: "无法加载参与作品角色列表",
         variant: "destructive",
       });
     } finally {
@@ -735,10 +738,28 @@ export default function IpArchivedView() {
       }
     }
     
+    // 表情包组筛选
+    if (filterEmojiPack !== "all") {
+      const isEmoji = ipDetail?.emojis.find(e => e.image_path === image.absolute_path);
+      if (filterEmojiPack === "has_none") {
+        if (isEmoji) return false;
+      } else if (filterEmojiPack === "has_any") {
+        if (!isEmoji) return false;
+      } else {
+        if (!isEmoji || isEmoji.pack_id !== filterEmojiPack) return false;
+      }
+    }
+
     // Tags 筛选
-    if (filterHasTags !== null) {
+    if (filterTagId !== "all") {
       const hasTags = image.tags.length > 0;
-      if (hasTags !== filterHasTags) return false;
+      if (filterTagId === "has_none") {
+        if (hasTags) return false;
+      } else if (filterTagId === "has_any") {
+        if (!hasTags) return false;
+      } else {
+        if (!image.tags.some(t => t.id === filterTagId)) return false;
+      }
     }
     
     // 水印筛选
@@ -767,6 +788,14 @@ export default function IpArchivedView() {
     return result;
   }, [filteredImages, sortBy, sortOrder]);
 
+  const allAvailableTags = useMemo(() => {
+    const tagsMap = new Map<string, any>();
+    archivedImages.forEach(img => {
+      img.tags.forEach(tag => tagsMap.set(tag.id, tag));
+    });
+    return Array.from(tagsMap.values());
+  }, [archivedImages]);
+
   const ipImageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     archivedImages.forEach((image) => {
@@ -783,6 +812,100 @@ export default function IpArchivedView() {
 
   const isAllSelected = sortedImages.length > 0 &&
     sortedImages.every((img) => selectedImages.includes(img.id));
+
+  const handleQuickUpload = async () => {
+    if (!selectedIpId || !ipDetail) return;
+    try {
+      const selected = await open({
+        multiple: true,
+        filters: [{
+          name: "Images",
+          extensions: ["png", "jpg", "jpeg", "webp", "gif"]
+        }]
+      });
+      
+      if (!selected) return;
+      const paths = Array.isArray(selected) ? selected : [selected];
+      if (paths.length === 0) return;
+
+      setIsQuickUploading(true);
+      const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
+      const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
+      const { settings } = useUIStore.getState();
+
+      let inboxDir: string;
+      if (settings.customIpInboxPath) {
+        inboxDir = settings.customIpInboxPath;
+      } else {
+        const appDir = await getAppRoot();
+        inboxDir = await join(appDir, "ip_inbox");
+      }
+      if (!(await exists(inboxDir))) {
+        await mkdir(inboxDir, { recursive: true });
+      }
+
+      let libraryPath: string;
+      if (settings.customIpArchivedPath) {
+        libraryPath = settings.customIpArchivedPath;
+      } else {
+        libraryPath = await getAppRoot();
+      }
+      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const imgPath of paths) {
+        try {
+          const fileName = imgPath.split(/[/\\]/).pop() || "image.png";
+          let fileSize = 0;
+          try {
+            const fileMeta = await stat(imgPath);
+            fileSize = fileMeta.size;
+          } catch (error) {
+            console.error(`Failed to get metadata for ${imgPath}:`, error);
+          }
+
+          const timestamp = Date.now();
+          const uniqueFileName = `${timestamp}_${fileName}`;
+          const targetPath = await join(inboxDir, uniqueFileName);
+
+          await copyFile(imgPath, targetPath);
+
+          const importResult = await ipImageApi.import({
+            file_path: targetPath,
+            file_name: fileName,
+            file_size: fileSize,
+            ip_id: selectedIpId,
+            tags: [],
+          });
+
+          const archiveResult = await ipImageApi.archive([importResult.id], libraryPath, namingTemplate);
+          if (archiveResult.success_count > 0) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          console.error("Failed to upload image:", err);
+          failCount++;
+        }
+      }
+
+      toast({
+        title: "上传并归档完成",
+        description: `成功 ${successCount} 张，失败 ${failCount} 张`,
+        variant: failCount > 0 ? "destructive" : "default",
+      });
+      loadArchivedImages();
+    } catch (e) {
+      console.error("Quick upload error:", e);
+      toast({ title: "上传失败", variant: "destructive" });
+    } finally {
+      setIsQuickUploading(false);
+    }
+  };
 
   const handleUnarchive = async () => {
     if (selectedImages.length === 0) return;
@@ -1001,7 +1124,7 @@ export default function IpArchivedView() {
                 { id: "creations", label: "归档资产", icon: Sparkles },
                 { id: "emojis", label: "表情包管理", icon: Smile },
                 { id: "relations", label: "关系链谱", icon: Link },
-                ...((settings?.showIpWorksTab ?? true) ? [{ id: "works", label: "相关作品", icon: Film }] : []),
+                ...((settings?.showIpWorksTab ?? true) ? [{ id: "works", label: "参与作品", icon: Film }] : []),
                 { id: "profile", label: "基本设定", icon: BookOpen },
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -1137,8 +1260,8 @@ export default function IpArchivedView() {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        setFilterHasPrompt(null);
-                        setFilterHasTags(null);
+                        setFilterEmojiPack("all");
+                        setFilterTagId("all");
                         setFilterHasWatermark(null);
                       }}
                       className="h-7 text-xs"
@@ -1148,20 +1271,25 @@ export default function IpArchivedView() {
                   </div>
                   
                   <div className="grid grid-cols-3 gap-4">
-                    {/* Prompt 关联筛选 */}
+                    {/* 表情包组 筛选 */}
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Prompt 模板关联</label>
+                      <label className="text-xs font-medium text-muted-foreground">关联表情包组</label>
                       <select
-                        value={filterHasPrompt === null ? "" : String(filterHasPrompt)}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setFilterHasPrompt(val === "" ? null : val === "true");
-                        }}
-                        className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+                        value={filterEmojiPack}
+                        onChange={(e) => setFilterEmojiPack(e.target.value)}
+                        disabled={!selectedIpId}
+                        className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer disabled:opacity-50"
                       >
-                        <option value="">全部</option>
-                        <option value="true">已关联</option>
-                        <option value="false">未关联</option>
+                        <option value="all">{!selectedIpId ? "请先选择IP" : "全部"}</option>
+                        {selectedIpId && (
+                          <>
+                            <option value="has_any">已关联</option>
+                            <option value="has_none">未关联</option>
+                            {ipDetail?.sticker_packs.map(pack => (
+                              <option key={pack.id} value={pack.id}>{pack.name}</option>
+                            ))}
+                          </>
+                        )}
                       </select>
                     </div>
 
@@ -1169,16 +1297,16 @@ export default function IpArchivedView() {
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-muted-foreground">标签</label>
                       <select
-                        value={filterHasTags === null ? "" : String(filterHasTags)}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setFilterHasTags(val === "" ? null : val === "true");
-                        }}
+                        value={filterTagId}
+                        onChange={(e) => setFilterTagId(e.target.value)}
                         className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
                       >
-                        <option value="">全部</option>
-                        <option value="false">无标签</option>
-                        <option value="true">有标签</option>
+                        <option value="all">全部</option>
+                        <option value="has_any">有标签</option>
+                        <option value="has_none">无标签</option>
+                        {allAvailableTags.map(tag => (
+                          <option key={tag.id} value={tag.id}>{tag.name}</option>
+                        ))}
                       </select>
                     </div>
 
@@ -1344,6 +1472,18 @@ export default function IpArchivedView() {
                   </ScrollArea>
                 )}
               </div>
+
+              {selectedIpId && (
+                <Button
+                  className="absolute bottom-8 right-8 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all"
+                  size="icon"
+                  onClick={handleQuickUpload}
+                  disabled={isQuickUploading}
+                  title="快速上传图片到当前IP"
+                >
+                  {isQuickUploading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Plus className="h-6 w-6" />}
+                </Button>
+              )}
             </div>
           )}
 
@@ -1688,22 +1828,34 @@ export default function IpArchivedView() {
             </ScrollArea>
           )}
 
-          {/* === TAB: 相关作品 === */}
+          {/* === TAB: 参与作品 === */}
           {selectedIpId && activeTab === "works" && (
-            <ScrollArea className="h-full p-6">
-              {isLoadingIpRoles ? (
-                <div className="flex flex-col gap-4">
-                  <Skeleton className="h-24 w-full animate-pulse" />
-                  <Skeleton className="h-24 w-full animate-pulse" />
-                </div>
-              ) : ipRoles.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                  <Film className="w-16 h-16 mb-4 opacity-40" />
-                  <p className="text-sm">该 IP 暂无参演的角色作品记录</p>
-                  <p className="text-xs text-muted-foreground mt-1">您可以在作品集详情中为角色关联此 IP 资产</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl">
+            <div className="h-full flex flex-col">
+              <div className="p-4 border-b shrink-0 flex items-center justify-between">
+                <div className="text-sm font-medium">参与作品列表</div>
+                <Button onClick={() => setIsAssociateModalOpen(true)}>
+                  <Link className="w-4 h-4 mr-2" />
+                  关联现有角色
+                </Button>
+              </div>
+              <ScrollArea className="flex-1 p-6">
+                {isLoadingIpRoles ? (
+                  <div className="flex flex-col gap-4">
+                    <Skeleton className="h-24 w-full animate-pulse" />
+                    <Skeleton className="h-24 w-full animate-pulse" />
+                  </div>
+                ) : ipRoles.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                    <Film className="w-16 h-16 mb-4 opacity-40" />
+                    <p className="text-sm">该 IP 暂无参演的角色作品记录</p>
+                    <p className="text-xs text-muted-foreground mt-1 mb-4">您可以点击右上方按钮，或在作品集详情中为角色关联此 IP 资产</p>
+                    <Button variant="outline" onClick={() => setIsAssociateModalOpen(true)}>
+                      <Link className="w-4 h-4 mr-2" />
+                      关联现有角色
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl">
                   {ipRoles.map((role) => (
                     <Card
                       key={role.id}
@@ -1772,10 +1924,34 @@ export default function IpArchivedView() {
                 </div>
               )}
             </ScrollArea>
+          </div>
           )}
             </>
         </div>
       </div>
+      
+      {/* Associate Character Modal */}
+      {selectedIpId && ipDetail && (
+        <IpAssociateCharacterModal
+          ipId={selectedIpId}
+          ipName={ipDetail.ip.name}
+          open={isAssociateModalOpen}
+          onOpenChange={setIsAssociateModalOpen}
+          onSuccess={() => {
+            // refresh roles
+            if (selectedIpId) {
+              setIsLoadingIpRoles(true);
+              import("@tauri-apps/api/core").then(({ invoke }) => {
+                invoke("get_ip_roles", { ipId: selectedIpId })
+                  .then((roles) => setIpRoles(roles as CharacterWithRelations[]))
+                  .catch((e) => console.error("Failed to refresh IP roles:", e))
+                  .finally(() => setIsLoadingIpRoles(false));
+              });
+            }
+          }}
+        />
+      )}
+
       {/* Batch Edit Modal */}
       <BatchEditModal open={showBatchEdit} onClose={() => setShowBatchEdit(false)} isIpMode={true} />
 

@@ -28,10 +28,9 @@ if (alreadyRunning) {
   process.exit(0);
 }
 
-const command = process.platform === "win32" ? "npm.cmd" : "npm";
-const child = spawn(command, ["run", "dev:raw"], {
+const child = spawn("npm run dev:raw", {
   stdio: "inherit",
-  shell: process.platform === "win32",
+  shell: true,
 });
 
 const forwardSignal = (signal) => {

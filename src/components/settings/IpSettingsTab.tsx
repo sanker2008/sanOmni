@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScanLine, Loader2, FolderOpen, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { ScanLine, Loader2, FolderOpen, AlertTriangle } from "lucide-react";
 import { scannerApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
 import type { ResetType } from "./ResetConfirmDialog";
@@ -13,7 +12,6 @@ interface IpSettingsTabProps {
   handleLocalUpdate: (key: string, value: any) => void;
   onSelectPath: (key: string) => Promise<void>;
   onTriggerReset: (type: ResetType) => void;
-  activeWatchers: any[];
 }
 
 export default function IpSettingsTab({
@@ -21,28 +19,64 @@ export default function IpSettingsTab({
   handleLocalUpdate,
   onSelectPath,
   onTriggerReset,
-  activeWatchers,
 }: IpSettingsTabProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [isCleaningInbox, setIsCleaningInbox] = useState(false);
-  const [inboxCleanupResult, setInboxCleanupResult] = useState<any>(null);
-  const [newWatchFolder, setNewWatchFolder] = useState("");
+  const [inboxScanResult, setInboxScanResult] = useState<any>(null);
+  const [isExecutingCleanup, setIsExecutingCleanup] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
-  const handleSelectWatchFolder = async () => {
+  const handleImportMissing = async () => {
+    if (!inboxScanResult?.missing_in_db.length) return;
+    setIsImporting(true);
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selectedFolder = await open({
-        directory: true,
-        multiple: false,
-      });
+      const { ipImageApi } = await import("@/services/tauri");
+      
+      let successCount = 0;
+      let failCount = 0;
 
-      if (selectedFolder && typeof selectedFolder === "string") {
-        const folders = [...(localSettings.ipWatchFolders || []), selectedFolder];
-        handleLocalUpdate("ipWatchFolders", folders);
+      for (const item of inboxScanResult.missing_in_db) {
+        try {
+          const result = await ipImageApi.import({
+            file_path: item.absolute_path,
+            file_name: item.filename,
+            file_size: item.file_size,
+            ip_id: "unknown", // 默认导入到 unknown，让用户稍后手动归类
+            tags: [],
+          });
+          const { useIpImageStore } = await import("@/stores");
+          useIpImageStore.getState().addImage(result);
+          successCount++;
+        } catch (error) {
+          console.error("Failed to import:", error);
+          failCount++;
+        }
       }
+
+      toast({
+        title: "导入完成",
+        description: `成功导入 ${successCount} 张图片${failCount > 0 ? `，失败 ${failCount} 张` : ''}`,
+      });
+      
+      let inboxPath = localSettings.ipCustomInboxPath;
+      if (!inboxPath) {
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        const { join } = await import("@tauri-apps/api/path");
+        const appDir = await getAppRoot();
+        inboxPath = await join(appDir, "ip_inbox");
+      }
+      const result = await scannerApi.scanIpInbox(inboxPath);
+      setInboxScanResult(result);
+
     } catch (error) {
-      console.error("Failed to select folder:", error);
+      toast({
+        title: "✗ 导入失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -192,7 +226,7 @@ export default function IpSettingsTab({
                 </CardContent>
               </Card>
 
-              <div className="text-lg font-semibold mb-4 mt-8 border-b pb-2">监控与自动化</div>
+
 
               <Card>
                 <CardHeader>
@@ -211,7 +245,7 @@ export default function IpSettingsTab({
                     disabled={isCleaningInbox}
                     onClick={async () => {
                       setIsCleaningInbox(true);
-                      setInboxCleanupResult(null);
+                      setInboxScanResult(null);
                       try {
                         let inboxPath: string;
                         const customPath = localSettings.ipCustomInboxPath;
@@ -225,16 +259,8 @@ export default function IpSettingsTab({
                           inboxPath = await join(appDir, "ip_inbox");
                         }
 
-                        const result = await scannerApi.cleanupIpInbox(inboxPath);
-                        setInboxCleanupResult(result);
-
-                        if (result.removed_count > 0) {
-                          const { ipImageApi } = await import("@/services/tauri");
-                          const inbox = await ipImageApi.getInboxImages();
-                          const { useIpImageStore } = await import("@/stores");
-                          useIpImageStore.getState().setInboxImages(inbox);
-                        }
-
+                        const result = await scannerApi.scanIpInbox(inboxPath);
+                        setInboxScanResult(result);
                       } catch (error) {
                         toast({
                           title: "✗ 扫描失败",
@@ -259,25 +285,74 @@ export default function IpSettingsTab({
                     )}
                   </Button>
 
-                  {inboxCleanupResult && (
-                    <div className="rounded-md border bg-muted/40 p-3 space-y-2 text-sm">
-                      <p className="font-medium">扫描完成</p>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
-                        <span>检查记录数</span>
-                        <span className="text-foreground font-medium">{inboxCleanupResult.scanned_count}</span>
-                        <span>保留记录</span>
-                        <span>{inboxCleanupResult.kept_count}</span>
-                        <span>清理记录</span>
-                        <span className="text-green-600 font-medium">{inboxCleanupResult.removed_count}</span>
-                        <span>失败</span>
-                        <span className={inboxCleanupResult.failed_count > 0 ? "text-destructive font-medium" : ""}>
-                          {inboxCleanupResult.failed_count}
-                        </span>
+                  {inboxScanResult && (
+                    <div className="rounded-md border bg-muted/40 p-4 space-y-4 text-sm">
+                      <div className="flex justify-between items-center">
+                        <p className="font-medium text-base">扫描结果</p>
+                        <div className="space-x-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={inboxScanResult.missing_in_db.length === 0 || isImporting}
+                            onClick={handleImportMissing}
+                          >
+                            {isImporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            导入文件 ({inboxScanResult.missing_in_db.length})
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={inboxScanResult.missing_on_disk.length === 0 || isExecutingCleanup}
+                            onClick={async () => {
+                              setIsExecutingCleanup(true);
+                              try {
+                                const ids = inboxScanResult.missing_on_disk.map((item: any) => item.id);
+                                const result = await scannerApi.executeIpInboxCleanup(ids);
+                                toast({
+                                  title: "✓ 清理完成",
+                                  description: `成功清理 ${result.removed_count} 条失效记录`,
+                                });
+                                setInboxScanResult(null);
+                                const { ipImageApi } = await import("@/services/tauri");
+                                const inbox = await ipImageApi.getInboxImages();
+                                const { useIpImageStore } = await import("@/stores");
+                                useIpImageStore.getState().setInboxImages(inbox);
+                              } catch (error) {
+                                toast({
+                                  title: "✗ 清理失败",
+                                  description: String(error),
+                                  variant: "destructive",
+                                });
+                              } finally {
+                                setIsExecutingCleanup(false);
+                              }
+                            }}
+                          >
+                            {isExecutingCleanup ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            确认清理 ({inboxScanResult.missing_on_disk.length})
+                          </Button>
+                        </div>
                       </div>
-                      {inboxCleanupResult.errors.length > 0 && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-muted-foreground">
+                        <span>新增文件 (未入库)</span>
+                        <span className="text-blue-600 font-medium">{inboxScanResult.missing_in_db.length}</span>
+                        <span>失效记录 (文件已删除)</span>
+                        <span className="text-destructive font-medium">{inboxScanResult.missing_on_disk.length}</span>
+                      </div>
+                      {inboxScanResult.missing_on_disk.length > 0 && (
+                        <div className="mt-2 space-y-1 max-h-32 overflow-y-auto bg-background rounded border p-2">
+                          <p className="text-xs font-medium text-destructive mb-1 sticky top-0 bg-background">待清理的失效记录：</p>
+                          {inboxScanResult.missing_on_disk.map((item: any) => (
+                            <p key={item.id} className="text-xs text-muted-foreground truncate" title={item.absolute_path}>
+                              {item.id} - {item.absolute_path}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {inboxScanResult.errors.length > 0 && (
                         <div className="mt-2 space-y-1">
                           <p className="text-xs font-medium text-destructive">错误详情：</p>
-                          {inboxCleanupResult.errors.map((err: any, i: number) => (
+                          {inboxScanResult.errors.map((err: any, i: number) => (
                             <p key={i} className="text-xs text-destructive/80 break-all">{err}</p>
                           ))}
                         </div>
@@ -381,94 +456,6 @@ export default function IpSettingsTab({
                       )}
                     </div>
                   )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">IP 文件夹监控</CardTitle>
-                  <CardDescription>
-                    添加需要监控的文件夹，当有新图片时自动导入到 IP 待整理区。
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="粘贴文件夹路径，或点击右侧选择..."
-                      value={newWatchFolder}
-                      onChange={(e) => setNewWatchFolder(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const folders = [...(localSettings.ipWatchFolders || []), newWatchFolder.trim()];
-                          handleLocalUpdate("ipWatchFolders", folders);
-                          setNewWatchFolder("");
-                        }
-                      }}
-                      className="flex-1"
-                    />
-                    <Button variant="outline" onClick={handleSelectWatchFolder}>
-                      <FolderOpen className="w-4 h-4 mr-2" />
-                      浏览
-                    </Button>
-                    <Button onClick={() => {
-                        if (newWatchFolder.trim()) {
-                          const folders = [...(localSettings.ipWatchFolders || []), newWatchFolder.trim()];
-                          handleLocalUpdate("ipWatchFolders", folders);
-                          setNewWatchFolder("");
-                        }
-                    }}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      添加
-                    </Button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {localSettings.ipWatchFolders?.map((folder: string, i: number) => {
-                      const isActive = activeWatchers.some(
-                        w => w.path === folder && w.is_active && w.watcher_type === "ip"
-                      );
-                      
-                      return (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between p-2 rounded-md bg-muted/50 border group"
-                        >
-                          <div className="flex items-center gap-2 overflow-hidden flex-1">
-                            <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
-                            <span className="text-sm font-medium truncate" title={folder}>
-                              {folder}
-                            </span>
-                            {isActive ? (
-                              <Badge variant="secondary" className="ml-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 shrink-0 border-transparent">
-                                监控中
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="ml-2 shrink-0">
-                                未激活
-                              </Badge>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2"
-                            onClick={() => {
-                              const folders = [...(localSettings.ipWatchFolders || [])];
-                              folders.splice(i, 1);
-                              handleLocalUpdate("ipWatchFolders", folders);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                    {(!localSettings.ipWatchFolders || localSettings.ipWatchFolders.length === 0) && (
-                      <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-md">
-                        尚未添加监控文件夹
-                      </p>
-                    )}
-                  </div>
                 </CardContent>
               </Card>
 

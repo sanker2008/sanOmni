@@ -33,6 +33,7 @@
     "@tauri-apps/plugin-updater": "^2.10.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "imagetracerjs": "^1.2.6",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

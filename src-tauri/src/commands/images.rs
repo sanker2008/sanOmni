@@ -68,6 +68,17 @@ pub async fn import_image(
         return CommandResult::err(format!("Failed to ensure default vendor/model: {}", e));
     }
 
+    // Check if absolute_path already exists
+    let existing_id: Option<String> = conn.query_row(
+        "SELECT id FROM images WHERE absolute_path = ?",
+        [&request.file_path],
+        |row| row.get(0),
+    ).ok();
+
+    if let Some(id) = existing_id {
+        return CommandResult::err(format!("Image already exists in database with id: {}", id));
+    }
+
     let uuid_str = Uuid::new_v4().to_string().replace("-", "");
     let image_id = format!("img_{}", &uuid_str[..12]);
     let now = chrono::Utc::now().to_rfc3339();
@@ -486,7 +497,9 @@ pub async fn update_image(
             }
 
             // Move/rename the file
-            if let Err(e) = std::fs::rename(old_path, &final_path) {
+            if let Err(e) = std::fs::rename(old_path, &final_path).or_else(|_| {
+                std::fs::copy(old_path, &final_path).and_then(|_| std::fs::remove_file(old_path))
+            }) {
                 eprintln!("Failed to move/rename file: {}", e);
                 return CommandResult::err(format!("Failed to move/rename file: {}", e));
             }
@@ -673,7 +686,9 @@ pub async fn archive_images(
                 continue;
             }
 
-            if let Err(e) = std::fs::rename(source, &target_path) {
+            if let Err(e) = std::fs::rename(source, &target_path).or_else(|_| {
+                std::fs::copy(source, &target_path).and_then(|_| std::fs::remove_file(source))
+            }) {
                 result.failed_count += 1;
                 result.errors.push(format!("{}: Failed to move file: {}", image_id, e));
                 continue;
@@ -878,7 +893,9 @@ pub async fn unarchive_images(
         // Move file back to inbox
         let source = std::path::Path::new(&image.absolute_path);
         if source.exists() {
-            if let Err(e) = std::fs::rename(source, &final_path) {
+            if let Err(e) = std::fs::rename(source, &final_path).or_else(|_| {
+                std::fs::copy(source, &final_path).and_then(|_| std::fs::remove_file(source))
+            }) {
                 result.failed_count += 1;
                 result.errors.push(format!("{}: Failed to move file: {}", image_id, e));
                 continue;

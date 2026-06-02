@@ -2,10 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
-import { Separator } from "@/components/ui/separator";
-import { ScanLine, Loader2, FolderOpen, AlertTriangle, Plus, X } from "lucide-react";
+import { ScanLine, Loader2, FolderOpen, AlertTriangle } from "lucide-react";
 import { scannerApi } from "@/services/tauri";
 import { useImageStore } from "@/stores";
 import { toast } from "@/hooks/useToast";
@@ -16,7 +13,6 @@ interface PromptSettingsTabProps {
   handleLocalUpdate: (key: string, value: any) => void;
   onSelectPath: (key: string) => Promise<void>;
   onTriggerReset: (type: ResetType) => void;
-  activeWatchers: any[];
 }
 
 export default function PromptSettingsTab({
@@ -24,43 +20,80 @@ export default function PromptSettingsTab({
   handleLocalUpdate,
   onSelectPath,
   onTriggerReset,
-  activeWatchers,
 }: PromptSettingsTabProps) {
   const { setArchivedImages, setInboxImages } = useImageStore();
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [isCleaningInbox, setIsCleaningInbox] = useState(false);
-  const [inboxCleanupResult, setInboxCleanupResult] = useState<any>(null);
-  const [newWatchFolder, setNewWatchFolder] = useState("");
+  const [inboxScanResult, setInboxScanResult] = useState<any>(null);
+  const [isExecutingCleanup, setIsExecutingCleanup] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
-  const handleAddWatchFolder = () => {
-    if (newWatchFolder.trim()) {
-      const folders = [...(localSettings.watchFolders || []), newWatchFolder.trim()];
-      handleLocalUpdate("watchFolders", folders);
-      setNewWatchFolder("");
-    }
-  };
-
-  const handleRemoveWatchFolder = (index: number) => {
-    const folders = [...(localSettings.watchFolders || [])];
-    folders.splice(index, 1);
-    handleLocalUpdate("watchFolders", folders);
-  };
-
-  const handleSelectWatchFolder = async () => {
+  const handleImportMissing = async () => {
+    if (!inboxScanResult?.missing_in_db.length) return;
+    setIsImporting(true);
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selectedFolder = await open({
-        directory: true,
-        multiple: false,
-      });
+      const { imageApi, classifyApi } = await import("@/services/tauri");
+      
+      let successCount = 0;
+      let failCount = 0;
 
-      if (selectedFolder && typeof selectedFolder === "string") {
-        const folders = [...(localSettings.watchFolders || []), selectedFolder];
-        handleLocalUpdate("watchFolders", folders);
+      for (const item of inboxScanResult.missing_in_db) {
+        let vendorId: string | undefined;
+        let modelIds: string[] = [];
+        
+        try {
+          const classification = await classifyApi.classify(item.filename);
+          if (classification.confidence > 0.5) {
+            vendorId = classification.vendor_id;
+            if (classification.model_id) {
+              modelIds = [classification.model_id];
+            }
+          }
+        } catch (error) {
+          console.error("Classification failed:", error);
+        }
+
+        try {
+          const result = await imageApi.import({
+            file_path: item.absolute_path,
+            file_name: item.filename,
+            file_size: item.file_size,
+            vendor_id: vendorId,
+            model_ids: modelIds,
+            tags: [],
+          });
+          useImageStore.getState().addImage(result);
+          successCount++;
+        } catch (error) {
+          console.error("Failed to import:", error);
+          failCount++;
+        }
       }
+
+      toast({
+        title: "导入完成",
+        description: `成功导入 ${successCount} 张图片${failCount > 0 ? `，失败 ${failCount} 张` : ''}`,
+      });
+      
+      let inboxPath = localSettings.customInboxPath;
+      if (!inboxPath) {
+        const { getAppRoot } = await import("@/lib/pathUtils");
+        const { join } = await import("@tauri-apps/api/path");
+        const appDir = await getAppRoot();
+        inboxPath = await join(appDir, "inbox");
+      }
+      const result = await scannerApi.scanInbox(inboxPath);
+      setInboxScanResult(result);
+
     } catch (error) {
-      console.error("Failed to select folder:", error);
+      toast({
+        title: "✗ 导入失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -200,7 +233,7 @@ export default function PromptSettingsTab({
                     disabled={isCleaningInbox}
                     onClick={async () => {
                       setIsCleaningInbox(true);
-                      setInboxCleanupResult(null);
+                      setInboxScanResult(null);
                       try {
                         let inboxPath: string;
                         const customPath = localSettings.customInboxPath;
@@ -214,14 +247,8 @@ export default function PromptSettingsTab({
                           inboxPath = await join(appDir, "inbox");
                         }
 
-                        const result = await scannerApi.cleanupInbox(inboxPath);
-                        setInboxCleanupResult(result);
-
-                        if (result.removed_count > 0) {
-                          const { imageApi } = await import("@/services/tauri");
-                          const inbox = await imageApi.getInboxImages();
-                          setInboxImages(inbox);
-                        }
+                        const result = await scannerApi.scanInbox(inboxPath);
+                        setInboxScanResult(result);
                       } catch (error) {
                         toast({
                           title: "✗ 扫描失败",
@@ -246,25 +273,73 @@ export default function PromptSettingsTab({
                     )}
                   </Button>
 
-                  {inboxCleanupResult && (
-                    <div className="rounded-md border bg-muted/40 p-3 space-y-2 text-sm">
-                      <p className="font-medium">扫描完成</p>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
-                        <span>检查记录数</span>
-                        <span className="text-foreground font-medium">{inboxCleanupResult.scanned_count}</span>
-                        <span>保留记录</span>
-                        <span>{inboxCleanupResult.kept_count}</span>
-                        <span>清理记录</span>
-                        <span className="text-green-600 font-medium">{inboxCleanupResult.removed_count}</span>
-                        <span>失败</span>
-                        <span className={inboxCleanupResult.failed_count > 0 ? "text-destructive font-medium" : ""}>
-                          {inboxCleanupResult.failed_count}
-                        </span>
+                  {inboxScanResult && (
+                    <div className="rounded-md border bg-muted/40 p-4 space-y-4 text-sm">
+                      <div className="flex justify-between items-center">
+                        <p className="font-medium text-base">扫描结果</p>
+                        <div className="space-x-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={inboxScanResult.missing_in_db.length === 0 || isImporting}
+                            onClick={handleImportMissing}
+                          >
+                            {isImporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            导入文件 ({inboxScanResult.missing_in_db.length})
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={inboxScanResult.missing_on_disk.length === 0 || isExecutingCleanup}
+                            onClick={async () => {
+                              setIsExecutingCleanup(true);
+                              try {
+                                const ids = inboxScanResult.missing_on_disk.map((item: any) => item.id);
+                                const result = await scannerApi.executeInboxCleanup(ids);
+                                toast({
+                                  title: "✓ 清理完成",
+                                  description: `成功清理 ${result.removed_count} 条失效记录`,
+                                });
+                                setInboxScanResult(null);
+                                const { imageApi } = await import("@/services/tauri");
+                                const inbox = await imageApi.getInboxImages();
+                                setInboxImages(inbox);
+                              } catch (error) {
+                                toast({
+                                  title: "✗ 清理失败",
+                                  description: String(error),
+                                  variant: "destructive",
+                                });
+                              } finally {
+                                setIsExecutingCleanup(false);
+                              }
+                            }}
+                          >
+                            {isExecutingCleanup ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            确认清理 ({inboxScanResult.missing_on_disk.length})
+                          </Button>
+                        </div>
                       </div>
-                      {inboxCleanupResult.errors.length > 0 && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-muted-foreground">
+                        <span>新增文件 (未入库)</span>
+                        <span className="text-blue-600 font-medium">{inboxScanResult.missing_in_db.length}</span>
+                        <span>失效记录 (文件已删除)</span>
+                        <span className="text-destructive font-medium">{inboxScanResult.missing_on_disk.length}</span>
+                      </div>
+                      {inboxScanResult.missing_on_disk.length > 0 && (
+                        <div className="mt-2 space-y-1 max-h-32 overflow-y-auto bg-background rounded border p-2">
+                          <p className="text-xs font-medium text-destructive mb-1 sticky top-0 bg-background">待清理的失效记录：</p>
+                          {inboxScanResult.missing_on_disk.map((item: any) => (
+                            <p key={item.id} className="text-xs text-muted-foreground truncate" title={item.absolute_path}>
+                              {item.id} - {item.absolute_path}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {inboxScanResult.errors.length > 0 && (
                         <div className="mt-2 space-y-1">
                           <p className="text-xs font-medium text-destructive">错误详情：</p>
-                          {inboxCleanupResult.errors.map((err: any, i: number) => (
+                          {inboxScanResult.errors.map((err: any, i: number) => (
                             <p key={i} className="text-xs text-destructive/80 break-all">{err}</p>
                           ))}
                         </div>
@@ -373,158 +448,6 @@ export default function PromptSettingsTab({
                 </CardContent>
               </Card>
 
-              
-{/* 监控设置 */}
-              <div className="text-lg font-semibold mt-8 mb-4 border-b pb-2">文件夹监控与自动分类</div>
-              {/* 活跃的监控器 */}
-              {activeWatchers.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">活跃的监控器</CardTitle>
-                    <CardDescription>
-                      当前正在运行的文件夹监控
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {activeWatchers.map((watcher: any) => (
-                        <div
-                          key={watcher.id}
-                          className="flex items-center gap-2 p-2 rounded-md border bg-green-50 dark:bg-green-950"
-                        >
-                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                          <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <span className="text-sm flex-1 truncate">{watcher.path}</span>
-                          <Badge variant="outline" className="text-xs">运行中</Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">监控文件夹</CardTitle>
-                  <CardDescription>
-                    添加需要自动监控的文件夹路径，新图片会自动导入到待整理
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {(localSettings.watchFolders || []).length === 0 && (
-                      <p className="text-sm text-muted-foreground py-2">
-                        暂未添加监控文件夹
-                      </p>
-                    )}
-                    {(localSettings.watchFolders || []).map(
-                      (folder: string, index: number) => (
-                        <div
-                          key={index}
-                          className="flex items-center gap-2 p-2 rounded-md border bg-muted/50"
-                        >
-                          <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <span className="text-sm flex-1 truncate">{folder}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 shrink-0"
-                            onClick={() => handleRemoveWatchFolder(index)}
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      )
-                    )}
-                    <Separator />
-                    <div className="flex gap-2">
-                      <Input
-                        value={newWatchFolder}
-                        onChange={(e) => setNewWatchFolder(e.target.value)}
-                        placeholder="输入文件夹路径..."
-                        className="flex-1"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleAddWatchFolder();
-                        }}
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={handleSelectWatchFolder}
-                        title="浏览文件夹"
-                      >
-                        <FolderOpen className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={handleAddWatchFolder}
-                        title="添加"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">文件扩展名过滤</CardTitle>
-                  <CardDescription>
-                    只监控指定扩展名的文件，多个扩展名用逗号分隔
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Input
-                    value={localSettings.watchExtensions || "png,jpg,jpeg,webp,gif"}
-                    onChange={(e) =>
-                      handleLocalUpdate("watchExtensions", e.target.value)
-                    }
-                    placeholder="png,jpg,jpeg,webp,gif"
-                  />
-                  <div className="flex flex-wrap gap-1.5 mt-3">
-                    {(localSettings.watchExtensions || "png,jpg,jpeg,webp,gif")
-                      .split(",")
-                      .filter(Boolean)
-                      .map((ext: string) => (
-                        <Badge key={ext.trim()} variant="outline">
-                          .{ext.trim()}
-                        </Badge>
-                      ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">防抖时间</CardTitle>
-                  <CardDescription>
-                    文件变更后等待多久再触发处理，避免重复触发（毫秒）
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <Slider
-                      value={[localSettings.watchDebounceMs ?? 1000]}
-                      onValueChange={([val]) =>
-                        handleLocalUpdate("watchDebounceMs", val)
-                      }
-                      min={200}
-                      max={5000}
-                      step={100}
-                      className="w-full"
-                    />
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">200ms</span>
-                      <Badge variant="secondary">
-                        {localSettings.watchDebounceMs ?? 1000}ms
-                      </Badge>
-                      <span className="text-muted-foreground">5000ms</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
               
               <Card className="border-destructive/50">
                 <CardHeader>

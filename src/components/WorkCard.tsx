@@ -137,7 +137,7 @@ export default function WorkCard({ work, onEdit }: WorkCardProps) {
               {work.name}
             </h3>
             <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed min-h-[32px]">
-              {work.description || "暂无相关作品的简要介绍。"}
+              {work.description || "暂无参与作品的简要介绍。"}
             </p>
           </div>
 

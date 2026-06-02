@@ -259,9 +259,9 @@ export default function QuickEditModal() {
 
       if (archiveAfterSave) {
         const settings = useUIStore.getState().settings;
-        const { appDataDir } = await import("@tauri-apps/api/path");
+        const { getAppRoot } = await import("@/lib/pathUtils");
         const customPath = settings.customIpArchivedPath;
-        const libraryPath = customPath || await appDataDir();
+        const libraryPath = customPath || await getAppRoot();
         const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
         const result = await ipImageApi.archive([image.id], libraryPath, namingTemplate);
         if (result.success_count > 0) {
@@ -277,6 +277,13 @@ export default function QuickEditModal() {
           } catch (e) {
             console.error("加载归档后的绝对路径失败:", e);
           }
+        }
+        if (result.failed_count > 0 || result.errors?.length > 0) {
+          toast({
+            title: "归档失败",
+            description: result.errors?.join("\n") || "无法移动文件，可能文件正被占用或存在权限问题。",
+            variant: "destructive",
+          });
         }
       }
 
@@ -344,12 +351,19 @@ export default function QuickEditModal() {
 
       if (archiveAfterSave) {
         const settings = useUIStore.getState().settings;
-        const { appDataDir } = await import("@tauri-apps/api/path");
+        const { getAppRoot } = await import("@/lib/pathUtils");
         const customPath = settings.customArchivedPath;
-        const libraryPath = customPath || await appDataDir();
+        const libraryPath = customPath || await getAppRoot();
         const result = await imageApi.archive([image.id], libraryPath);
         if (result.success_count > 0) {
           removePromptImage(image.id);
+        }
+        if (result.failed_count > 0 || result.errors?.length > 0) {
+          toast({
+            title: "归档失败",
+            description: result.errors?.join("\n") || "无法移动文件，可能文件正被占用或存在权限问题。",
+            variant: "destructive",
+          });
         }
       }
     }

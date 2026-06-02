@@ -25,17 +25,54 @@ interface CanvasPreviewProps {
 // ─── Image Cache ───────────────────────────────────────────
 
 const imageCache = new Map<string, HTMLImageElement>();
+const loadingCache = new Map<string, boolean>();
+const pendingCallbacks = new Map<string, Set<() => void>>();
 
-function getCachedImage(src: string): HTMLImageElement | null {
-  if (imageCache.has(src)) return imageCache.get(src)!;
+function getCachedImage(src: string, onLoaded?: () => void): HTMLImageElement | null {
+  if (imageCache.has(src)) {
+    return imageCache.get(src)!;
+  }
+  
+  if (onLoaded) {
+    if (!pendingCallbacks.has(src)) pendingCallbacks.set(src, new Set());
+    pendingCallbacks.get(src)!.add(onLoaded);
+  }
+
+  if (loadingCache.has(src)) {
+    return null; // Already loading
+  }
+
+  loadingCache.set(src, true);
   
   const img = new Image();
+  // Handle cross-origin images if necessary, though data URLs are common here
+  img.crossOrigin = "anonymous";
   img.src = src;
-  img.onload = () => imageCache.set(src, img);
+  
+  const flushCallbacks = () => {
+    const cbs = pendingCallbacks.get(src);
+    if (cbs) {
+      cbs.forEach(cb => cb());
+      pendingCallbacks.delete(src);
+    }
+  };
+
+  img.onload = () => {
+    imageCache.set(src, img);
+    loadingCache.delete(src);
+    flushCallbacks();
+  };
+  
+  img.onerror = () => {
+    loadingCache.delete(src);
+    pendingCallbacks.delete(src);
+  };
   
   // If already loaded (e.g., data URL), cache immediately
-  if (img.complete) {
+  if (img.complete && img.naturalWidth > 0) {
     imageCache.set(src, img);
+    loadingCache.delete(src);
+    flushCallbacks();
     return img;
   }
   
@@ -722,22 +759,17 @@ export default function CanvasPreview({
     return () => cancelAnimationFrame(frameId);
   }, [render]);
 
-  // Also re-render when images load
+  // Pre-load images and re-render when they finish
   useEffect(() => {
-    const interval = setInterval(() => {
-      const hasUnloaded = layers.some(
-        (l) => l.type === 'image' && !imageCache.has(l.src)
-      );
-      if (hasUnloaded) {
-        // Try to cache images
-        layers.forEach((l) => {
-          if (l.type === 'image') getCachedImage(l.src);
+    let mounted = true;
+    layers.forEach((l) => {
+      if (l.type === 'image' && !imageCache.has(l.src)) {
+        getCachedImage(l.src, () => {
+          if (mounted) render();
         });
-        render();
       }
-    }, 100);
-
-    return () => clearInterval(interval);
+    });
+    return () => { mounted = false; };
   }, [layers, render]);
 
   // Mouse handlers for drag

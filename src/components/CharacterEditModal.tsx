@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
-import { Upload, X, Star } from "lucide-react";
+import { Upload, X, Star, Search, ChevronDown, Check } from "lucide-react";
 
 interface CharacterEditModalProps {
   workId: string;
@@ -38,6 +38,26 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
   const [selectedIpId, setSelectedIpId] = useState<string>("");
   const [ipRelationNote, setIpRelationNote] = useState("");
   const [ips, setIps] = useState<IpAsset[]>([]);
+
+  // IP Searchable Dropdown state
+  const [isIpDropdownOpen, setIsIpDropdownOpen] = useState(false);
+  const [ipSearchQuery, setIpSearchQuery] = useState("");
+  const ipDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ipDropdownRef.current && !ipDropdownRef.current.contains(event.target as Node)) {
+        setIsIpDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredIps = ips.filter(ip => 
+    ip.name.toLowerCase().includes(ipSearchQuery.toLowerCase()) || 
+    ip.path.toLowerCase().includes(ipSearchQuery.toLowerCase())
+  );
 
   // Images states
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -100,6 +120,7 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
         setIpRelationNote("");
         setPreviewUrls([]);
         setSelectedFiles([]);
+        setIpSearchQuery("");
       }
     }
   }, [open, character]);
@@ -192,7 +213,7 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
       console.error(e);
       toast({
         title: "保存失败",
-        description: "保存角色信息时发生错误，请重试",
+        description: `保存角色信息时发生错误: ${typeof e === 'string' ? e : (e instanceof Error ? e.message : JSON.stringify(e))}`,
         variant: "destructive",
       });
     } finally {
@@ -254,20 +275,65 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5" ref={ipDropdownRef}>
                 <label className="text-xs font-semibold text-primary/80">选择演员 IP 形象</label>
-                <select
-                  value={selectedIpId}
-                  onChange={(e) => setSelectedIpId(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-primary/20 bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-950"
-                >
-                  <option value="">-- 纯作品角色，不绑定任何 IP 形象 --</option>
-                  {ips.map((ip) => (
-                    <option key={ip.id} value={ip.id}>
-                      {ip.name} ({ip.path})
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <div
+                    onClick={() => setIsIpDropdownOpen(!isIpDropdownOpen)}
+                    className="flex h-9 w-full items-center justify-between rounded-md border border-primary/20 bg-background px-3 py-1 text-sm shadow-sm transition-colors hover:border-primary/50 cursor-pointer dark:bg-zinc-950"
+                  >
+                    <span className="truncate">
+                      {selectedIpId
+                        ? ips.find((ip) => ip.id === selectedIpId)?.name || "未知 IP"
+                        : "-- 纯作品角色，不绑定任何 IP 形象 --"}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </div>
+                  
+                  {isIpDropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in fade-in-0 zoom-in-95">
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <input
+                          autoFocus
+                          value={ipSearchQuery}
+                          onChange={(e) => setIpSearchQuery(e.target.value)}
+                          placeholder="搜索 IP 名称或标识..."
+                          className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                      </div>
+                      <div className="max-h-[200px] overflow-y-auto p-1">
+                        <div
+                          onClick={() => {
+                            setSelectedIpId("");
+                            setIsIpDropdownOpen(false);
+                          }}
+                          className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                        >
+                          <Check className={`mr-2 h-4 w-4 ${selectedIpId === "" ? "opacity-100" : "opacity-0"}`} />
+                          -- 纯作品角色，不绑定任何 IP 形象 --
+                        </div>
+                        {filteredIps.length === 0 ? (
+                          <div className="py-6 text-center text-sm text-muted-foreground">未找到匹配的 IP</div>
+                        ) : (
+                          filteredIps.map((ip) => (
+                            <div
+                              key={ip.id}
+                              onClick={() => {
+                                setSelectedIpId(ip.id);
+                                setIsIpDropdownOpen(false);
+                              }}
+                              className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                            >
+                              <Check className={`mr-2 h-4 w-4 ${selectedIpId === ip.id ? "opacity-100" : "opacity-0"}`} />
+                              {ip.name} <span className="text-muted-foreground ml-1 text-xs">({ip.path})</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col gap-1.5">

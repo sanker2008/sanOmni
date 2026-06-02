@@ -41,6 +41,20 @@ interface CommandResult<T> {
   error?: string;
 }
 
+export interface DirectoryStatus {
+  exists: boolean;
+  is_empty: boolean;
+}
+
+export interface RepairReport {
+  total_records: number;
+  valid_count: number;
+  broken_count: number;
+  fixable_count: number;
+  fixed_count: number;
+  unfixable_paths: string[];
+}
+
 // Helper to get database path
 export async function getDbPath(): Promise<string> {
   const { join } = await import("@tauri-apps/api/path");
@@ -488,44 +502,6 @@ export const geminiWatermarkApi = {
   },
 };
 
-// ==================== Watcher API ====================
-
-export interface WatcherConfig {
-  path: string;
-  recursive: boolean;
-  file_extensions: string[];
-  debounce_ms: number;
-}
-
-export interface WatcherInfo {
-  id: string;
-  path: string;
-  recursive: boolean;
-  is_active: boolean;
-  created_at: string;
-}
-
-export const watcherApi = {
-  async start(config: WatcherConfig): Promise<WatcherInfo> {
-    const result = await invoke<WatcherInfo>("start_folder_watcher", {
-      config,
-    });
-    return result;
-  },
-
-  async stop(watcherId: string): Promise<boolean> {
-    const result = await invoke<boolean>("stop_folder_watcher", {
-      watcherId,
-    });
-    return result;
-  },
-
-  async getActive(): Promise<WatcherInfo[]> {
-    const result = await invoke<WatcherInfo[]>("get_active_watchers");
-    return result;
-  },
-};
-
 // ==================== Classifier API ====================
 
 export interface ClassificationResult {
@@ -552,9 +528,24 @@ export interface ScanResult {
   errors: string[];
 }
 
+export interface InboxMissingInDbItem {
+  absolute_path: string;
+  filename: string;
+  file_size: number;
+}
+
+export interface InboxMissingOnDiskItem {
+  id: string;
+  absolute_path: string;
+}
+
+export interface InboxScanResult {
+  missing_in_db: InboxMissingInDbItem[];
+  missing_on_disk: InboxMissingOnDiskItem[];
+  errors: string[];
+}
+
 export interface InboxCleanupResult {
-  scanned_count: number;
-  kept_count: number;
   removed_count: number;
   failed_count: number;
   errors: string[];
@@ -574,9 +565,9 @@ export const scannerApi = {
     return result.data;
   },
 
-  async cleanupInbox(inboxPath: string): Promise<InboxCleanupResult> {
+  async scanInbox(inboxPath: string): Promise<InboxScanResult> {
     const dbPath = await getDbPath();
-    const result = await invoke<CommandResult<InboxCleanupResult>>("cleanup_inbox_directory", {
+    const result = await invoke<CommandResult<InboxScanResult>>("scan_inbox_directory", {
       dbPath,
       inboxPath,
     });
@@ -586,14 +577,38 @@ export const scannerApi = {
     return result.data;
   },
 
-  async cleanupIpInbox(inboxPath: string): Promise<InboxCleanupResult> {
+  async executeInboxCleanup(imageIds: string[]): Promise<InboxCleanupResult> {
     const dbPath = await getDbPath();
-    const result = await invoke<CommandResult<InboxCleanupResult>>("cleanup_ip_inbox_directory", {
+    const result = await invoke<CommandResult<InboxCleanupResult>>("execute_inbox_cleanup", {
+      dbPath,
+      imageIds,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "清理失败");
+    }
+    return result.data;
+  },
+
+  async scanIpInbox(inboxPath: string): Promise<InboxScanResult> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<InboxScanResult>>("scan_ip_inbox_directory", {
       dbPath,
       inboxPath,
     });
     if (!result.success || !result.data) {
       throw new Error(result.error || "扫描失败");
+    }
+    return result.data;
+  },
+
+  async executeIpInboxCleanup(imageIds: string[]): Promise<InboxCleanupResult> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<InboxCleanupResult>>("execute_ip_inbox_cleanup", {
+      dbPath,
+      imageIds,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "清理失败");
     }
     return result.data;
   },
@@ -658,6 +673,29 @@ export const settingsApi = {
     const result = await invoke<CommandResult<boolean>>("reset_ip_data", { dbPath, deleteFiles });
     if (!result.success) throw new Error(result.error || "Failed to reset IP data");
     return result.data || false;
+  },
+
+  async migrateDirectory(oldPath: string, newPath: string): Promise<boolean> {
+    const result = await invoke<CommandResult<boolean>>("migrate_directory", { oldPath, newPath });
+    if (!result.success) throw new Error(result.error || "Failed to migrate directory");
+    return result.data || false;
+  },
+
+  async checkDirectoryStatus(path: string): Promise<DirectoryStatus> {
+    const result = await invoke<CommandResult<DirectoryStatus>>("check_directory_status", { path });
+    if (!result.success) throw new Error(result.error || "Failed to check directory status");
+    return result.data!;
+  },
+
+  async repairDatabasePaths(searchDirs: string[], autoFix: boolean): Promise<RepairReport> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<RepairReport>>("repair_database_paths", { 
+      dbPath, 
+      searchDirs, 
+      autoFix 
+    });
+    if (!result.success) throw new Error(result.error || "Failed to repair database paths");
+    return result.data!;
   },
 };
 

@@ -308,7 +308,9 @@ pub async fn update_ip_image(
             let source = std::path::Path::new(&current_image.absolute_path);
             if source.exists() {
                 if let Ok(_) = std::fs::create_dir_all(&target_dir) {
-                    if let Ok(_) = std::fs::rename(source, &target_path) {
+                    if std::fs::rename(source, &target_path).or_else(|_| {
+                        std::fs::copy(source, &target_path).and_then(|_| std::fs::remove_file(source))
+                    }).is_ok() {
                         // Update the database paths
                         let new_relative = std::path::Path::new("ip_archived")
                             .join(&new_ip_path)
@@ -430,7 +432,9 @@ pub async fn update_ip_image(
                         // Move physical file!
                         let source = std::path::Path::new(&current_absolute_path);
                         if source.exists() && source != target_path {
-                            if let Ok(_) = std::fs::rename(source, &target_path) {
+                            if std::fs::rename(source, &target_path).or_else(|_| {
+                                std::fs::copy(source, &target_path).and_then(|_| std::fs::remove_file(source))
+                            }).is_ok() {
                                 current_filename = unique_filename;
                                 let current_relative_path = if let Some(ref pp) = pack_path {
                                     std::path::Path::new("ip_archived")
@@ -678,7 +682,9 @@ pub async fn archive_ip_images(
                 continue;
             }
 
-            if let Err(e) = std::fs::rename(source, &target_path) {
+            if let Err(e) = std::fs::rename(source, &target_path).or_else(|_| {
+                std::fs::copy(source, &target_path).and_then(|_| std::fs::remove_file(source))
+            }) {
                 result.failed_count += 1;
                 result.errors.push(format!("{}: Failed to move file: {}", ip_image_id, e));
                 continue;

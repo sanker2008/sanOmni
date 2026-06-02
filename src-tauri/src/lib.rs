@@ -12,7 +12,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .manage(commands::watcher::WatcherState::new())
         .setup(|app| {
             // Use Tauri's app data directory
             let app_data_dir = app.path().app_data_dir()
@@ -63,9 +62,7 @@ pub fn run() {
             commands::gemini_watermark_removal::remove_gemini_watermark,
             commands::gemini_watermark_removal::batch_remove_gemini_watermarks,
             commands::gemini_watermark_removal::auto_remove_gemini_watermark,
-            commands::watcher::start_folder_watcher,
-            commands::watcher::stop_folder_watcher,
-            commands::watcher::get_active_watchers,
+
             commands::classifier::classify_image,
             commands::settings::get_settings,
             commands::settings::save_settings,
@@ -74,9 +71,11 @@ pub fn run() {
             commands::settings::reset_prompt_data,
             commands::settings::reset_ip_data,
             commands::scanner::scan_archived_directory,
-            commands::scanner::cleanup_inbox_directory,
-            commands::scanner::cleanup_ip_inbox_directory,
+            commands::scanner::scan_inbox_directory,
+            commands::scanner::scan_ip_inbox_directory,
             commands::scanner::scan_ip_archived_directory,
+            commands::scanner::execute_inbox_cleanup,
+            commands::scanner::execute_ip_inbox_cleanup,
             commands::prompt_groups::create_prompt_group,
             commands::prompt_groups::get_prompt_groups,
             commands::prompt_groups::get_prompt_group_with_images,
@@ -119,12 +118,17 @@ pub fn run() {
             commands::works::remove_work_tag,
             commands::characters::create_character,
             commands::characters::get_characters,
+            commands::characters::get_all_characters,
             commands::characters::get_character_by_id,
             commands::characters::update_character,
             commands::characters::delete_character,
             commands::characters::update_character_order,
             commands::characters::upload_character_images,
             commands::characters::get_ip_characters,
+            commands::fs::migrate_directory,
+            commands::fs::update_database_paths,
+            commands::fs::check_directory_status,
+            commands::fs::repair_database_paths,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

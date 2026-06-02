@@ -21,7 +21,7 @@
 ### 通用功能
 - [删除功能](./DELETE_FEATURE.md) - 图片删除
 - [图片查看器](./IMAGE_VIEWER.md) - 全屏查看
-- [文件夹监控](./FOLDER_MONITORING.md) - 自动导入
+- [文件扫描](./FOLDER_MONITORING.md) - 手动扫描与清理
 - [打开文件夹和归档](./OPEN_FOLDER_AND_ARCHIVE.md) - 右键功能
 - [水印检测算法](./WATERMARK_DETECTION_ALGORITHM.md) - 水印检测
 - [水印检测测试](./WATERMARK_DETECTION_TESTING.md) - 测试指南

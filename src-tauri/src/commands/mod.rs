@@ -38,7 +38,7 @@ pub fn get_app_root(conn: &rusqlite::Connection, default_app_data_dir: &std::pat
     default_app_data_dir.to_path_buf()
 }
 
-pub fn get_app_root_from_handle(app_handle: &tauri::AppHandle, default_app_data_dir: &std::path::Path) -> std::path::PathBuf {
+pub fn get_app_root_from_handle(_app_handle: &tauri::AppHandle, default_app_data_dir: &std::path::Path) -> std::path::PathBuf {
     if let Ok(conn) = rusqlite::Connection::open(default_app_data_dir.join("data").join("database.sqlite")) {
         return get_app_root(&conn, default_app_data_dir);
     }
@@ -58,7 +58,7 @@ pub fn get_works_base_path(conn: &rusqlite::Connection, default_app_data_dir: &s
     get_app_root(conn, default_app_data_dir)
 }
 
-pub fn get_works_root_from_handle(app_handle: &tauri::AppHandle, default_app_data_dir: &std::path::Path) -> std::path::PathBuf {
+pub fn get_works_root_from_handle(_app_handle: &tauri::AppHandle, default_app_data_dir: &std::path::Path) -> std::path::PathBuf {
     if let Ok(conn) = rusqlite::Connection::open(default_app_data_dir.join("data").join("database.sqlite")) {
         return get_works_base_path(&conn, default_app_data_dir);
     }
@@ -71,7 +71,7 @@ pub mod tags;
 pub mod watermark;
 pub mod watermark_removal;
 pub mod gemini_watermark_removal;
-pub mod watcher;
+
 pub mod classifier;
 pub mod settings;
 pub mod scanner;
@@ -80,3 +80,4 @@ pub mod ip_assets;
 pub mod ip_images;
 pub mod works;
 pub mod characters;
+pub mod fs;

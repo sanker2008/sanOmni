@@ -14,9 +14,27 @@ pub struct ScanResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct InboxMissingInDbItem {
+    pub absolute_path: String,
+    pub filename: String,
+    pub file_size: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InboxMissingOnDiskItem {
+    pub id: String,
+    pub absolute_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InboxScanResult {
+    pub missing_in_db: Vec<InboxMissingInDbItem>,
+    pub missing_on_disk: Vec<InboxMissingOnDiskItem>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InboxCleanupResult {
-    pub scanned_count: usize,
-    pub kept_count: usize,
     pub removed_count: usize,
     pub failed_count: usize,
     pub errors: Vec<String>,
@@ -37,7 +55,7 @@ pub async fn scan_archived_directory(
     let template = naming_template
         .unwrap_or_else(|| "{vendor}-{model}-{date}-{index}".to_string());
 
-    let archived_root = std::path::Path::new(&library_path).join("archived");
+    let archived_root = std::path::Path::new(&library_path);
     if !archived_root.exists() {
         return CommandResult::err(format!(
             "归档目录不存在: {}",
@@ -310,13 +328,13 @@ pub async fn scan_archived_directory(
     CommandResult::ok(result)
 }
 
-/// 扫描 inbox 目录，清理数据库中已不存在的待整理记录
+/// 扫描 inbox 目录，返回未入库的文件和已失效的数据库记录
 #[tauri::command]
-pub async fn cleanup_inbox_directory(
+pub async fn scan_inbox_directory(
     db_path: String,
     inbox_path: String,
-) -> CommandResult<InboxCleanupResult> {
-    let mut conn = match Connection::open(&db_path) {
+) -> CommandResult<InboxScanResult> {
+    let conn = match Connection::open(&db_path) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
     };
@@ -329,28 +347,87 @@ pub async fn cleanup_inbox_directory(
         ));
     }
 
-    let mut result = InboxCleanupResult {
-        scanned_count: 0,
-        kept_count: 0,
-        removed_count: 0,
-        failed_count: 0,
+    let mut result = InboxScanResult {
+        missing_in_db: Vec::new(),
+        missing_on_disk: Vec::new(),
         errors: Vec::new(),
     };
 
-    let records: Vec<(String, String)> = {
-        let mut stmt = match conn.prepare(
-            "SELECT id, absolute_path FROM images WHERE status IN ('inbox', 'tagged')"
-        ) {
-            Ok(stmt) => stmt,
-            Err(e) => return CommandResult::err(format!("查询待整理数据失败: {}", e)),
-        };
+    let mut db_paths = std::collections::HashSet::new();
 
-        let rows = match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?))) {
-            Ok(rows) => rows,
-            Err(e) => return CommandResult::err(format!("读取待整理数据失败: {}", e)),
-        };
+    // 1. Get DB records
+    let mut stmt = match conn.prepare(
+        "SELECT id, absolute_path FROM images WHERE status IN ('inbox', 'tagged')"
+    ) {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            result.errors.push(format!("查询待整理数据失败: {}", e));
+            return CommandResult::ok(result);
+        }
+    };
 
-        rows.filter_map(|r| r.ok()).collect()
+    let rows = match stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))) {
+        Ok(rows) => rows,
+        Err(e) => {
+            result.errors.push(format!("读取待整理数据失败: {}", e));
+            return CommandResult::ok(result);
+        }
+    };
+
+    for r in rows.flatten() {
+        let (id, absolute_path) = r;
+        if !std::path::Path::new(&absolute_path).exists() {
+            result.missing_on_disk.push(InboxMissingOnDiskItem {
+                id,
+                absolute_path: absolute_path.clone(),
+            });
+        }
+        
+        db_paths.insert(absolute_path.to_lowercase()); // normalize for comparison
+    }
+
+    // 2. Read disk files
+    if let Ok(entries) = std::fs::read_dir(inbox_root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() { continue; }
+            let ext = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
+                Some(e) if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") => e,
+                _ => continue,
+            };
+            let abs_path = path.to_string_lossy().to_string();
+            
+            // Check if missing in DB
+            if !db_paths.contains(&abs_path.to_lowercase()) {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let file_size = path.metadata().map(|m| m.len() as i64).unwrap_or(0);
+                
+                result.missing_in_db.push(InboxMissingInDbItem {
+                    absolute_path: abs_path,
+                    filename,
+                    file_size,
+                });
+            }
+        }
+    }
+
+    CommandResult::ok(result)
+}
+
+#[tauri::command]
+pub async fn execute_inbox_cleanup(
+    db_path: String,
+    image_ids: Vec<String>,
+) -> CommandResult<InboxCleanupResult> {
+    let mut conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
+    };
+
+    let mut result = InboxCleanupResult {
+        removed_count: 0,
+        failed_count: 0,
+        errors: Vec::new(),
     };
 
     let tx = match conn.transaction() {
@@ -358,14 +435,7 @@ pub async fn cleanup_inbox_directory(
         Err(e) => return CommandResult::err(format!("无法开启事务: {}", e)),
     };
 
-    for (image_id, absolute_path) in records {
-        result.scanned_count += 1;
-
-        if std::path::Path::new(&absolute_path).exists() {
-            result.kept_count += 1;
-            continue;
-        }
-
+    for image_id in image_ids {
         if let Err(e) = tx.execute("DELETE FROM image_model_relations WHERE image_id = ?", [&image_id]) {
             result.failed_count += 1;
             result.errors.push(format!("{}: 删除模型关联失败: {}", image_id, e));
@@ -402,13 +472,13 @@ pub async fn cleanup_inbox_directory(
     CommandResult::ok(result)
 }
 
-/// 扫描 IP inbox 目录，清理数据库中已不存在的待整理记录
+/// 扫描 IP inbox 目录，返回未入库的文件和已失效的数据库记录
 #[tauri::command]
-pub async fn cleanup_ip_inbox_directory(
+pub async fn scan_ip_inbox_directory(
     db_path: String,
     inbox_path: String,
-) -> CommandResult<InboxCleanupResult> {
-    let mut conn = match Connection::open(&db_path) {
+) -> CommandResult<InboxScanResult> {
+    let conn = match Connection::open(&db_path) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
     };
@@ -421,28 +491,84 @@ pub async fn cleanup_ip_inbox_directory(
         ));
     }
 
-    let mut result = InboxCleanupResult {
-        scanned_count: 0,
-        kept_count: 0,
-        removed_count: 0,
-        failed_count: 0,
+    let mut result = InboxScanResult {
+        missing_in_db: Vec::new(),
+        missing_on_disk: Vec::new(),
         errors: Vec::new(),
     };
 
-    let records: Vec<(String, String)> = {
-        let mut stmt = match conn.prepare(
-            "SELECT id, absolute_path FROM ip_images WHERE status IN ('inbox', 'tagged')"
-        ) {
-            Ok(stmt) => stmt,
-            Err(e) => return CommandResult::err(format!("查询待整理数据失败: {}", e)),
-        };
+    let mut db_paths = std::collections::HashSet::new();
 
-        let rows = match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?))) {
-            Ok(rows) => rows,
-            Err(e) => return CommandResult::err(format!("读取待整理数据失败: {}", e)),
-        };
+    let mut stmt = match conn.prepare(
+        "SELECT id, absolute_path FROM ip_images WHERE status IN ('inbox', 'tagged')"
+    ) {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            result.errors.push(format!("查询待整理数据失败: {}", e));
+            return CommandResult::ok(result);
+        }
+    };
 
-        rows.filter_map(|r| r.ok()).collect()
+    let rows = match stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))) {
+        Ok(rows) => rows,
+        Err(e) => {
+            result.errors.push(format!("读取待整理数据失败: {}", e));
+            return CommandResult::ok(result);
+        }
+    };
+
+    for r in rows.flatten() {
+        let (id, absolute_path) = r;
+        if !std::path::Path::new(&absolute_path).exists() {
+            result.missing_on_disk.push(InboxMissingOnDiskItem {
+                id,
+                absolute_path: absolute_path.clone(),
+            });
+        }
+        
+        db_paths.insert(absolute_path.to_lowercase());
+    }
+
+    if let Ok(entries) = std::fs::read_dir(inbox_root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() { continue; }
+            let ext = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
+                Some(e) if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") => e,
+                _ => continue,
+            };
+            let abs_path = path.to_string_lossy().to_string();
+            
+            if !db_paths.contains(&abs_path.to_lowercase()) {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let file_size = path.metadata().map(|m| m.len() as i64).unwrap_or(0);
+                
+                result.missing_in_db.push(InboxMissingInDbItem {
+                    absolute_path: abs_path,
+                    filename,
+                    file_size,
+                });
+            }
+        }
+    }
+
+    CommandResult::ok(result)
+}
+
+#[tauri::command]
+pub async fn execute_ip_inbox_cleanup(
+    db_path: String,
+    image_ids: Vec<String>,
+) -> CommandResult<InboxCleanupResult> {
+    let mut conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
+    };
+
+    let mut result = InboxCleanupResult {
+        removed_count: 0,
+        failed_count: 0,
+        errors: Vec::new(),
     };
 
     let tx = match conn.transaction() {
@@ -450,14 +576,7 @@ pub async fn cleanup_ip_inbox_directory(
         Err(e) => return CommandResult::err(format!("无法开启事务: {}", e)),
     };
 
-    for (ip_image_id, absolute_path) in records {
-        result.scanned_count += 1;
-
-        if std::path::Path::new(&absolute_path).exists() {
-            result.kept_count += 1;
-            continue;
-        }
-
+    for ip_image_id in image_ids {
         if let Err(e) = tx.execute("DELETE FROM ip_image_tag_relations WHERE ip_image_id = ?", [&ip_image_id]) {
             result.failed_count += 1;
             result.errors.push(format!("{}: 删除标签关联失败: {}", ip_image_id, e));
@@ -494,7 +613,7 @@ pub async fn scan_ip_archived_directory(
     let template = naming_template
         .unwrap_or_else(|| "{ip}-{date}-{index}".to_string());
 
-    let archived_root = std::path::Path::new(&library_path).join("ip_archived");
+    let archived_root = std::path::Path::new(&library_path);
     if !archived_root.exists() {
         return CommandResult::err(format!(
             "归档目录不存在: {}",

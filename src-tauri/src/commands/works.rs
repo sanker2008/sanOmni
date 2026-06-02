@@ -6,8 +6,9 @@ use chrono::Utc;
 use crate::models::{Work, WorkWithRelations, WorkFilters, Tag, CharacterWithRelations};
 
 fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
-    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db_path = app_data_dir.join("data").join("database.sqlite");
+    let default_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_root = crate::commands::get_app_root_from_handle(app_handle, &default_app_data_dir);
+    let db_path = app_root.join("data").join("database.sqlite");
     Connection::open(db_path).map_err(|e| e.to_string())
 }
 
@@ -62,9 +63,15 @@ pub async fn create_work(
         "INSERT INTO works (id, name, path, work_type, description, release_date, 
          producer, director_author, status, created_at, updated_at) 
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-        params![id, name, final_path, work_type, description, release_date, 
+        params![id, name, final_path.clone(), work_type, description, release_date, 
                 producer, director_author, status, now, now],
     ).map_err(|e| e.to_string())?;
+
+    // Create the works/{path} directory
+    let base_app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
+    let target_dir = app_data_dir.join("works").join(&final_path);
+    let _ = std::fs::create_dir_all(&target_dir);
     
     get_work_by_id(app_handle, id).await.map(|w| w.work)
 }

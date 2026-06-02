@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useImageStore, useIpImageStore, useVendorStore, useUIStore } from "@/stores";
-import type { IpAsset } from "@/stores";
+import type { IpAsset, IpStickerPack } from "@/stores";
 import { imageApi, ipImageApi } from "@/services/tauri";
 import {
   Dialog,
@@ -44,6 +44,9 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
   const [selectedIps, setSelectedIps] = useState<string[]>([]);
   const [availableIps, setAvailableIps] = useState<IpAsset[]>([]);
   const [primaryIp, setPrimaryIp] = useState<string | null>(null);
+  const { selectedIpId } = useUIStore();
+  const [associateStickerPackId, setAssociateStickerPackId] = useState<string | null>(null);
+  const [ipStickerPacks, setIpStickerPacks] = useState<IpStickerPack[]>([]);
 
   useEffect(() => {
     if (isIpMode) {
@@ -52,6 +55,23 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
       });
     }
   }, [isIpMode]);
+
+  useEffect(() => {
+    if (isIpMode) {
+      const targetIp = primaryIp || selectedIpId;
+      if (targetIp && targetIp !== "unknown") {
+        import("@/services/tauri").then((m) => {
+          m.ipApi.getDetail(targetIp).then((detail) => {
+            if (detail) {
+              setIpStickerPacks(detail.sticker_packs);
+            }
+          }).catch(console.error);
+        });
+      } else {
+        setIpStickerPacks([]);
+      }
+    }
+  }, [isIpMode, primaryIp, selectedIpId]);
 
   const toggleIp = (ipId: string) => {
     if (selectedIps.includes(ipId)) {
@@ -132,7 +152,7 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
 
   const handleSave = async () => {
     if (!isIpMode && modelAction === "none" && tagAction === "none" && watermarkAction === "none") return;
-    if (isIpMode && ipAction === "none" && tagAction === "none" && watermarkAction === "none") return;
+    if (isIpMode && ipAction === "none" && tagAction === "none" && watermarkAction === "none" && associateStickerPackId === null) return;
 
     setIsSaving(true);
     setResult(null);
@@ -194,6 +214,13 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
           const settings = useUIStore.getState().settings;
           const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
 
+          let finalAssociateStickerPackId = undefined;
+          if (associateStickerPackId === "ungrouped") {
+            finalAssociateStickerPackId = "ungrouped";
+          } else if (associateStickerPackId !== null) {
+            finalAssociateStickerPackId = associateStickerPackId;
+          }
+
           const updated = await ipImageApi.update({
             ip_image_id: imageId,
             ip_ids: finalIpIds,
@@ -202,6 +229,7 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
             has_watermark: finalHasWatermark,
             watermark_platform: finalWatermarkPlatform,
             naming_template: namingTemplate,
+            associate_sticker_pack_id: finalAssociateStickerPackId,
           });
           updateImage(imageId, updated as any);
         } else {
@@ -259,6 +287,7 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
     setIpAction("none");
     setSelectedIps([]);
     setPrimaryIp(null);
+    setAssociateStickerPackId(null);
     setModelAction("none");
     setSelectedModels([]);
     setPrimaryModel(null);
@@ -271,7 +300,7 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
     onClose();
   };
 
-  const canSave = ((!isIpMode && modelAction !== "none") || (isIpMode && ipAction !== "none") || tagAction !== "none" || watermarkAction !== "none") && !isSaving;
+  const canSave = ((!isIpMode && modelAction !== "none") || (isIpMode && ipAction !== "none") || tagAction !== "none" || watermarkAction !== "none" || (isIpMode && associateStickerPackId !== null)) && !isSaving;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
@@ -423,6 +452,28 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
                       </button>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Associate Sticker Pack Dropdown */}
+            {isIpMode && (primaryIp || selectedIpId) && primaryIp !== "unknown" && selectedIpId !== "unknown" && (
+              <div className="space-y-3 pt-2">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">关联表情包分组</label>
+                  <select
+                    value={associateStickerPackId || ""}
+                    onChange={(e) => setAssociateStickerPackId(e.target.value === "" ? null : e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">不修改当前关联</option>
+                    <option value="ungrouped">解除关联 (移出分组)</option>
+                    {ipStickerPacks.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             )}
