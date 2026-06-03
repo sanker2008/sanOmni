@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getDefaultExportPath, saveFile, openExportFolder } from './fs';
+import { getDefaultExportPath, saveFile, openExportFolder, ensureDirectory } from './fs';
 import { toast } from '@/hooks/useToast';
+import { useUIStore } from '@/stores';
 import { open } from '@tauri-apps/plugin-dialog';
+import { geminiWatermarkApi } from '@/services/tauri';
+import { readFile } from '@tauri-apps/plugin-fs';
+import { join } from '@tauri-apps/api/path';
+import { getLabsRoot } from '@/lib/pathUtils';
 import {
   Upload,
   Settings,
@@ -9,7 +14,9 @@ import {
   Trash2,
   FileImage,
   XCircle,
-  PlayCircle
+  PlayCircle,
+  Eraser,
+  Loader2
 } from 'lucide-react';
 
 interface FileItem {
@@ -23,6 +30,9 @@ interface FileItem {
 }
 
 export default function ImageCompressor() {
+  const settings = useUIStore((state) => state.settings);
+  const showFullImage = settings.showFullImage ?? false;
+  
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -31,7 +41,7 @@ export default function ImageCompressor() {
   const [format, setFormat] = useState<'jpeg' | 'webp' | 'png'>('jpeg');
   const [quality, setQuality] = useState<number>(0.8);
   const [scale, setScale] = useState<number>(1);
-  const [resizeMode, setResizeMode] = useState<'scale' | 'exact'>('scale');
+  const [resizeMode, setResizeMode] = useState<'scale' | 'exact' | 'none'>('none');
   const [exactWidth, setExactWidth] = useState<number | ''>('');
   const [exactHeight, setExactHeight] = useState<number | ''>('');
   const [exportPath, setExportPath] = useState<string>('');
@@ -102,6 +112,9 @@ export default function ImageCompressor() {
 
   const clearFiles = () => {
     setFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const selectExportFolder = async () => {
@@ -116,6 +129,52 @@ export default function ImageCompressor() {
       }
     } catch (e) {
       console.error('Failed to select folder:', e);
+    }
+  };
+
+  const handleRemoveWatermark = async (item: FileItem) => {
+    try {
+      setFiles((prev) => prev.map((f) => (f.id === item.id ? { ...f, status: 'compressing' } : f)));
+      
+      // 让出主线程，确保 React 能够先渲染出 Loading 动画
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      const labsRoot = await getLabsRoot();
+      const tempDir = await join(labsRoot, 'temp');
+      await ensureDirectory(tempDir);
+      
+      const inputPath = await join(tempDir, `in_${item.id}.png`);
+      const outputPath = await join(tempDir, `out_${item.id}.png`);
+      
+      const res = await fetch(item.dataUrl);
+      const blob = await res.blob();
+      const buffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(buffer);
+      
+      await saveFile(tempDir, `in_${item.id}.png`, uint8Array);
+      
+      const result = await geminiWatermarkApi.autoRemove(inputPath, outputPath);
+      if (result.success) {
+        const outputBuffer = await readFile(outputPath);
+        const outputBlob = new Blob([outputBuffer], { type: 'image/png' });
+        
+        const reader = new FileReader();
+        reader.onload = () => {
+          setFiles((prev) => prev.map((f) => (f.id === item.id ? { 
+            ...f, 
+            dataUrl: reader.result as string,
+            status: 'pending'
+          } : f)));
+          toast({ title: '去水印成功', description: `${item.name} 水印已移除` });
+        };
+        reader.readAsDataURL(outputBlob);
+      } else {
+        throw new Error("处理失败");
+      }
+    } catch (e: any) {
+      console.error('Remove watermark failed:', e);
+      toast({ title: '去水印失败', description: e.message || String(e), variant: 'destructive' });
+      setFiles((prev) => prev.map((f) => (f.id === item.id ? { ...f, status: 'pending' } : f)));
     }
   };
 
@@ -229,7 +288,12 @@ export default function ImageCompressor() {
         accept="image/*"
         multiple
         className="hidden"
-        onChange={(e) => e.target.files && handleFiles(e.target.files)}
+        onChange={(e) => {
+          if (e.target.files) {
+            handleFiles(e.target.files);
+          }
+          e.target.value = '';
+        }}
       />
 
       {files.length > 0 && (
@@ -245,7 +309,10 @@ export default function ImageCompressor() {
             </button>
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                fileInputRef.current?.click();
+              }}
               className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors bg-muted/40 hover:bg-muted/80 px-2 py-1 rounded border"
             >
               <Upload className="w-3.5 h-3.5" />
@@ -266,18 +333,28 @@ export default function ImageCompressor() {
               {files.map((file) => (
                 <div key={file.id} className="bg-card border border-border/80 rounded-lg overflow-hidden group relative flex flex-col hover:shadow-md transition-shadow">
                   <div className="aspect-square relative overflow-hidden bg-muted/30">
-                    <img src={file.dataUrl} alt={file.name} className="w-full h-full object-cover" />
-                    {file.status !== 'done' && (
-                      <button
-                        onClick={() => removeFile(file.id)}
-                        className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 hover:bg-black/80 transition-all"
-                      >
-                        <XCircle className="w-4 h-4" />
-                      </button>
+                    <img src={file.dataUrl} alt={file.name} className={`w-full h-full ${showFullImage ? 'object-contain' : 'object-cover'}`} />
+                    {file.status !== 'done' && file.status !== 'compressing' && (
+                      <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRemoveWatermark(file); }}
+                          className="p-1.5 bg-black/60 text-white rounded-full hover:bg-black/90 shadow transition-colors"
+                          title="去除 Gemini 水印"
+                        >
+                          <Eraser className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
+                          className="p-1.5 bg-black/60 text-white rounded-full hover:bg-destructive shadow transition-colors"
+                          title="移除图片"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
                     {file.status === 'compressing' && (
                       <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                        <Loader2 className="w-6 h-6 text-white animate-spin" />
                       </div>
                     )}
                     {file.status === 'done' && (
@@ -303,7 +380,10 @@ export default function ImageCompressor() {
           <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900/5 dark:bg-black/10 select-none" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
             <div
               className="w-full max-w-xl aspect-[16/10] bg-card border-2 border-dashed border-border/80 hover:border-primary/50 hover:shadow-lg rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all duration-300 cursor-pointer group"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                fileInputRef.current?.click();
+              }}
             >
               <div className="w-16 h-16 rounded-full bg-primary/5 group-hover:bg-primary/10 text-primary/70 flex items-center justify-center transition-all mb-5 group-hover:scale-105">
                 <Upload className="w-8 h-8" />
@@ -387,10 +467,25 @@ export default function ImageCompressor() {
                 >
                   设定尺寸
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setResizeMode('none')}
+                  className={`flex-1 py-1 text-[11px] font-medium rounded transition-all ${
+                    resizeMode === 'none' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                  }`}
+                >
+                  保持原尺寸
+                </button>
               </div>
             </div>
 
-            {resizeMode === 'scale' ? (
+            {resizeMode === 'none' ? (
+              <div className="space-y-2">
+                <div className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                  不改变图片原始尺寸，仅通过优化算法减小文件体积，实现无损或高质量压缩。
+                </div>
+              </div>
+            ) : resizeMode === 'scale' ? (
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs font-semibold text-foreground/90">
                   <span>缩放比例</span>

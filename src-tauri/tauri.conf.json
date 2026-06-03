@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "sanOmni",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "identifier": "com.sanomni.app",
   "build": {
     "beforeDevCommand": "node ./scripts/ensure-vite-for-tauri.mjs",
@@ -49,9 +49,9 @@
       "active": true,
       "endpoints": [
         "https://github.com/sanker2008/sanOmni/releases/latest/download/latest.json",
-        "https://ghproxy.net/https://github.com/sanker2008/sanOmni/releases/latest/download/latest.json",
-        "https://github.moeyy.xyz/https://github.com/sanker2008/sanOmni/releases/latest/download/latest.json",
-        "https://ghp.ci/https://github.com/sanker2008/sanOmni/releases/latest/download/latest.json"
+        "https://ghfast.top/https://github.com/sanker2008/sanOmni/releases/latest/download/latest.json",
+        "https://mirror.ghproxy.com/https://github.com/sanker2008/sanOmni/releases/latest/download/latest.json",
+        "https://ghproxy.net/https://github.com/sanker2008/sanOmni/releases/latest/download/latest.json"
       ],
       "dialog": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJDQTYwNzc5QTQ0Mjc2NjMKUldSamRrS2tlUWVtTEQ3VUx2MERIZ3FqZkZVdXQ2TlorSkZtN1FtTGpuR251eU01SndzOFVqSUsK"

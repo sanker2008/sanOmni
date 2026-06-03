@@ -391,7 +391,7 @@ pub async fn scan_inbox_directory(
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.is_file() { continue; }
-            let ext = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
+            let _ext = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
                 Some(e) if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") => e,
                 _ => continue,
             };
@@ -533,7 +533,7 @@ pub async fn scan_ip_inbox_directory(
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.is_file() { continue; }
-            let ext = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
+            let _ext = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
                 Some(e) if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") => e,
                 _ => continue,
             };

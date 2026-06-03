@@ -10,6 +10,7 @@ import ProductImageMaker from './product-image-maker/ProductImageMaker';
 import ImageSlicer from './image-slicer/ImageSlicer';
 import AiImageEditor from './ai-image-editor/AiImageEditor';
 import ImageCompressor from './image-compressor/ImageCompressor';
+import WatermarkRemover from './watermark-remover/WatermarkRemover';
 import {
   ImageIcon,
   Scissors,
@@ -17,6 +18,7 @@ import {
   FlaskConical,
   Wand2,
   PenTool,
+  Eraser,
 } from 'lucide-react';
 import PngToSvg from './png-to-svg/PngToSvg';
 
@@ -38,6 +40,14 @@ const LAB_TOOLS: LabTool[] = [
     description: 'AI 驱动的图片编辑与遮罩涂鸦工具',
     icon: <Wand2 className="w-4 h-4" />,
     component: AiImageEditor,
+    available: true,
+  },
+  {
+    id: 'watermark-remover',
+    name: '智能去水印',
+    description: '上传图片，涂抹水印区域，AI 一键无痕去除',
+    icon: <Eraser className="w-4 h-4" />,
+    component: WatermarkRemover,
     available: true,
   },
   {

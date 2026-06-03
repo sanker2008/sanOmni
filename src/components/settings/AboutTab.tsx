@@ -35,7 +35,8 @@ export default function AboutTab() {
         setUpdateObj(null);
       }
     } catch (err: any) {
-      setError(err?.message || "网络请求失败");
+      const errMsg = typeof err === 'string' ? err : (err?.message || "网络请求失败");
+      setError(errMsg);
     } finally {
       setChecking(false);
     }
