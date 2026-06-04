@@ -23,6 +23,7 @@ export default function SlicerCanvas({
   const [hoveredGuideId, setHoveredGuideId] = useState<string | null>(null);
   const [draggedGuideId, setDraggedGuideId] = useState<string | null>(null);
   const [dragInfo, setDragInfo] = useState<{ startPosition: number; startMousePos: number } | null>(null);
+  const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -41,6 +42,30 @@ export default function SlicerCanvas({
     return () => window.removeEventListener('resize', updateDisplayedSize);
   }, [updateDisplayedSize, imageSrc]);
 
+  // Handle global keyboard delete event
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (!selectedGuideId) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+        e.preventDefault();
+        onDeleteGuideline(selectedGuideId);
+        setSelectedGuideId(null);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [selectedGuideId, onDeleteGuideline]);
+
+  // Automatically reset selectedGuideId if it is deleted from the external list
+  useEffect(() => {
+    if (selectedGuideId && !guidelines.some((g) => g.id === selectedGuideId)) {
+      setSelectedGuideId(null);
+    }
+  }, [guidelines, selectedGuideId]);
+
   const handleImageLoad = () => {
     updateDisplayedSize();
     // Second trigger after a tiny delay to ensure clientRect stabilizes
@@ -54,6 +79,7 @@ export default function SlicerCanvas({
   const handleMouseDown = (e: React.MouseEvent, guide: Guideline) => {
     e.preventDefault();
     e.stopPropagation();
+    setSelectedGuideId(guide.id);
     setDraggedGuideId(guide.id);
     setDragInfo({
       startPosition: guide.position,
@@ -74,7 +100,8 @@ export default function SlicerCanvas({
       const originalLimit = guide.type === 'vertical' ? originalWidth : originalHeight;
 
       const rawNewPos = dragInfo.startPosition + delta / scale;
-      const clampedNewPos = Math.max(0, Math.min(originalLimit, Math.round(rawNewPos)));
+      // Allow dragging out of bounds slightly (-50px to limit + 50px) to trigger deletion
+      const clampedNewPos = Math.max(-50, Math.min(originalLimit + 50, Math.round(rawNewPos)));
 
       onUpdateGuideline(draggedGuideId, clampedNewPos);
     },
@@ -82,9 +109,19 @@ export default function SlicerCanvas({
   );
 
   const handleMouseUp = useCallback(() => {
+    if (draggedGuideId) {
+      const guide = guidelines.find((g) => g.id === draggedGuideId);
+      if (guide) {
+        const limit = guide.type === 'vertical' ? originalWidth : originalHeight;
+        if (guide.position < 0 || guide.position > limit) {
+          onDeleteGuideline(draggedGuideId);
+          setSelectedGuideId(null);
+        }
+      }
+    }
     setDraggedGuideId(null);
     setDragInfo(null);
-  }, []);
+  }, [draggedGuideId, guidelines, originalWidth, originalHeight, onDeleteGuideline]);
 
   useEffect(() => {
     if (draggedGuideId) {
@@ -128,7 +165,10 @@ export default function SlicerCanvas({
   }, [guidelines]);
 
   return (
-    <div className="flex-1 h-full bg-slate-900/40 dark:bg-black/35 flex items-center justify-center p-6 overflow-auto">
+    <div
+      className="flex-1 h-full bg-slate-900/40 dark:bg-black/35 flex items-center justify-center p-6 overflow-auto"
+      onClick={() => setSelectedGuideId(null)}
+    >
       {imageSrc ? (
         <div
           ref={containerRef}
@@ -188,6 +228,10 @@ export default function SlicerCanvas({
                 const pos = guide.position * (isVertical ? scaleX : scaleY);
                 const isHovered = hoveredGuideId === guide.id;
                 const isDragged = draggedGuideId === guide.id;
+                const isSelected = selectedGuideId === guide.id;
+
+                const limit = isVertical ? originalWidth : originalHeight;
+                const isOutOfBounds = guide.position < 0 || guide.position > limit;
 
                 // Position styles for vertical/horizontal guidelines
                 const lineStyle: React.CSSProperties = isVertical
@@ -195,13 +239,13 @@ export default function SlicerCanvas({
                       left: pos,
                       top: 0,
                       bottom: 0,
-                      width: '1px',
+                      width: isSelected ? '2px' : '1px',
                     }
                   : {
                       top: pos,
                       left: 0,
                       right: 0,
-                      height: '1px',
+                      height: isSelected ? '2px' : '1px',
                     };
 
                 // Hotspot (larger invisible hover target for easy grab)
@@ -226,20 +270,28 @@ export default function SlicerCanvas({
                     {/* The Visual Guideline */}
                     <div
                       className={`absolute transition-colors pointer-events-none ${
-                        isDragged
-                          ? 'bg-sky-500 z-30 shadow-[0_0_8px_rgba(14,165,233,0.8)]'
-                          : isHovered
-                            ? 'bg-sky-400 z-20 shadow-[0_0_6px_rgba(56,189,248,0.6)]'
-                            : guide.gutterSide
-                              ? 'bg-rose-500/60 border-rose-500/30'
-                              : 'bg-teal-500/80 border-teal-500/40'
-                      } ${guide.isAuto && !guide.gutterSide ? 'border-dashed' : 'border-solid'}`}
+                        isOutOfBounds
+                          ? 'bg-rose-500 z-30 shadow-[0_0_8px_rgba(239,68,68,0.8)] border-rose-500'
+                          : isDragged
+                            ? 'bg-sky-500 z-30 shadow-[0_0_8px_rgba(14,165,233,0.8)]'
+                            : isSelected
+                              ? 'bg-sky-500 z-25 shadow-[0_0_10px_rgba(14,165,233,0.9)]'
+                              : isHovered
+                                ? 'bg-sky-400 z-20 shadow-[0_0_6px_rgba(56,189,248,0.6)]'
+                                : guide.gutterSide
+                                  ? 'bg-rose-500/60 border-rose-500/30'
+                                  : 'bg-teal-500/80 border-teal-500/40'
+                      } ${guide.isAuto && !guide.gutterSide && !isSelected && !isDragged ? 'border-dashed' : 'border-solid'}`}
                       style={lineStyle}
                     >
-                      {/* Floating Coordinate Label on Drag or Hover */}
-                      {(isHovered || isDragged) && (
+                      {/* Floating Coordinate Label on Drag, Hover or Select */}
+                      {(isHovered || isDragged || isSelected) && (
                         <div
-                          className="absolute bg-sky-950 text-sky-200 border border-sky-500/30 font-mono text-[9px] px-1 py-0.5 rounded shadow-md pointer-events-none z-30 flex items-center gap-1 shrink-0 whitespace-nowrap"
+                          className={`absolute text-white border font-mono text-[9px] px-1.5 py-0.5 rounded shadow-md pointer-events-none z-30 flex items-center gap-1 shrink-0 whitespace-nowrap transition-colors ${
+                            isOutOfBounds
+                              ? 'bg-rose-950 text-rose-200 border-rose-500/40 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+                              : 'bg-sky-950 text-sky-200 border-sky-500/30 shadow-[0_0_6px_rgba(14,165,233,0.3)]'
+                          }`}
                           style={
                             isVertical
                               ? {
@@ -254,12 +306,53 @@ export default function SlicerCanvas({
                                 }
                           }
                         >
-                          <span className="opacity-60">{isVertical ? 'X:' : 'Y:'}</span>
-                          <span className="font-semibold">{guide.position}</span>
-                          <span className="text-[7px] opacity-40">px</span>
+                          {isOutOfBounds ? (
+                            <span className="font-semibold flex items-center gap-1">🗑️ 松开以删除</span>
+                          ) : (
+                            <>
+                              <span className="opacity-60">{isVertical ? 'X:' : 'Y:'}</span>
+                              <span className="font-semibold">{guide.position}</span>
+                              <span className="text-[7px] opacity-40">px</span>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
+
+                    {/* Edge Quick Delete Button (shows on hover or select, but not while dragging) */}
+                    {(isHovered || isSelected) && !isDragged && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteGuideline(guide.id);
+                          setSelectedGuideId(null);
+                        }}
+                        onMouseEnter={() => setHoveredGuideId(guide.id)}
+                        onMouseLeave={() => setHoveredGuideId(null)}
+                        className="absolute z-45 w-4 h-4 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center shadow-md border border-white/20 transition-all pointer-events-auto select-none font-bold"
+                        style={
+                          isVertical
+                            ? {
+                                left: pos - 8,
+                                top: 6,
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                lineHeight: '14px',
+                              }
+                            : {
+                                top: pos - 8,
+                                left: 6,
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                lineHeight: '14px',
+                              }
+                        }
+                        title="删除此参考线"
+                      >
+                        ×
+                      </button>
+                    )}
 
                     {/* Interactive Hotspot Grab Handler */}
                     <div
@@ -272,7 +365,8 @@ export default function SlicerCanvas({
                         e.stopPropagation();
                         onDeleteGuideline(guide.id);
                       }}
-                      title="双击以删除此参考线"
+                      onClick={(e) => e.stopPropagation()}
+                      title="双击或点击后按 Delete 键可删除"
                     />
                   </React.Fragment>
                 );

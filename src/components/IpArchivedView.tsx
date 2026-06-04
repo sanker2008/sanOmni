@@ -627,15 +627,16 @@ export default function IpArchivedView() {
   };
 
   const [isConvertingWebp, setIsConvertingWebp] = useState(false);
-  const handleBatchConvertToWebp = async () => {
+  const handleBatchConvertFormat = async (format: 'webp' | 'png') => {
     if (selectedImages.length === 0) return;
     setIsConvertingWebp(true);
     let successCount = 0;
     let failCount = 0;
     let skippedCount = 0;
 
+    const formatName = format === 'webp' ? 'WebP' : 'PNG';
     const loadingToast = toast({
-      title: "正在批量转为 WebP",
+      title: `正在批量转为 ${formatName}`,
       description: "图片压缩优化中...",
       duration: 100000,
     });
@@ -646,16 +647,20 @@ export default function IpArchivedView() {
         const image = archivedImages.find((img) => img.id === imageId);
         if (!image) continue;
         
-        if (image.format?.toLowerCase() === 'webp') {
+        if (image.format?.toLowerCase() === format) {
           skippedCount++;
           continue;
         }
 
         try {
-          await convertIpImageToWebp(image as any);
+          if (format === 'webp') {
+            await convertIpImageToWebp(image as any);
+          } else {
+            await convertIpImageToPng(image as any);
+          }
           successCount++;
         } catch (err) {
-          console.error(`Failed to convert image ${imageId} to WebP:`, err);
+          console.error(`Failed to convert image ${imageId} to ${formatName}:`, err);
           failCount++;
         }
       }
@@ -665,7 +670,7 @@ export default function IpArchivedView() {
       clearSelection();
       
       toast({
-        title: `批量转为 WebP 完成`,
+        title: `批量转为 ${formatName} 完成`,
         description: `成功转换 ${successCount} 张，跳过 ${skippedCount} 张，失败 ${failCount} 张`,
         variant: failCount > 0 ? "destructive" : "default",
       });

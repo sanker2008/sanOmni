@@ -157,7 +157,13 @@ export default function ImageSlicer() {
   };
 
   const handleDeleteGuideline = (id: string) => {
-    setGuidelines((prev) => prev.filter((g) => g.id !== id));
+    setGuidelines((prev) => {
+      const guide = prev.find((g) => g.id === id);
+      if (guide?.pairId) {
+        return prev.filter((g) => g.pairId !== guide.pairId);
+      }
+      return prev.filter((g) => g.id !== id);
+    });
   };
 
   const handleClearGuidelines = () => {

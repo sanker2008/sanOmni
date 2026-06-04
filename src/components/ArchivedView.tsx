@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Settings,
   X,
+  Plus,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import BatchEditModal from "./BatchEditModal";
@@ -65,6 +66,139 @@ export default function ArchivedView() {
   const [sortBy, setSortBy] = useState<"time" | "size">("time");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [isVendorsDialogOpen, setIsVendorsDialogOpen] = useState(false);
+  const [isQuickImporting, setIsQuickImporting] = useState(false);
+
+  const handleQuickUpload = async () => {
+    if (!selectedModel || !selectedVendor) {
+      toast({
+        title: "无法归档",
+        description: "请先在左侧选择一个具体模型",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        multiple: true,
+        filters: [
+          {
+            name: "Images",
+            extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
+          },
+        ],
+      });
+
+      if (!selected) return;
+
+      const files = Array.isArray(selected) ? selected : [selected];
+      setIsQuickImporting(true);
+
+      const { join } = await import("@tauri-apps/api/path");
+      const { getAppRoot } = await import("@/lib/pathUtils");
+      const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
+
+      const customInboxPath = useUIStore.getState().settings.customInboxPath;
+      const customArchivedPath = useUIStore.getState().settings.customArchivedPath;
+
+      let inboxDir: string;
+      if (customInboxPath) {
+        inboxDir = customInboxPath;
+      } else {
+        const appDir = await getAppRoot();
+        inboxDir = await join(appDir, "inbox");
+      }
+
+      let libraryPath: string;
+      if (customArchivedPath) {
+        libraryPath = customArchivedPath;
+      } else {
+        libraryPath = await getAppRoot();
+      }
+
+      if (!(await exists(inboxDir))) {
+        await mkdir(inboxDir, { recursive: true });
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const filePath of files) {
+        const fileName = filePath.split(/[/\\]/).pop() || "unknown";
+        
+        let fileSize = 0;
+        try {
+          const fileMeta = await stat(filePath);
+          fileSize = fileMeta.size;
+        } catch (error) {
+          console.error(`Failed to get metadata for ${filePath}:`, error);
+        }
+
+        const timestamp = Date.now();
+        const uniqueFileName = `${timestamp}_${fileName}`;
+        const targetInboxPath = await join(inboxDir, uniqueFileName);
+
+        try {
+          await copyFile(filePath, targetInboxPath);
+        } catch (error) {
+          console.error(`Failed to copy file ${fileName}:`, error);
+          failCount++;
+          continue;
+        }
+
+        try {
+          const imported = await imageApi.import({
+            file_path: targetInboxPath,
+            file_name: fileName,
+            file_size: fileSize,
+            vendor_id: selectedVendor,
+            model_ids: [selectedModel],
+            primary_model_id: selectedModel,
+            tags: [],
+          });
+
+          const archiveResult = await imageApi.archive([imported.id], libraryPath);
+          if (archiveResult.success_count > 0) {
+            successCount++;
+          } else {
+            console.error(`Failed to archive image ${imported.id}:`, archiveResult.errors);
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`Failed to import/archive ${fileName}:`, error);
+          failCount++;
+        }
+      }
+
+      setIsQuickImporting(false);
+
+      if (successCount > 0) {
+        toast({
+          title: `✓ 成功归档 ${successCount} 张图片`,
+          description: `已直接归档至当前模型。`,
+        });
+        await loadArchivedImages();
+      }
+
+      if (failCount > 0) {
+        toast({
+          title: "✗ 归档失败",
+          description: `有 ${failCount} 张图片归档失败，请检查文件或重试。`,
+          variant: "destructive",
+        });
+      }
+
+    } catch (error) {
+      console.error("Quick upload and archive failed:", error);
+      setIsQuickImporting(false);
+      toast({
+        title: "✗ 操作失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleBatchSetWatermark = async (hasWatermark: boolean) => {
     if (selectedImages.length === 0) return;
@@ -448,7 +582,14 @@ export default function ArchivedView() {
                         return (
                           <button
                             key={model.id}
-                            onClick={() => setSelectedModel(model.id === selectedModel ? null : model.id)}
+                            onClick={() => {
+                              if (model.id === selectedModel) {
+                                setSelectedModel(null);
+                              } else {
+                                setSelectedModel(model.id);
+                                setSelectedVendor(vendor.id);
+                              }
+                            }}
                             className={cn(
                               "w-full flex items-center justify-between px-3 py-1.5 rounded-md text-xs transition-colors",
                               selectedModel === model.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
@@ -828,6 +969,24 @@ export default function ArchivedView() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Floating Action Button for Quick Upload & Archive */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={handleQuickUpload}
+          disabled={isQuickImporting}
+          className={cn(
+            "w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 p-0 bg-primary text-primary-foreground hover:bg-primary/90",
+            (!selectedModel || !selectedVendor) && "opacity-60 bg-muted hover:bg-muted text-muted-foreground cursor-not-allowed"
+          )}
+          title={(!selectedModel || !selectedVendor) ? "请先选择具体模型再上传" : "快速上传并归档至当前模型"}
+        >
+          {isQuickImporting ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Plus className="w-5 h-5" />
+          )}
+        </Button>
+      </div>
     </div>
   );
 }
