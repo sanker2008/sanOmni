@@ -162,11 +162,19 @@ pub fn get_ip_assets(db_path: String) -> CommandResult<Vec<IpAsset>> {
     };
 
     let rows = stmt.query_map([], |row| {
+        let avatar_path: Option<String> = row.get(3)?;
+        let verified_avatar_path = avatar_path.and_then(|p| {
+            if Path::new(&p).exists() {
+                Some(p)
+            } else {
+                None
+            }
+        });
         Ok(IpAsset {
             id: row.get(0)?,
             name: row.get(1)?,
             path: row.get(2).unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
-            avatar_path: row.get(3)?,
+            avatar_path: verified_avatar_path,
             inspiration: row.get(4)?,
             description: row.get(5)?,
             created_at: row.get(6)?,
@@ -231,11 +239,19 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
     };
 
     let ip = match stmt.query_row(params![ip_id], |row| {
+        let avatar_path: Option<String> = row.get(3)?;
+        let verified_avatar_path = avatar_path.and_then(|p| {
+            if Path::new(&p).exists() {
+                Some(p)
+            } else {
+                None
+            }
+        });
         Ok(IpAsset {
             id: row.get(0)?,
             name: row.get(1)?,
             path: row.get(2).unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
-            avatar_path: row.get(3)?,
+            avatar_path: verified_avatar_path,
             inspiration: row.get(4)?,
             description: row.get(5)?,
             created_at: row.get(6)?,
@@ -489,6 +505,7 @@ pub fn create_ip_asset(
     inspiration: Option<String>,
     description: Option<String>,
     avatar_path: Option<String>,
+    copy_avatar: Option<bool>,
 ) -> CommandResult<IpAsset> {
     let conn = match Connection::open(Path::new(&db_path)) {
         Ok(c) => c,
@@ -516,8 +533,11 @@ pub fn create_ip_asset(
 
     let copied_avatar_path = match avatar_path {
         Some(src) => {
+            let should_copy = copy_avatar.unwrap_or(true);
             if src.trim().is_empty() {
                 None
+            } else if !should_copy {
+                Some(src)
             } else {
                 match copy_to_ip_archived(&db_path, &path, "root", None, &src) {
                     Ok(dest) => Some(dest),
@@ -583,6 +603,7 @@ pub fn update_ip_asset(
     inspiration: Option<String>,
     description: Option<String>,
     avatar_path: Option<String>,
+    copy_avatar: Option<bool>,
 ) -> CommandResult<IpAsset> {
     if ip_id == "unknown" {
         return CommandResult::err("系统默认的未知形象不可被编辑".to_string());
@@ -625,13 +646,25 @@ pub fn update_ip_asset(
 
     let copied_avatar_path = match avatar_path {
         Some(src) => {
+            let should_copy = copy_avatar.unwrap_or(true);
             if src.trim().is_empty() {
                 None
             } else if Some(src.clone()) == old_avatar_path {
-                old_avatar_path
+                old_avatar_path.clone()
+            } else if !should_copy {
+                Some(src)
             } else {
                 match copy_to_ip_archived(&db_path, &path, "root", None, &src) {
-                    Ok(dest) => Some(dest),
+                    Ok(dest) => {
+                        // If we successfully copied a new avatar, and there was an old one, delete the old one
+                        if let Some(ref old) = old_avatar_path {
+                            let old_path = Path::new(old);
+                            if old_path.exists() && old_path != Path::new(&dest) {
+                                let _ = std::fs::remove_file(old_path);
+                            }
+                        }
+                        Some(dest)
+                    },
                     Err(e) => return CommandResult::err(format!("拷贝头像文件失败: {}", e)),
                 }
             }

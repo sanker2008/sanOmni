@@ -60,8 +60,11 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
   );
 
   // Images states
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  type ImageItem = 
+    | { type: 'existing'; url: string; path: string }
+    | { type: 'new'; url: string; file: File };
+    
+  const [images, setImages] = useState<ImageItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isSaving, setIsSaving] = useState(false);
@@ -99,17 +102,16 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
           try {
             const parsed = JSON.parse(character.image_paths);
             if (Array.isArray(parsed)) {
-              setPreviewUrls(parsed.map(path => convertFileSrc(path)));
+              setImages(parsed.map(path => ({ type: 'existing', url: convertFileSrc(path), path })));
             } else {
-              setPreviewUrls([]);
+              setImages([]);
             }
           } catch {
-            setPreviewUrls([]);
+            setImages([]);
           }
         } else {
-          setPreviewUrls([]);
+          setImages([]);
         }
-        setSelectedFiles([]);
       } else {
         // Reset for creating
         setName("");
@@ -118,8 +120,7 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
         setDescription("");
         setSelectedIpId("");
         setIpRelationNote("");
-        setPreviewUrls([]);
-        setSelectedFiles([]);
+        setImages([]);
         setIpSearchQuery("");
       }
     }
@@ -128,11 +129,12 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const newFiles = Array.from(files);
-      setSelectedFiles((prev) => [...prev, ...newFiles]);
-      
-      const newUrls = newFiles.map(file => URL.createObjectURL(file));
-      setPreviewUrls((prev) => [...prev, ...newUrls]);
+      const newItems = Array.from(files).map(file => ({
+        type: 'new' as const,
+        url: URL.createObjectURL(file),
+        file
+      }));
+      setImages(prev => [...prev, ...newItems]);
     }
   };
 
@@ -141,16 +143,7 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
   };
 
   const handleRemoveImage = (index: number) => {
-    setPreviewUrls((prev) => prev.filter((_, idx) => idx !== index));
-    
-    // Calculate if it's from the new files
-    // If we are editing, some files are already on the backend, so selectedFiles has fewer items than previewUrls
-    const existingCount = character?.image_paths ? JSON.parse(character.image_paths).length : 0;
-    
-    if (index >= existingCount) {
-      const fileIndex = index - existingCount;
-      setSelectedFiles((prev) => prev.filter((_, idx) => idx !== fileIndex));
-    }
+    setImages(prev => prev.filter((_, idx) => idx !== index));
   };
 
   const handleSave = async () => {
@@ -175,15 +168,39 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
         ip_id: selectedIpId || null,
         ip_relation_note: ipRelationNote.trim() || null,
       };
+      
+      let imagesChanged = false;
+      const originalPaths = character?.image_paths ? JSON.parse(character.image_paths) : [];
+      if (images.length !== originalPaths.length) {
+        imagesChanged = true;
+      } else {
+        for (let i = 0; i < images.length; i++) {
+          const item = images[i];
+          if (item.type !== 'existing' || item.path !== originalPaths[i]) {
+            imagesChanged = true;
+            break;
+          }
+        }
+      }
 
       if (character) {
         // Edit mode
         savedChar = await updateCharacter(character.id, payload);
         
-        // Overwrite images if any new files are uploaded
-        // (Tauri character image uploads are single complete batches)
-        if (selectedFiles.length > 0) {
-          await uploadImages(character.id, workId, selectedFiles);
+        if (imagesChanged) {
+          const finalFiles: File[] = [];
+          for (const item of images) {
+            if (item.type === 'existing') {
+              const response = await fetch(item.url);
+              const blob = await response.blob();
+              const filename = item.path.split(/[/\\]/).pop() || 'image.png';
+              const mimeType = filename.toLowerCase().endsWith('.webp') ? 'image/webp' : blob.type;
+              finalFiles.push(new File([blob], filename, { type: mimeType }));
+            } else {
+              finalFiles.push(item.file);
+            }
+          }
+          await uploadImages(character.id, workId, finalFiles);
         }
         
         toast({
@@ -197,9 +214,9 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
           ...payload
         });
 
-        // Upload images if any
-        if (selectedFiles.length > 0) {
-          await uploadImages(savedChar.id, workId, selectedFiles);
+        if (imagesChanged && images.length > 0) {
+          const finalFiles: File[] = images.map(item => item.type === 'new' ? item.file : new File([], ''));
+          await uploadImages(savedChar.id, workId, finalFiles);
         }
 
         toast({
@@ -384,9 +401,9 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
               </div>
 
               {/* Previews lists */}
-              {previewUrls.map((url, idx) => (
+              {images.map((item, idx) => (
                 <div key={idx} className="w-20 h-24 rounded-lg overflow-hidden border relative group bg-background flex items-center justify-center shadow-sm shrink-0">
-                  <img src={url} className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`} alt={`Preview ${idx}`} />
+                  <img src={item.url} className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`} alt={`Preview ${idx}`} />
                   <button
                     onClick={() => handleRemoveImage(idx)}
                     className="absolute top-1 right-1 bg-black/60 hover:bg-black/90 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"

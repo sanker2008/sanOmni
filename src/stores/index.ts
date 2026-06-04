@@ -778,10 +778,12 @@ export const useWorksStore = create<WorksStore>((set, get) => ({
   setLoading: (loading) => set({ loading }),
   
   uploadCover: async (workId, file) => {
+    const { convertFileToWebp } = await import("@/lib/webpConverter");
+    const webpFile = await convertFileToWebp(file);
     const { uploadWorkCover, getWorkById } = await import("@/services/tauri");
-    const arrayBuffer = await file.arrayBuffer();
+    const arrayBuffer = await webpFile.arrayBuffer();
     const data = Array.from(new Uint8Array(arrayBuffer));
-    const ext = file.name.split('.').pop() || 'jpg';
+    const ext = webpFile.name.split('.').pop() || 'webp';
     const coverPath = await uploadWorkCover(workId, data, ext);
     const fullWork = await getWorkById(workId);
     set((state) => ({
@@ -895,12 +897,14 @@ export const useCharactersStore = create<CharactersStore>((set) => ({
   },
   
   uploadImages: async (characterId, workId, files) => {
+    const { convertFileToWebp } = await import("@/lib/webpConverter");
     const { uploadCharacterImages, getCharacterById } = await import("@/services/tauri");
     const images: [number[], string][] = await Promise.all(
       files.map(async (file) => {
-        const arrayBuffer = await file.arrayBuffer();
+        const webpFile = await convertFileToWebp(file);
+        const arrayBuffer = await webpFile.arrayBuffer();
         const data = Array.from(new Uint8Array(arrayBuffer));
-        const ext = file.name.split('.').pop() || 'jpg';
+        const ext = webpFile.name.split('.').pop() || 'webp';
         return [data, ext] as [number[], string];
       })
     );

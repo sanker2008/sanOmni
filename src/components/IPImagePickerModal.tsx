@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Check, X } from "lucide-react";
-import { useImageStore } from "@/stores";
+import { useImageStore, useUIStore } from "@/stores";
 
 interface IPImagePickerModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface IPImagePickerModalProps {
   title: string;
   description: string;
   multiSelect?: boolean;
+  images?: any[];
 }
 
 export default function IPImagePickerModal({
@@ -23,20 +24,24 @@ export default function IPImagePickerModal({
   title,
   description,
   multiSelect = true,
+  images,
 }: IPImagePickerModalProps) {
   const { inboxImages, archivedImages } = useImageStore();
+  const settings = useUIStore((state) => state.settings);
+  const showFullImage = settings?.showFullImage ?? false;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // 合并库中所有图片
   const allImages = useMemo(() => {
+    if (images) return images;
     // 根据哈希排重或简单合并
     const map = new Map();
     for (const img of [...inboxImages, ...archivedImages]) {
       map.set(img.id, img);
     }
     return Array.from(map.values());
-  }, [inboxImages, archivedImages]);
+  }, [inboxImages, archivedImages, images]);
 
   // 根据搜索条件过滤
   const filteredImages = useMemo(() => {
@@ -121,7 +126,9 @@ export default function IPImagePickerModal({
                     <img
                       src={convertFileSrc(image.absolute_path)}
                       alt={image.filename}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      className={`w-full h-full transition-transform duration-300 group-hover:scale-105 ${
+                        showFullImage ? "object-contain bg-background" : "object-cover"
+                      }`}
                       loading="lazy"
                     />
 

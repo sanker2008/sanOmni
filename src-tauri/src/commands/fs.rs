@@ -248,3 +248,43 @@ pub fn repair_database_paths(db_path: String, search_dirs: Vec<String>, auto_fix
         unfixable_paths,
     })
 }
+
+#[tauri::command]
+pub fn show_in_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        use std::fs::metadata;
+        if metadata(&path).map(|m| m.is_dir()).unwrap_or(false) {
+            Command::new("xdg-open")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| format!("Failed to open folder: {}", e))?;
+        } else {
+            let mut path2 = std::path::PathBuf::from(&path);
+            path2.pop();
+            Command::new("xdg-open")
+                .arg(&path2)
+                .spawn()
+                .map_err(|e| format!("Failed to open folder: {}", e))?;
+        }
+    }
+
+    Ok(())
+}

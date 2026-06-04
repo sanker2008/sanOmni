@@ -59,3 +59,13 @@ export async function resolveSettingPath(settingKey: string, value: string, curr
       return "";
   }
 }
+
+export async function revealFileInFolder(filePath: string) {
+  if (!filePath) return;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('show_in_folder', { path: filePath });
+  } catch (e) {
+    console.error('Failed to reveal file in folder:', e);
+  }
+}

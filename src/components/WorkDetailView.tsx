@@ -5,11 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/useToast";
-import { ArrowLeft, Edit, Plus, Users, Film, Calendar, User, Building, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit, Plus, Users, Film, Calendar, User, Building, Trash2, FolderOpen, Minimize, Loader2 } from "lucide-react";
 import WorkEditModal from "./WorkEditModal";
 import CharacterEditModal from "./CharacterEditModal";
 import CharacterCard from "./CharacterCard";
 import ConfirmDialog from "./ConfirmDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface WorkDetailViewProps {
   onIpSelect?: (ipId: string | null) => void;
@@ -56,6 +62,7 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
   
   const [showDeleteWorkConfirm, setShowDeleteWorkConfirm] = useState(false);
   const [isDeletingWork, setIsDeletingWork] = useState(false);
+  const [convertingToWebp, setConvertingToWebp] = useState(false);
   
   // Drag and drop sorting states
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -87,6 +94,31 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
     } finally {
       setIsDeletingWork(false);
       setShowDeleteWorkConfirm(false);
+    }
+  };
+
+  const handleConvertToWebp = async () => {
+    if (convertingToWebp || !selectedWork.cover_path) return;
+    
+    setConvertingToWebp(true);
+    toast({ title: "正在转为 WebP", description: "转换中..." });
+    
+    try {
+      const src = convertFileSrc(selectedWork.cover_path);
+      const response = await fetch(src);
+      const blob = await response.blob();
+      const filename = selectedWork.cover_path.split(/[/\\]/).pop() || 'cover.png';
+      const file = new File([blob], filename, { type: blob.type });
+      
+      const { uploadCover } = useWorksStore.getState();
+      await uploadCover(selectedWork.id, file);
+      
+      toast({ title: "✓ 转换成功", description: "已成功转为 WebP 格式" });
+    } catch (error: any) {
+      console.error("WebP conversion failed:", error);
+      toast({ title: "转换失败", description: error.message || "未知错误", variant: "destructive" });
+    } finally {
+      setConvertingToWebp(false);
     }
   };
 
@@ -172,13 +204,41 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
           <ScrollArea className="flex-1">
             <div className="p-5 space-y-6 flex flex-col">
               {/* Cover Large view */}
-              <div className="aspect-[3/4] w-full bg-muted rounded-xl overflow-hidden shadow-md border relative flex items-center justify-center">
+              <div className="aspect-[3/4] w-full bg-muted rounded-xl overflow-hidden shadow-md border relative flex items-center justify-center group">
                 {selectedWork.cover_path ? (
-                  <img
-                    src={convertFileSrc(selectedWork.cover_path)}
-                    alt={selectedWork.name}
-                    className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`}
-                  />
+                  <>
+                    <img
+                      src={`${convertFileSrc(selectedWork.cover_path)}?t=${new Date(selectedWork.updated_at).getTime()}`}
+                      alt={selectedWork.name}
+                      className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`}
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={async () => {
+                          const { revealFileInFolder } = await import("@/lib/pathUtils");
+                          revealFileInFolder(selectedWork.cover_path!);
+                        }}
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                        打开目录
+                      </Button>
+                      {!selectedWork.cover_path.toLowerCase().endsWith('.webp') && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="gap-1.5 ml-2"
+                          onClick={handleConvertToWebp}
+                          disabled={convertingToWebp}
+                        >
+                          {convertingToWebp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Minimize className="w-4 h-4" />}
+                          转为 WebP
+                        </Button>
+                      )}
+                    </div>
+                  </>
                 ) : (
                   <Film className="w-16 h-16 text-muted-foreground opacity-30" />
                 )}

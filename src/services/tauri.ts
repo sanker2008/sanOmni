@@ -720,7 +720,7 @@ export const ipApi = {
     return result.data;
   },
 
-  async create(name: string, path: string, inspiration?: string, description?: string, avatarPath?: string): Promise<IpAsset> {
+  async create(name: string, path: string, inspiration?: string, description?: string, avatarPath?: string, copyAvatar?: boolean): Promise<IpAsset> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<IpAsset>>("create_ip_asset", {
       dbPath,
@@ -729,6 +729,7 @@ export const ipApi = {
       inspiration,
       description,
       avatarPath,
+      copyAvatar,
     });
     if (!result.success || !result.data) {
       throw new Error(result.error || "创建 IP 失败");
@@ -736,7 +737,7 @@ export const ipApi = {
     return result.data;
   },
 
-  async update(ipId: string, name: string, path: string, inspiration?: string, description?: string, avatarPath?: string): Promise<IpAsset> {
+  async update(ipId: string, name: string, path: string, inspiration?: string, description?: string, avatarPath?: string, copyAvatar?: boolean): Promise<IpAsset> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<IpAsset>>("update_ip_asset", {
       dbPath,
@@ -746,6 +747,7 @@ export const ipApi = {
       inspiration,
       description,
       avatarPath,
+      copyAvatar,
     });
     if (!result.success || !result.data) {
       throw new Error(result.error || "更新 IP 失败");
@@ -1044,6 +1046,15 @@ interface UpdateIpImageRequest {
   associate_sticker_pack_id?: string;
 }
 
+export interface UpdateIpImageFileRequest {
+  ip_image_id: string;
+  new_filename: string;
+  new_absolute_path: string;
+  new_relative_path: string;
+  new_format?: string;
+  new_file_size: number;
+}
+
 interface ArchiveIpImagesRequest {
   ip_image_ids: string[];
   naming_template?: string;
@@ -1075,6 +1086,13 @@ export const ipImageApi = {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<IpImageResponse>>("update_ip_image", { dbPath, request });
     if (!result.success || !result.data) throw new Error(result.error || "更新 IP 图片失败");
+    return result.data;
+  },
+
+  async updateFile(request: UpdateIpImageFileRequest): Promise<IpImageResponse> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<IpImageResponse>>("update_ip_image_file", { dbPath, request });
+    if (!result.success || !result.data) throw new Error(result.error || "更新 IP 图片文件失败");
     return result.data;
   },
 

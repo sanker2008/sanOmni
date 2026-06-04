@@ -5,8 +5,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
-import { GripVertical, Edit, Trash2, ChevronDown, ChevronUp, Star, HelpCircle, Film, Sparkles } from "lucide-react";
+import { GripVertical, Edit, Trash2, ChevronDown, ChevronUp, Star, HelpCircle, Film, Sparkles, FolderOpen, Minimize, Loader2 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface CharacterCardProps {
   character: CharacterWithRelations;
@@ -37,6 +43,7 @@ export default function CharacterCard({ character, onEdit, onIpSelect }: Charact
   const [isExpanded, setIsExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [convertingToWebp, setConvertingToWebp] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const { toast } = useToast();
   const settings = useUIStore((state) => state.settings);
@@ -73,6 +80,32 @@ export default function CharacterCard({ character, onEdit, onIpSelect }: Charact
     }
   };
 
+  const handleConvertFormat = async (e: React.MouseEvent, format: 'webp' | 'png') => {
+    e.stopPropagation();
+    if (convertingToWebp || !character.image_paths || character.image_paths === '[]') return;
+    setConvertingToWebp(true);
+    toast({ title: `正在转为 ${format.toUpperCase()}`, description: "图片优化中..." });
+    try {
+      const paths = JSON.parse(character.image_paths);
+      if (Array.isArray(paths)) {
+        const finalFiles: File[] = [];
+        for (const p of paths) {
+          const response = await fetch(convertFileSrc(p));
+          const blob = await response.blob();
+          const file = new File([blob], p.split(/[\\/]/).pop() || 'image.png', { type: blob.type });
+          const newFile = format === 'webp' ? await convertFileToWebp(file) : await convertFileToPng(file);
+          finalFiles.push(newFile);
+        }
+        await uploadImages(character.id, character.work_id, finalFiles);
+        toast({ title: "✓ 转换成功", description: `已成功转为 ${format.toUpperCase()} 格式` });
+      }
+    } catch (error: any) {
+      toast({ title: "转换失败", description: String(error), variant: "destructive" });
+    } finally {
+      setConvertingToWebp(false);
+    }
+  };
+
   const handleIpClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (character.ip_id && onIpSelect) {
@@ -90,13 +123,43 @@ export default function CharacterCard({ character, onEdit, onIpSelect }: Charact
           </div>
 
           {/* Character Photo / Carousel */}
-          <div className="w-16 h-20 bg-muted border rounded overflow-hidden flex-shrink-0 flex items-center justify-center relative bg-zinc-100 dark:bg-zinc-800">
+          <div className="w-16 h-20 bg-muted border rounded overflow-hidden flex-shrink-0 flex items-center justify-center relative bg-zinc-100 dark:bg-zinc-800 group/img">
             {imagePaths.length > 0 ? (
-              <img
-                src={convertFileSrc(imagePaths[carouselIndex])}
-                alt={character.name}
-                className={`w-full h-full ${showFullImage ? "object-contain bg-background" : "object-cover"}`}
-              />
+              <>
+                <img
+                  src={convertFileSrc(imagePaths[carouselIndex])}
+                  alt={character.name}
+                  className={`w-full h-full ${showFullImage ? "object-contain bg-background" : "object-cover"}`}
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-white hover:text-primary hover:bg-black/50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      import("@/lib/pathUtils").then(({ revealFileInFolder }) => {
+                        revealFileInFolder(imagePaths[carouselIndex]);
+                      });
+                    }}
+                    title="打开所在目录"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                  </Button>
+                  {!imagePaths[carouselIndex].toLowerCase().endsWith('.webp') && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-white hover:text-primary hover:bg-black/50"
+                      onClick={handleConvertToWebp}
+                      title="转为 WebP"
+                      disabled={convertingToWebp}
+                    >
+                      {convertingToWebp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Minimize className="w-3.5 h-3.5" />}
+                    </Button>
+                  )}
+                </div>
+              </>
             ) : (
               <HelpCircle className="w-6 h-6 text-muted-foreground opacity-30" />
             )}

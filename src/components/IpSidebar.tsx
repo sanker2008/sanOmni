@@ -107,7 +107,8 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
         ip.path,
         ip.inspiration || undefined,
         ip.description || undefined,
-        finalAvatarPath
+        finalAvatarPath,
+        false
       );
     } catch (updateError) {
       console.error("更新 IP 头像路径失败:", updateError);
@@ -121,6 +122,8 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
   const [ips, setIps] = useState<IpAsset[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { settings } = useUIStore();
+  const showFullImage = settings?.showFullImage ?? false;
 
   // 表单弹窗状态
   const [isIpModalOpen, setIsIpModalOpen] = useState(false);
@@ -336,7 +339,7 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
                       <img
                         src={convertFileSrc(ip.avatar_path)}
                         alt={ip.name}
-                        className="w-full h-full object-cover"
+                        className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">
@@ -393,7 +396,7 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
                   <img
                     src={convertFileSrc(ipAvatarPath)}
                     alt="Avatar"
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`}
                   />
                 ) : (
                   <Users className="w-8 h-8 opacity-30" />

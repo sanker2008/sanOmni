@@ -742,6 +742,28 @@ pub async fn delete_ip_image(db_path: String, ip_image_id: String) -> CommandRes
         return CommandResult::err(format!("Failed to delete from database: {}", e));
     }
 
+    // Clean up references to this image path in other tables
+    let _ = conn.execute(
+        "UPDATE ip_assets SET avatar_path = NULL WHERE avatar_path = ?",
+        [&ip_image.absolute_path],
+    );
+    let _ = conn.execute(
+        "DELETE FROM ip_creations WHERE image_path = ?",
+        [&ip_image.absolute_path],
+    );
+    let _ = conn.execute(
+        "DELETE FROM ip_emojis WHERE image_path = ?",
+        [&ip_image.absolute_path],
+    );
+    let _ = conn.execute(
+        "DELETE FROM ip_character_sheets WHERE image_path = ?",
+        [&ip_image.absolute_path],
+    );
+    let _ = conn.execute(
+        "UPDATE works SET cover_path = NULL WHERE cover_path = ?",
+        [&ip_image.absolute_path],
+    );
+
     CommandResult::ok(true)
 }
 
@@ -892,4 +914,84 @@ fn fetch_associated_ips(conn: &Connection, ip_image_id: &str) -> Result<Vec<Stri
         }
     }
     Ok(ips)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateIpImageFileRequest {
+    pub ip_image_id: String,
+    pub new_filename: String,
+    pub new_absolute_path: String,
+    pub new_relative_path: String,
+    pub new_format: Option<String>,
+    pub new_file_size: i64,
+}
+
+#[tauri::command]
+pub async fn update_ip_image_file(
+    db_path: String,
+    request: UpdateIpImageFileRequest,
+) -> CommandResult<IpImageResponse> {
+    let conn = match Connection::open(&db_path) {
+        Ok(conn) => conn,
+        Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
+    };
+
+    // Fetch old absolute_path
+    let old_absolute_path: Option<String> = conn.query_row(
+        "SELECT absolute_path FROM ip_images WHERE id = ?",
+        [&request.ip_image_id],
+        |row| row.get(0),
+    ).ok();
+
+    if let Err(e) = conn.execute(
+        "UPDATE ip_images SET 
+            filename = ?, relative_path = ?, absolute_path = ?, format = ?, file_size = ?
+        WHERE id = ?",
+        rusqlite::params![
+            &request.new_filename,
+            &request.new_relative_path,
+            &request.new_absolute_path,
+            &request.new_format,
+            request.new_file_size,
+            &request.ip_image_id
+        ],
+    ) {
+        return CommandResult::err(format!("Failed to update database: {}", e));
+    }
+
+    // Cascade update to other tables that reference the absolute path
+    if let Some(old_path) = old_absolute_path {
+        let new_path = &request.new_absolute_path;
+        
+        let _ = conn.execute("UPDATE ip_assets SET avatar_path = ? WHERE avatar_path = ?", [new_path, &old_path]);
+        let _ = conn.execute("UPDATE ip_creations SET image_path = ? WHERE image_path = ?", [new_path, &old_path]);
+        let _ = conn.execute("UPDATE ip_emojis SET image_path = ? WHERE image_path = ?", [new_path, &old_path]);
+        let _ = conn.execute("UPDATE ip_character_sheets SET image_path = ? WHERE image_path = ?", [new_path, &old_path]);
+        let _ = conn.execute("UPDATE works SET cover_path = ? WHERE cover_path = ?", [new_path, &old_path]);
+        
+        // For characters.image_paths, it might be JSON or comma separated. 
+        // We'll replace occurrences of the old path with the new path using SQLite REPLACE.
+        let _ = conn.execute("UPDATE characters SET image_paths = REPLACE(image_paths, ?, ?) WHERE image_paths LIKE '%' || ? || '%'", [
+            &old_path, new_path, &old_path
+        ]);
+    }
+
+    let ip_image_id = &request.ip_image_id;
+    let ip_image = match fetch_ip_image_by_id(&conn, ip_image_id) {
+        Some(img) => img,
+        None => return CommandResult::err("IP image not found after update".to_string()),
+    };
+    let tags = fetch_ip_image_tags(&conn, ip_image_id).unwrap_or_default();
+    let ip_name = fetch_ip_name(&conn, &ip_image.ip_id).unwrap_or_else(|| "Unknown".to_string());
+    let ip_ids = fetch_associated_ips(&conn, ip_image_id).unwrap_or_default();
+    let ip_ids = if ip_ids.is_empty() { vec![ip_image.ip_id.clone()] } else { ip_ids };
+    let primary_ip_id = ip_image.ip_id.clone();
+
+    CommandResult::ok(IpImageResponse { 
+        ip_image, 
+        tags, 
+        ip_name,
+        ip_ids,
+        primary_ip_id,
+    })
 }

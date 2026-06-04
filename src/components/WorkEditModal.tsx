@@ -88,7 +88,7 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
         setProducer(work.producer || "");
         setDirectorAuthor(work.director_author || "");
         setDescription(work.description || "");
-        setCoverPreview(work.cover_path ? convertFileSrc(work.cover_path) : null);
+        setCoverPreview(work.cover_path ? `${convertFileSrc(work.cover_path)}?t=${new Date(work.updated_at).getTime()}` : null);
         setCoverFile(null);
         setSelectedTagIds(work.tags?.map((t) => t.id) || []);
       } else {

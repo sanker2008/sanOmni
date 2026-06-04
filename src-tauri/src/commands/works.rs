@@ -351,15 +351,41 @@ pub async fn upload_work_cover(
     
     // Resolve path identifier
     let conn = get_connection(&app_handle)?;
-    let path_ident: String = conn.query_row(
-        "SELECT path FROM works WHERE id = ?",
+    let (path_ident, old_cover_path): (String, Option<String>) = conn.query_row(
+        "SELECT path, cover_path FROM works WHERE id = ?",
         params![work_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     ).map_err(|e| e.to_string())?;
     
     let work_dir = app_data_dir.join("works").join(&path_ident);
     std::fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
     
+    // Delete old cover file if it exists and has a different extension
+    if let Some(ref path) = old_cover_path {
+        let abs_old_path = app_data_dir.join(&path.replace('/', &std::path::MAIN_SEPARATOR.to_string())
+                                              .replace('\\', &std::path::MAIN_SEPARATOR.to_string()));
+        if abs_old_path.exists() {
+            let _ = std::fs::remove_file(&abs_old_path);
+        }
+    }
+    
+    // Check if there are other cover files in the directory and delete them (e.g. cover.png, cover.jpg)
+    // This handles the case where we convert to webp and need to delete the original png
+    if let Ok(entries) = std::fs::read_dir(&work_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    let path = entry.path();
+                    if let Some(file_name) = path.file_stem().and_then(|s| s.to_str()) {
+                        if file_name == "cover" {
+                            let _ = std::fs::remove_file(&path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let cover_path = work_dir.join(format!("cover.{}", extension));
     std::fs::write(&cover_path, image_data).map_err(|e| e.to_string())?;
     

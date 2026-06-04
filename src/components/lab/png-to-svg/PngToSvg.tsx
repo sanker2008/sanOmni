@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Download, RefreshCw, FolderOpen, Image as ImageIcon, HelpCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
+import { Upload, Download, RefreshCw, FolderOpen, Image as ImageIcon, HelpCircle, Settings, PlayCircle } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
@@ -17,14 +15,14 @@ export default function PngToSvg() {
   const { toast } = useToast();
   
   // Settings
-  const [colors, setColors] = useState([16]);
-  const [blurRadius, setBlurRadius] = useState([1]);
-  const [pathOmit, setPathOmit] = useState([8]);
-  const [ltres, setLtres] = useState([1]);
-  const [qtres, setQtres] = useState([1]);
-  const [rightAngleEnhance, setRightAngleEnhance] = useState(true);
-  const [minColorRatio, setMinColorRatio] = useState([0.02]);
-  const [colorQuantCycles, setColorQuantCycles] = useState([3]);
+  const [colors, setColors] = useState<number>(16);
+  const [blurRadius, setBlurRadius] = useState<number>(1);
+  const [pathOmit, setPathOmit] = useState<number>(8);
+  const [ltres, setLtres] = useState<number>(1);
+  const [qtres, setQtres] = useState<number>(1);
+  const [rightAngleEnhance, setRightAngleEnhance] = useState<boolean>(true);
+  const [minColorRatio, setMinColorRatio] = useState<number>(0.02);
+  const [colorQuantCycles, setColorQuantCycles] = useState<number>(3);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -45,13 +43,13 @@ export default function PngToSvg() {
     setTimeout(() => {
       try {
         const options = {
-          numberofcolors: colors[0],
-          mincolorratio: minColorRatio[0],
-          colorquantcycles: colorQuantCycles[0],
-          blurradius: blurRadius[0],
-          pathomit: pathOmit[0],
-          ltres: ltres[0],
-          qtres: qtres[0],
+          numberofcolors: colors,
+          mincolorratio: minColorRatio,
+          colorquantcycles: colorQuantCycles,
+          blurradius: blurRadius,
+          pathomit: pathOmit,
+          ltres: ltres,
+          qtres: qtres,
           rightangleenhance: rightAngleEnhance,
           viewbox: true,
           scale: 1,
@@ -96,47 +94,124 @@ export default function PngToSvg() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/40 shrink-0 select-none">
         <div>
-          <h2 className="text-lg font-semibold">PNG 转 SVG</h2>
-          <p className="text-sm text-muted-foreground">将位图转换为矢量图，支持参数调节。</p>
+          <h2 className="text-sm font-semibold text-foreground/90">PNG 转 SVG</h2>
+          <p className="text-xs text-muted-foreground">将位图转换为矢量图，支持参数调节。</p>
         </div>
         <div className="flex gap-2">
           {svgContent && (
-            <Button onClick={handleSave} className="gap-2">
-              <Download className="w-4 h-4" /> 导出 SVG
-            </Button>
+            <button 
+              onClick={handleSave} 
+              className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors bg-muted/40 hover:bg-muted/80 px-2 py-1 rounded border"
+            >
+              <Download className="w-3.5 h-3.5" /> 导出 SVG
+            </button>
           )}
-          <Button variant="outline" onClick={openOutputFolder} className="gap-2">
-            <FolderOpen className="w-4 h-4" /> 输出目录
-          </Button>
+          <button 
+            onClick={openOutputFolder} 
+            className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors bg-muted/40 hover:bg-muted/80 px-2 py-1 rounded border"
+          >
+            <FolderOpen className="w-3.5 h-3.5" /> 输出目录
+          </button>
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar settings */}
-        <div className="w-72 border-r p-4 overflow-y-auto space-y-6">
-          <div className="space-y-4">
-            <h3 className="font-medium">1. 选择图片</h3>
-            <div className="grid w-full max-w-sm items-center gap-1.5">
-              <input
-                type="file"
-                accept="image/png, image/jpeg, image/webp"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                onChange={handleFileChange}
-              />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Main Content Preview */}
+        <div className="flex-1 flex flex-col bg-slate-900/5 dark:bg-black/10 overflow-hidden">
+          {imageUrl ? (
+            <div className="flex-1 p-4 grid grid-cols-2 gap-4 h-full min-h-0">
+              <div className="flex flex-col gap-2 min-h-0">
+                <h3 className="text-center font-medium text-sm text-foreground/80 shrink-0">原图预览</h3>
+                <div className="flex-1 border border-border/80 rounded-lg bg-card flex items-center justify-center p-4 relative overflow-hidden shadow-sm">
+                  <img 
+                    src={imageUrl} 
+                    alt="Original" 
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-2 min-h-0">
+                <h3 className="text-center font-medium text-sm text-foreground/80 shrink-0">矢量图 (SVG)</h3>
+                <div className="flex-1 border border-border/80 rounded-lg bg-card flex items-center justify-center p-4 relative overflow-hidden shadow-sm">
+                  {isProcessing ? (
+                    <div className="flex flex-col items-center text-muted-foreground">
+                      <RefreshCw className="w-8 h-8 animate-spin mb-2 text-primary/60" />
+                      <span className="text-sm">正在转换，请稍候...</span>
+                    </div>
+                  ) : svgContent ? (
+                    <div 
+                      className="w-full h-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto"
+                      dangerouslySetInnerHTML={{ __html: svgContent }} 
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center text-muted-foreground">
+                      <ImageIcon className="w-12 h-12 mb-2 opacity-20" />
+                      <span className="text-sm">点击生成以预览 SVG</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 select-none">
+              <div className="w-full max-w-xl aspect-[16/10] bg-card border-2 border-dashed border-border/80 hover:border-primary/50 hover:shadow-lg rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all duration-300 cursor-pointer group relative">
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/webp"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  onChange={handleFileChange}
+                />
+                <div className="w-16 h-16 rounded-full bg-primary/5 group-hover:bg-primary/10 text-primary/70 flex items-center justify-center transition-all mb-5 group-hover:scale-105">
+                  <Upload className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-foreground mb-1 bg-gradient-to-r from-primary to-sky-400 bg-clip-text text-transparent">
+                  上传需要转换的图片
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-[280px] leading-relaxed mb-6">
+                  在右侧面板设置转换参数，一键处理生成矢量图。
+                </p>
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 border border-border/60 bg-muted/20 px-3 py-1 rounded-full">
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  支持 JPG、PNG、WEBP
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
-          <div className="space-y-4">
-            <h3 className="font-medium">2. 调整参数</h3>
-            
-            <div className="space-y-3">
-              <div className="flex justify-between">
+        {/* Sidebar settings */}
+        <div className="w-[300px] shrink-0 border-l border-border bg-card flex flex-col h-full overflow-hidden select-none">
+          <div className="px-4 py-3 border-b border-border bg-card/60 flex items-center gap-2 shrink-0">
+            <Settings className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-semibold">转换设置</h3>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
+            {imageUrl && (
+              <div className="space-y-2 mb-4">
+                <span className="text-xs font-semibold text-foreground/90 block">更改图片</span>
+                <label className="flex items-center justify-center gap-2 w-full py-1.5 bg-muted/60 hover:bg-muted text-foreground/80 text-xs rounded border border-border/60 transition-colors cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  重新选择图片
+                  <input
+                    type="file"
+                    accept="image/png, image/jpeg, image/webp"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                </label>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs font-semibold text-foreground/90">
                 <div className="flex items-center gap-1.5">
-                  <label className="text-sm">颜色数量</label>
+                  <span>颜色数量</span>
                   <Tooltip>
                     <TooltipTrigger type="button" tabIndex={-1} className="cursor-help">
                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/70 hover:text-foreground" />
@@ -146,15 +221,21 @@ export default function PngToSvg() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <span className="text-sm text-muted-foreground">{colors[0]}</span>
+                <span className="text-primary font-mono">{colors}</span>
               </div>
-              <Slider value={colors} onValueChange={setColors} min={2} max={64} step={1} />
+              <input 
+                type="range" 
+                min="2" max="64" step="1" 
+                value={colors} 
+                onChange={(e) => setColors(parseInt(e.target.value))} 
+                className="w-full accent-primary" 
+              />
             </div>
 
-            <div className="space-y-3">
-              <div className="flex justify-between">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs font-semibold text-foreground/90">
                 <div className="flex items-center gap-1.5">
-                  <label className="text-sm">颜色合并过滤 (Min Color Ratio)</label>
+                  <span>颜色合并过滤</span>
                   <Tooltip>
                     <TooltipTrigger type="button" tabIndex={-1} className="cursor-help">
                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/70 hover:text-foreground" />
@@ -164,15 +245,21 @@ export default function PngToSvg() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <span className="text-sm text-muted-foreground">{minColorRatio[0]}</span>
+                <span className="text-primary font-mono">{minColorRatio}</span>
               </div>
-              <Slider value={minColorRatio} onValueChange={setMinColorRatio} min={0} max={0.1} step={0.01} />
+              <input 
+                type="range" 
+                min="0" max="0.1" step="0.01" 
+                value={minColorRatio} 
+                onChange={(e) => setMinColorRatio(parseFloat(e.target.value))} 
+                className="w-full accent-primary" 
+              />
             </div>
 
-            <div className="space-y-3">
-              <div className="flex justify-between">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs font-semibold text-foreground/90">
                 <div className="flex items-center gap-1.5">
-                  <label className="text-sm">色彩分析循环 (Quant Cycles)</label>
+                  <span>色彩分析循环</span>
                   <Tooltip>
                     <TooltipTrigger type="button" tabIndex={-1} className="cursor-help">
                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/70 hover:text-foreground" />
@@ -182,15 +269,21 @@ export default function PngToSvg() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <span className="text-sm text-muted-foreground">{colorQuantCycles[0]}</span>
+                <span className="text-primary font-mono">{colorQuantCycles}</span>
               </div>
-              <Slider value={colorQuantCycles} onValueChange={setColorQuantCycles} min={1} max={10} step={1} />
+              <input 
+                type="range" 
+                min="1" max="10" step="1" 
+                value={colorQuantCycles} 
+                onChange={(e) => setColorQuantCycles(parseInt(e.target.value))} 
+                className="w-full accent-primary" 
+              />
             </div>
 
-            <div className="space-y-3">
-              <div className="flex justify-between">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs font-semibold text-foreground/90">
                 <div className="flex items-center gap-1.5">
-                  <label className="text-sm">平滑度 (Blur Radius)</label>
+                  <span>平滑度 (Blur)</span>
                   <Tooltip>
                     <TooltipTrigger type="button" tabIndex={-1} className="cursor-help">
                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/70 hover:text-foreground" />
@@ -200,15 +293,21 @@ export default function PngToSvg() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <span className="text-sm text-muted-foreground">{blurRadius[0]}</span>
+                <span className="text-primary font-mono">{blurRadius}</span>
               </div>
-              <Slider value={blurRadius} onValueChange={setBlurRadius} min={0} max={5} step={1} />
+              <input 
+                type="range" 
+                min="0" max="5" step="1" 
+                value={blurRadius} 
+                onChange={(e) => setBlurRadius(parseInt(e.target.value))} 
+                className="w-full accent-primary" 
+              />
             </div>
 
-            <div className="space-y-3">
-              <div className="flex justify-between">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs font-semibold text-foreground/90">
                 <div className="flex items-center gap-1.5">
-                  <label className="text-sm">杂点过滤 (Path Omit)</label>
+                  <span>杂点过滤 (Omit)</span>
                   <Tooltip>
                     <TooltipTrigger type="button" tabIndex={-1} className="cursor-help">
                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/70 hover:text-foreground" />
@@ -218,15 +317,21 @@ export default function PngToSvg() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <span className="text-sm text-muted-foreground">{pathOmit[0]}</span>
+                <span className="text-primary font-mono">{pathOmit}</span>
               </div>
-              <Slider value={pathOmit} onValueChange={setPathOmit} min={0} max={20} step={1} />
+              <input 
+                type="range" 
+                min="0" max="20" step="1" 
+                value={pathOmit} 
+                onChange={(e) => setPathOmit(parseInt(e.target.value))} 
+                className="w-full accent-primary" 
+              />
             </div>
 
-            <div className="space-y-3">
-              <div className="flex justify-between">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs font-semibold text-foreground/90">
                 <div className="flex items-center gap-1.5">
-                  <label className="text-sm">直线平滑 (L-threshold)</label>
+                  <span>直线平滑 (L-thres)</span>
                   <Tooltip>
                     <TooltipTrigger type="button" tabIndex={-1} className="cursor-help">
                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/70 hover:text-foreground" />
@@ -236,15 +341,21 @@ export default function PngToSvg() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <span className="text-sm text-muted-foreground">{ltres[0]}</span>
+                <span className="text-primary font-mono">{ltres}</span>
               </div>
-              <Slider value={ltres} onValueChange={setLtres} min={0.5} max={10} step={0.5} />
+              <input 
+                type="range" 
+                min="0.5" max="10" step="0.5" 
+                value={ltres} 
+                onChange={(e) => setLtres(parseFloat(e.target.value))} 
+                className="w-full accent-primary" 
+              />
             </div>
 
-            <div className="space-y-3">
-              <div className="flex justify-between">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs font-semibold text-foreground/90">
                 <div className="flex items-center gap-1.5">
-                  <label className="text-sm">曲线平滑 (Q-threshold)</label>
+                  <span>曲线平滑 (Q-thres)</span>
                   <Tooltip>
                     <TooltipTrigger type="button" tabIndex={-1} className="cursor-help">
                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/70 hover:text-foreground" />
@@ -254,14 +365,20 @@ export default function PngToSvg() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <span className="text-sm text-muted-foreground">{qtres[0]}</span>
+                <span className="text-primary font-mono">{qtres}</span>
               </div>
-              <Slider value={qtres} onValueChange={setQtres} min={0.5} max={10} step={0.5} />
+              <input 
+                type="range" 
+                min="0.5" max="10" step="0.5" 
+                value={qtres} 
+                onChange={(e) => setQtres(parseFloat(e.target.value))} 
+                className="w-full accent-primary" 
+              />
             </div>
 
-            <div className="flex items-center justify-between mt-6">
+            <div className="flex items-center justify-between mt-6 bg-muted/30 p-2 rounded-md border border-border/60">
               <div className="flex items-center gap-1.5">
-                <label className="text-sm font-medium">直角优化 (增强几何图形)</label>
+                <label className="text-xs font-semibold text-foreground/90">直角优化 (增强几何)</label>
                 <Tooltip>
                   <TooltipTrigger type="button" tabIndex={-1} className="cursor-help">
                     <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/70 hover:text-foreground" />
@@ -271,67 +388,25 @@ export default function PngToSvg() {
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <Switch checked={rightAngleEnhance} onCheckedChange={setRightAngleEnhance} />
+              <Switch checked={rightAngleEnhance} onCheckedChange={setRightAngleEnhance} className="scale-75 origin-right" />
             </div>
           </div>
 
-          <Button 
-            className="w-full gap-2" 
-            onClick={processImage} 
-            disabled={!imageUrl || isProcessing}
-          >
-            {isProcessing ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            {isProcessing ? '处理中...' : '生成 SVG'}
-          </Button>
-        </div>
-
-        {/* Main Content Preview */}
-        <div className="flex-1 p-6 bg-muted/30 overflow-y-auto">
-          {imageUrl ? (
-            <div className="grid grid-cols-2 gap-6 h-full">
-              <div className="flex flex-col gap-2">
-                <h3 className="text-center font-medium">原图预览</h3>
-                <div className="flex-1 border rounded-lg bg-background flex items-center justify-center p-4 relative overflow-hidden">
-                  <img 
-                    src={imageUrl} 
-                    alt="Original" 
-                    className="max-w-full max-h-[70vh] object-contain"
-                  />
-                </div>
-              </div>
-              
-              <div className="flex flex-col gap-2">
-                <h3 className="text-center font-medium">矢量图 (SVG)</h3>
-                <div className="flex-1 border rounded-lg bg-background flex items-center justify-center p-4 relative overflow-hidden">
-                  {isProcessing ? (
-                    <div className="flex flex-col items-center text-muted-foreground">
-                      <RefreshCw className="w-8 h-8 animate-spin mb-2" />
-                      <span>正在转换，请稍候...</span>
-                    </div>
-                  ) : svgContent ? (
-                    <div 
-                      className="w-full h-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:max-h-[70vh] [&>svg]:w-auto [&>svg]:h-auto"
-                      dangerouslySetInnerHTML={{ __html: svgContent }} 
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center text-muted-foreground">
-                      <ImageIcon className="w-12 h-12 mb-2 opacity-20" />
-                      <span>点击生成以预览 SVG</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed rounded-lg">
-              <Upload className="w-12 h-12 mb-4 opacity-20" />
-              <p>请在左侧选择一张图片以开始</p>
-            </div>
-          )}
+          <div className="p-4 border-t border-border bg-card/80 shrink-0">
+            <button
+              type="button"
+              onClick={processImage}
+              disabled={!imageUrl || isProcessing}
+              className="w-full py-2 bg-primary hover:bg-primary/95 text-primary-foreground text-xs font-semibold rounded-md shadow flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {isProcessing ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <PlayCircle className="w-4 h-4" />
+              )}
+              {isProcessing ? '处理中...' : '生成 SVG'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

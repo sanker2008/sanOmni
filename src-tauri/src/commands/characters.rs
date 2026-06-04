@@ -105,7 +105,13 @@ pub async fn get_characters(
             work_name: row.get(13)?,
             work_type: row.get(14)?,
             ip_name: row.get(15)?,
-            ip_avatar_path: row.get(16)?,
+            ip_avatar_path: row.get::<_, Option<String>>(16)?.and_then(|p| {
+                if std::path::Path::new(&p).exists() {
+                    Some(p)
+                } else {
+                    None
+                }
+            }),
         })
     }).map_err(|e| e.to_string())?;
     
@@ -152,7 +158,13 @@ pub async fn get_all_characters(app_handle: AppHandle) -> Result<Vec<CharacterWi
             work_name: row.get(13)?,
             work_type: row.get(14)?,
             ip_name: row.get(15)?,
-            ip_avatar_path: row.get(16)?,
+            ip_avatar_path: row.get::<_, Option<String>>(16)?.and_then(|p| {
+                if std::path::Path::new(&p).exists() {
+                    Some(p)
+                } else {
+                    None
+                }
+            }),
         })
     }).map_err(|e| e.to_string())?;
     
@@ -199,7 +211,13 @@ pub async fn get_character_by_id(
                 work_name: row.get(13)?,
                 work_type: row.get(14)?,
                 ip_name: row.get(15)?,
-                ip_avatar_path: row.get(16)?,
+                ip_avatar_path: row.get::<_, Option<String>>(16)?.and_then(|p| {
+                    if std::path::Path::new(&p).exists() {
+                        Some(p)
+                    } else {
+                        None
+                    }
+                }),
             })
         },
     ).map_err(|e| e.to_string())
@@ -316,6 +334,22 @@ pub async fn upload_character_images(
     let char_dir = app_data_dir.join("works").join(&path_ident).join("characters");
     std::fs::create_dir_all(&char_dir).map_err(|e| e.to_string())?;
     
+    // Clean up existing images for this character
+    if let Ok(entries) = std::fs::read_dir(&char_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    let path = entry.path();
+                    if let Some(file_name) = path.file_stem().and_then(|s| s.to_str()) {
+                        if file_name.starts_with(&format!("{}_", character_id)) {
+                            let _ = std::fs::remove_file(&path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut paths_rel = Vec::new();
     let mut paths_abs = Vec::new();
     for (index, (data, ext)) in images.iter().enumerate() {
@@ -382,7 +416,13 @@ pub async fn get_ip_characters(
             work_name: row.get(13)?,
             work_type: row.get(14)?,
             ip_name: row.get(15)?,
-            ip_avatar_path: row.get(16)?,
+            ip_avatar_path: row.get::<_, Option<String>>(16)?.and_then(|p| {
+                if std::path::Path::new(&p).exists() {
+                    Some(p)
+                } else {
+                    None
+                }
+            }),
         })
     }).map_err(|e| e.to_string())?;
     

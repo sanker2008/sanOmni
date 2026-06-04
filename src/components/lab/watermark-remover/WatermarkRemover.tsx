@@ -1,8 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { generateInpaint } from '../ai-image-editor/api';
 import { saveFile, getDefaultExportPath } from '../image-compressor/fs';
 import { toast } from '@/hooks/useToast';
-import { Upload, Eraser, Download, Image as ImageIcon, Paintbrush, PlayCircle, Loader2 } from 'lucide-react';
+import { Upload, Eraser, Download, Paintbrush, PlayCircle, Loader2 } from 'lucide-react';
 
 export default function WatermarkRemover() {
   const [image, setImage] = useState<string | null>(null);

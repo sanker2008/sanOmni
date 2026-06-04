@@ -41,6 +41,7 @@ pub fn run() {
             commands::ip_images::get_ip_inbox_images,
             commands::ip_images::get_ip_archived_images,
             commands::ip_images::update_ip_image,
+            commands::ip_images::update_ip_image_file,
             commands::ip_images::delete_ip_image,
             commands::ip_images::archive_ip_images,
             commands::vendors::get_vendors,
@@ -129,6 +130,7 @@ pub fn run() {
             commands::fs::update_database_paths,
             commands::fs::check_directory_status,
             commands::fs::repair_database_paths,
+            commands::fs::show_in_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

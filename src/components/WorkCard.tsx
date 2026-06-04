@@ -1,12 +1,18 @@
-import { type WorkWithRelations, useWorksStore } from "@/stores";
+import { type WorkWithRelations, useWorksStore, useUIStore } from "@/stores";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Film, Edit, Trash2, Calendar, User } from "lucide-react";
+import { Film, Edit, Trash2, Calendar, User, FolderOpen, Minimize, Loader2 } from "lucide-react";
 import { useState } from "react";
 import ConfirmDialog from "./ConfirmDialog";
 import { useToast } from "@/hooks/useToast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface WorkCardProps {
   work: WorkWithRelations;
@@ -43,8 +49,11 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function WorkCard({ work, onEdit }: WorkCardProps) {
   const { selectWork, deleteWork } = useWorksStore();
+  const { settings } = useUIStore();
+  const showFullImage = settings?.showFullImage ?? false;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [convertingToWebp, setConvertingToWebp] = useState(false);
   const { toast } = useToast();
 
   const handleCardClick = () => {
@@ -72,6 +81,28 @@ export default function WorkCard({ work, onEdit }: WorkCardProps) {
     }
   };
 
+  const handleConvertFormat = async (e: React.MouseEvent, format: 'webp' | 'png') => {
+    e.stopPropagation();
+    if (convertingToWebp || !work.cover_path) return;
+    setConvertingToWebp(true);
+    toast({ title: `正在转为 ${format.toUpperCase()}`, description: "图片优化中..." });
+    try {
+      const src = convertFileSrc(work.cover_path);
+      const response = await fetch(src);
+      const blob = await response.blob();
+      const filename = work.cover_path.split(/[\\/]/).pop() || 'cover.png';
+      const file = new File([blob], filename, { type: blob.type });
+      const newFile = format === 'webp' ? await convertFileToWebp(file) : await convertFileToPng(file);
+      const { uploadCover } = useWorksStore.getState();
+      await uploadCover(work.id, newFile);
+      toast({ title: "✓ 转换成功", description: `已成功转为 ${format.toUpperCase()} 格式` });
+    } catch (error: any) {
+      toast({ title: "转换失败", description: error.message || "未知错误", variant: "destructive" });
+    } finally {
+      setConvertingToWebp(false);
+    }
+  };
+
   return (
     <>
       <Card
@@ -82,9 +113,9 @@ export default function WorkCard({ work, onEdit }: WorkCardProps) {
         <div className="aspect-[16/9] w-full bg-muted border-b relative overflow-hidden flex items-center justify-center flex-shrink-0">
           {work.cover_path ? (
             <img
-              src={convertFileSrc(work.cover_path)}
+              src={`${convertFileSrc(work.cover_path)}?t=${new Date(work.updated_at).getTime()}`}
               alt={work.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              className={`w-full h-full ${showFullImage ? "object-contain bg-background" : "object-cover"} group-hover:scale-105 transition-transform duration-500`}
               loading="lazy"
             />
           ) : (
@@ -93,6 +124,41 @@ export default function WorkCard({ work, onEdit }: WorkCardProps) {
 
           {/* Floating actions */}
           <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+            {work.cover_path && (
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-8 w-8 rounded-full shadow bg-background/85 hover:bg-background"
+                title="打开所在目录"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const { revealFileInFolder } = await import("@/lib/pathUtils");
+                  revealFileInFolder(work.cover_path!);
+                }}
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+              </Button>
+            )}
+                        {work.cover_path && !work.cover_path.toLowerCase().endsWith('.webp') && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full shadow bg-background/85 hover:bg-background z-20" disabled={convertingToWebp} onClick={(e) => e.stopPropagation()}>
+                          {convertingToWebp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Minimize className="w-3.5 h-3.5" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={(e) => handleConvertFormat(e as any, 'webp')}>转为 WebP</DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => handleConvertFormat(e as any, 'png')}>转为 PNG-24</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">图片优化</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <Button
               size="icon"
               variant="secondary"

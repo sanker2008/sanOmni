@@ -37,14 +37,18 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Minimize,
+  ChevronDown,
 } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import ImageCard from "./ImageCard";
+import IPImagePickerModal from "./IPImagePickerModal";
 import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IpAssociateCharacterModal } from "./IpAssociateCharacterModal";
 
 import IpSidebar from "./IpSidebar";
@@ -135,7 +139,8 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
         ip.path,
         ip.inspiration || undefined,
         ip.description || undefined,
-        finalAvatarPath
+        finalAvatarPath,
+        false
       );
     } catch (updateError) {
       console.error("更新 IP 头像路径失败:", updateError);
@@ -185,6 +190,8 @@ export default function IpArchivedView() {
   const [ipInspiration, setIpInspiration] = useState("");
   const [ipDescription, setIpDescription] = useState("");
   const [ipAvatarPath, setIpAvatarPath] = useState<string | null>(null);
+  const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
+  const [isAvatarFromAsset, setIsAvatarFromAsset] = useState(false);
 
   const [deleteIpId, setDeleteIpId] = useState<string | null>(null);
   const [deleteIpName, setDeleteIpName] = useState<string>("");
@@ -197,6 +204,7 @@ export default function IpArchivedView() {
     setIpInspiration(ip.inspiration || "");
     setIpDescription(ip.description || "");
     setIpAvatarPath(ip.avatar_path || null);
+    setIsAvatarFromAsset(false);
     setIsIpModalOpen(true);
   };
 
@@ -211,6 +219,7 @@ export default function IpArchivedView() {
       });
       if (selected && typeof selected === "string") {
         setIpAvatarPath(selected);
+        setIsAvatarFromAsset(false);
       }
     } catch (e) {
       console.error("选择头像失败:", e);
@@ -246,10 +255,11 @@ export default function IpArchivedView() {
           finalPath,
           ipInspiration || undefined,
           ipDescription || undefined,
-          isAvatarChanged ? undefined : (ipAvatarPath || undefined)
+          (isAvatarChanged && !isAvatarFromAsset) ? undefined : (ipAvatarPath || undefined),
+          (isAvatarChanged && isAvatarFromAsset) ? false : undefined
         );
 
-        if (isAvatarChanged && ipAvatarPath) {
+        if (isAvatarChanged && ipAvatarPath && !isAvatarFromAsset) {
           await autoArchiveAvatar(ipAvatarPath, updated);
         }
 
@@ -614,6 +624,52 @@ export default function IpArchivedView() {
       description: `已成功标记 ${successCount} 张图片，失败 ${failCount} 张`,
       variant: failCount > 0 ? "destructive" : "default",
     });
+  };
+
+  const [isConvertingWebp, setIsConvertingWebp] = useState(false);
+  const handleBatchConvertToWebp = async () => {
+    if (selectedImages.length === 0) return;
+    setIsConvertingWebp(true);
+    let successCount = 0;
+    let failCount = 0;
+    let skippedCount = 0;
+
+    const loadingToast = toast({
+      title: "正在批量转为 WebP",
+      description: "图片压缩优化中...",
+      duration: 100000,
+    });
+
+    try {
+      const { convertIpImageToWebp, convertIpImageToPng } = await import("@/lib/webpConverter");
+      for (const imageId of selectedImages) {
+        const image = archivedImages.find((img) => img.id === imageId);
+        if (!image) continue;
+        
+        if (image.format?.toLowerCase() === 'webp') {
+          skippedCount++;
+          continue;
+        }
+
+        try {
+          await convertIpImageToWebp(image as any);
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to convert image ${imageId} to WebP:`, err);
+          failCount++;
+        }
+      }
+    } finally {
+      setIsConvertingWebp(false);
+      loadingToast.dismiss();
+      clearSelection();
+      
+      toast({
+        title: `批量转为 WebP 完成`,
+        description: `成功转换 ${successCount} 张，跳过 ${skippedCount} 张，失败 ${failCount} 张`,
+        variant: failCount > 0 ? "destructive" : "default",
+      });
+    }
   };
 
   const [showFilters, setShowFilters] = useState(false);
@@ -1069,7 +1125,7 @@ export default function IpArchivedView() {
                   <img
                     src={convertFileSrc(ipDetail.ip.avatar_path)}
                     alt={ipDetail.ip.name}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground">
@@ -1360,34 +1416,62 @@ export default function IpArchivedView() {
                           <Edit2 className="w-3 h-3" />
                           批量编辑
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1 h-7 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                          onClick={() => handleBatchSetWatermark(false)}
-                          disabled={isUpdatingWatermark}
-                        >
-                          {isUpdatingWatermark ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Check className="w-3 h-3" />
-                          )}
-                          标记无水印
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1 h-7 text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
-                          onClick={() => handleBatchSetWatermark(true)}
-                          disabled={isUpdatingWatermark}
-                        >
-                          {isUpdatingWatermark ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <AlertCircle className="w-3 h-3" />
-                          )}
-                          标记有水印
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1 h-7"
+                              disabled={isUpdatingWatermark}
+                            >
+                              {isUpdatingWatermark ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <AlertCircle className="w-3 h-3 text-orange-500" />
+                              )}
+                              标记水印
+                              <ChevronDown className="w-3 h-3 opacity-50" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            <DropdownMenuItem
+                              onClick={() => handleBatchSetWatermark(true)}
+                              className="text-orange-600 dark:text-orange-400 cursor-pointer"
+                            >
+                              <AlertCircle className="w-3.5 h-3.5 mr-2" />
+                              标记有水印
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleBatchSetWatermark(false)}
+                              className="text-green-600 dark:text-green-400 cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5 mr-2" />
+                              标记无水印
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 h-7 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+                      disabled={isConvertingWebp}
+                    >
+                      {isConvertingWebp ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Minimize className="w-3 h-3" />
+                      )}
+                      批量图片优化
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => handleBatchConvertFormat('webp')}>转为 WebP</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleBatchConvertFormat('png')}>转为 PNG-24</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                         <Button
                           variant="ghost"
@@ -2212,20 +2296,29 @@ export default function IpArchivedView() {
                   <img
                     src={convertFileSrc(ipAvatarPath)}
                     alt="Avatar"
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`}
                   />
                 ) : (
                   <Users className="w-8 h-8 opacity-30" />
                 )}
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSelectAvatarPath}
-              >
-                选择本地头像
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAvatarPath}
+                >
+                  选择本地头像
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAvatarPickerOpen(true)}
+                >
+                  从当前资产库选择
+                </Button>
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -2374,6 +2467,25 @@ export default function IpArchivedView() {
         variant="destructive"
         onConfirm={executeBatchDelete}
         onCancel={() => setBatchDeleteStep(0)}
+      />
+
+      {/* 资产库头像选择弹窗 */}
+      <IPImagePickerModal
+        isOpen={isAvatarPickerOpen}
+        onClose={() => setIsAvatarPickerOpen(false)}
+        title="选择已有头像"
+        description="从该 IP 形象现有的资产图片中选择一张作为头像。"
+        multiSelect={false}
+        images={ipDetail?.ip_images?.map(item => item.ip_image) || []}
+        onConfirm={(ids) => {
+          if (ids.length > 0 && ipDetail) {
+            const selectedImg = ipDetail.ip_images.find(item => item.ip_image.id === ids[0]);
+            if (selectedImg) {
+              setIpAvatarPath(selectedImg.ip_image.absolute_path);
+              setIsAvatarFromAsset(true);
+            }
+          }
+        }}
       />
     </div>
   );

@@ -24,11 +24,13 @@ import {
   AlertCircle,
   RefreshCw,
   X,
+  ChevronDown,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import DropZone from "./DropZone";
 import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export default function InboxView() {
   const { 
@@ -586,34 +588,40 @@ export default function InboxView() {
                   )}
                   批量归档
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 h-7 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                  onClick={() => handleBatchSetWatermark(false)}
-                  disabled={isUpdatingWatermark}
-                >
-                  {isUpdatingWatermark ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Check className="w-3 h-3" />
-                  )}
-                  标记无水印
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 h-7 text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
-                  onClick={() => handleBatchSetWatermark(true)}
-                  disabled={isUpdatingWatermark}
-                >
-                  {isUpdatingWatermark ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <AlertCircle className="w-3 h-3" />
-                  )}
-                  标记有水印
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 h-7"
+                      disabled={isUpdatingWatermark}
+                    >
+                      {isUpdatingWatermark ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <AlertCircle className="w-3 h-3 text-orange-500" />
+                      )}
+                      标记水印
+                      <ChevronDown className="w-3 h-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem
+                      onClick={() => handleBatchSetWatermark(true)}
+                      className="text-orange-600 dark:text-orange-400 cursor-pointer"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 mr-2" />
+                      标记有水印
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleBatchSetWatermark(false)}
+                      className="text-green-600 dark:text-green-400 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5 mr-2" />
+                      标记无水印
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 <Button
                   variant="ghost"

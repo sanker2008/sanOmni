@@ -24,9 +24,12 @@ import {
   AlertCircle,
   RefreshCw,
   X,
+  Minimize,
+  ChevronDown,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import DropZone from "./DropZone";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -91,6 +94,52 @@ export default function IpInboxView() {
       description: `已成功标记 ${successCount} 张图片，失败 ${failCount} 张`,
       variant: failCount > 0 ? "destructive" : "default",
     });
+  };
+
+  const [isConvertingWebp, setIsConvertingWebp] = useState(false);
+  const handleBatchConvertToWebp = async () => {
+    if (selectedImages.length === 0) return;
+    setIsConvertingWebp(true);
+    let successCount = 0;
+    let failCount = 0;
+    let skippedCount = 0;
+
+    const loadingToast = toast({
+      title: "正在批量转为 WebP",
+      description: "图片压缩优化中...",
+      duration: 100000,
+    });
+
+    try {
+      const { convertIpImageToWebp } = await import("@/lib/webpConverter");
+      for (const imageId of selectedImages) {
+        const image = inboxImages.find((img) => img.id === imageId);
+        if (!image) continue;
+        
+        if (image.format?.toLowerCase() === 'webp') {
+          skippedCount++;
+          continue;
+        }
+
+        try {
+          await convertIpImageToWebp(image as any);
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to convert image ${imageId} to WebP:`, err);
+          failCount++;
+        }
+      }
+    } finally {
+      setIsConvertingWebp(false);
+      loadingToast.dismiss();
+      clearSelection();
+      
+      toast({
+        title: `批量转为 WebP 完成`,
+        description: `成功转换 ${successCount} 张，跳过 ${skippedCount} 张，失败 ${failCount} 张`,
+        variant: failCount > 0 ? "destructive" : "default",
+      });
+    }
   };
 
   // 筛选器状态
@@ -575,35 +624,63 @@ export default function IpInboxView() {
                   )}
                   批量归档
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 h-7 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                  onClick={() => handleBatchSetWatermark(false)}
-                  disabled={isUpdatingWatermark}
-                >
-                  {isUpdatingWatermark ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Check className="w-3 h-3" />
-                  )}
-                  标记无水印
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 h-7 text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
-                  onClick={() => handleBatchSetWatermark(true)}
-                  disabled={isUpdatingWatermark}
-                >
-                  {isUpdatingWatermark ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <AlertCircle className="w-3 h-3" />
-                  )}
-                  标记有水印
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 h-7"
+                      disabled={isUpdatingWatermark}
+                    >
+                      {isUpdatingWatermark ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <AlertCircle className="w-3 h-3 text-orange-500" />
+                      )}
+                      标记水印
+                      <ChevronDown className="w-3 h-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem
+                      onClick={() => handleBatchSetWatermark(true)}
+                      className="text-orange-600 dark:text-orange-400 cursor-pointer"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 mr-2" />
+                      标记有水印
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleBatchSetWatermark(false)}
+                      className="text-green-600 dark:text-green-400 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5 mr-2" />
+                      标记无水印
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 h-7 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+                      disabled={isConvertingWebp}
+                    >
+                      {isConvertingWebp ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Minimize className="w-3 h-3" />
+                      )}
+                      批量图片优化
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => handleBatchConvertFormat('webp')}>转为 WebP</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleBatchConvertFormat('png')}>转为 PNG-24</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
                 <Button
                   variant="ghost"
                   size="sm"

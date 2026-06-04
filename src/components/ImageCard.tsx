@@ -6,19 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import ConfirmDialog from "./ConfirmDialog";
-import {
-  CheckCircle2,
-  Circle,
-  Eye,
-  Edit,
-  Archive,
-  Image as ImageIcon,
-  Loader2,
-  Eraser,
-  Trash2,
-  FolderOpen,
-  Undo2,
-} from "lucide-react";
+import { CheckCircle2, Circle, Eye, Edit, Archive, Image as ImageIcon, Loader2, Eraser, Trash2, FolderOpen, Undo2, Minimize } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -32,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi, ipApi } from "@/services/tauri";
+import { convertIpImageToWebp, convertIpImageToPng } from "@/lib/webpConverter";
 
 type AnyImage = ImageWithRelations | IpImageWithRelations;
 const isPromptImage = (img: AnyImage): img is ImageWithRelations => "models" in img;
@@ -63,6 +52,33 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
   const [clickTimeout, setClickTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
   const [imageTimestamp, setImageTimestamp] = useState(Date.now());
+  const [convertingToWebp, setConvertingToWebp] = useState(false);
+
+  const handleConvertFormat = async (e: React.MouseEvent, format: 'webp' | 'png') => {
+    e.stopPropagation();
+    if (convertingToWebp || isPrompt) return;
+    setConvertingToWebp(true);
+    const loadingToast = toast({
+      title: `正在转为 ${format.toUpperCase()}`,
+      description: "图片压缩优化中...",
+      duration: 100000,
+    });
+    try {
+      if (format === 'webp') {
+        await convertIpImageToWebp(image as import("@/stores").IpImageWithRelations);
+      } else {
+        await convertIpImageToPng(image as import("@/stores").IpImageWithRelations);
+      }
+      setImageTimestamp(Date.now());
+      toast({ title: "✓ 转换成功", description: `已成功转为 ${format.toUpperCase()} 格式` });
+    } catch (err) {
+      toast({ title: "✗ 转换失败", description: String(err), variant: "destructive" });
+    } finally {
+      setConvertingToWebp(false);
+      loadingToast.dismiss();
+    }
+  };
+
   const [isAvatar, setIsAvatar] = useState(false);
   const [isEmoji, setIsEmoji] = useState(false);
 
@@ -600,6 +616,32 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {!isPrompt && image.format?.toLowerCase() !== 'webp' && (
+              <TooltipProvider delayDuration={200}>
+                <DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={convertingToWebp} onClick={(e) => e.stopPropagation()}>
+                          {convertingToWebp ? <Loader2 className="w-3 h-3 animate-spin" /> : <Minimize className="w-3 h-3" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>图片优化</TooltipContent>
+                  </Tooltip>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={(e) => handleConvertFormat(e as any, 'webp')}>
+                      转为 WebP
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={(e) => handleConvertFormat(e as any, 'png')}>
+                      转为 PNG-24
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TooltipProvider>
+            )}
+
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-7 w-7"
@@ -935,6 +977,31 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
 
           {/* 下组：管理操作 */}
           <div className="flex gap-1 bg-background/95 dark:bg-background/95 rounded-md shadow-lg border p-1 backdrop-blur-sm">
+            {!isPrompt && image.format?.toLowerCase() !== 'webp' && (
+              <TooltipProvider delayDuration={200}>
+                <DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={convertingToWebp} onClick={(e) => e.stopPropagation()}>
+                          {convertingToWebp ? <Loader2 className="w-3 h-3 animate-spin" /> : <Minimize className="w-3 h-3" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>图片优化</TooltipContent>
+                  </Tooltip>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={(e) => handleConvertFormat(e as any, 'webp')}>
+                      转为 WebP
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={(e) => handleConvertFormat(e as any, 'png')}>
+                      转为 PNG-24
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TooltipProvider>
+            )}
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
