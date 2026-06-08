@@ -13,6 +13,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { convertFileToWebp, convertFileToPng } from "@/lib/webpConverter";
 
 interface WorkCardProps {
   work: WorkWithRelations;
