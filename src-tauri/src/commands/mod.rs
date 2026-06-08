@@ -81,3 +81,4 @@ pub mod ip_images;
 pub mod works;
 pub mod characters;
 pub mod fs;
+pub mod sync_commands;

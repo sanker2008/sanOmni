@@ -120,8 +120,8 @@ export default function PromptSettingsTab({
                         <span>归档当天日期（格式为：<span className="font-mono text-slate-500">YYYY-MM-DD</span>，例如 <span className="font-mono text-slate-500">2026-05-27</span>）</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{index}"}</code>
-                        <span>当天自增排序号（格式为：<span className="font-mono text-slate-500">001</span>, <span className="font-mono text-slate-500">002</span> ...）</span>
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">{"{time}"}</code>
+                        <span>具体到秒的时间戳（格式为：<span className="font-mono text-slate-500">HHMMSS</span>，例如 <span className="font-mono text-slate-500">152455</span>）</span>
                       </div>
                     </div>
                   </CardDescription>
@@ -130,16 +130,17 @@ export default function PromptSettingsTab({
                   <Input
                     value={localSettings.namingTemplate || ""}
                     onChange={(e) => handleLocalUpdate("namingTemplate", e.target.value)}
-                    placeholder="{vendor}-{model}-{date}-{index}"
+                    placeholder="{vendor}-{model}-{date}-{time}"
                   />
                   {(() => {
-                    const template = localSettings.namingTemplate || "{vendor}-{model}-{date}-{index}";
-                    const formattedDate = new Date().toISOString().split("T")[0];
+                    const template = localSettings.namingTemplate || "{vendor}-{model}-{date}-{time}";
+                    const formattedDate = new Date().toISOString().split("T")[0].replace(/-/g, "");
                     const previewName = template
                       .replace(/{vendor}/g, "openai")
                       .replace(/{model}/g, "gpt-4")
                       .replace(/{date}/g, formattedDate)
-                      .replace(/{index}/g, "001");
+                      .replace(/{time}/g, "152455")
+                      .replace(/{index}/g, "152455");
                     return (
                       <p className="text-xs text-muted-foreground mt-2">
                         实时预览（以厂商 <span className="font-mono font-medium text-slate-800 dark:text-slate-200 bg-muted px-1.5 py-0.5 rounded">openai</span> 和模型 <span className="font-mono font-medium text-slate-800 dark:text-slate-200 bg-muted px-1.5 py-0.5 rounded">gpt-4</span> 为例）：<span className="font-mono font-semibold text-primary">{previewName}.png</span>

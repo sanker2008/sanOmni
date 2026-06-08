@@ -51,7 +51,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
     } else {
       libraryPath = await getAppRoot();
     }
-    const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+    const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{time}";
 
     const fileName = avatarPath.split(/[/\\]/).pop() || "avatar.png";
 

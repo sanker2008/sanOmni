@@ -253,7 +253,7 @@ pub async fn update_ip_image(
     if need_rename && !library_path.is_empty() {
         let target_dir = std::path::PathBuf::from(&library_path).join("ip_archived").join(&new_ip_path);
 
-        let default_template = "{ip}-{date}-{index}".to_string();
+        let default_template = "{ip}-{date}-{time}".to_string();
         let template = request.naming_template.clone().unwrap_or(default_template);
 
         let ext = std::path::Path::new(&current_image.filename)
@@ -267,19 +267,19 @@ pub async fn update_ip_image(
             "unknown"
         };
 
-        let count: i64 = conn.query_row(
+        let _count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM ip_images WHERE ip_id = ? AND status = 'archived'",
             [&request.primary_ip_id],
             |row| row.get(0),
         ).unwrap_or(0);
 
-        // 如果是本 IP 内部重命名且当前数据库中有记录，尽量排除本记录，避免 index 偏大
-        let index = if !is_ip_changed && count > 0 { count } else { count + 1 };
+        let now_time = chrono::Local::now().format("%H%M%S").to_string();
 
         let filename_candidate = template
             .replace("{ip}", &new_ip_path)
             .replace("{date}", date)
-            .replace("{index}", &format!("{:03}", index))
+            .replace("{time}", &now_time)
+            .replace("{index}", &now_time)
             .replace("{original}", &current_image.original_filename);
 
             let mut path_file = std::path::PathBuf::from(&filename_candidate);
@@ -298,7 +298,11 @@ pub async fn update_ip_image(
             let mut target_path = target_dir.join(&unique_filename);
             let mut counter = 1;
 
-            while target_path.exists() {
+            while ["png", "jpg", "jpeg", "webp", "gif", "bmp"].iter().any(|e| {
+                let check_stem = if counter == 1 { stem.to_string() } else { format!("{}_{}", stem, counter - 1) };
+                let p = target_dir.join(format!("{}.{}", check_stem, e));
+                p.exists() && p != std::path::Path::new(&current_image.absolute_path)
+            }) {
                 unique_filename = format!("{}_{}.{}", stem, counter, ext);
                 target_path = target_dir.join(&unique_filename);
                 counter += 1;
@@ -380,7 +384,7 @@ pub async fn update_ip_image(
                         };
                         let _ = std::fs::create_dir_all(&target_dir);
 
-                        let default_template = "{ip}-{date}-{index}".to_string();
+                        let default_template = "{ip}-{date}-{time}".to_string();
                         let template = request.naming_template.clone().unwrap_or(default_template);
                         let date = &current_image.created_at[..10];
                         let ext = std::path::Path::new(&current_filename)
@@ -388,25 +392,13 @@ pub async fn update_ip_image(
                             .and_then(|e| e.to_str())
                             .unwrap_or("png");
 
-                        let count: i64 = if db_pack_id.is_none() {
-                            conn.query_row(
-                                "SELECT COUNT(*) FROM ip_emojis WHERE ip_id = ? AND pack_id IS NULL",
-                                [&request.primary_ip_id],
-                                |row| row.get(0),
-                            ).unwrap_or(0)
-                        } else {
-                            conn.query_row(
-                                "SELECT COUNT(*) FROM ip_emojis WHERE ip_id = ? AND pack_id = ?",
-                                [&request.primary_ip_id, pack_id],
-                                |row| row.get(0),
-                            ).unwrap_or(0)
-                        };
-                        let index = count + 1;
+                        let now_time = chrono::Local::now().format("%H%M%S").to_string();
 
                         let filename_candidate = template
                             .replace("{ip}", &ip_path)
                             .replace("{date}", date)
-                            .replace("{index}", &format!("{:03}", index))
+                            .replace("{time}", &now_time)
+                            .replace("{index}", &now_time)
                             .replace("{original}", &current_image.original_filename);
 
                         let mut path_candidate = target_dir.join(&filename_candidate);
@@ -420,10 +412,11 @@ pub async fn update_ip_image(
                         let mut target_path = target_dir.join(&unique_filename);
                         let mut counter = 1;
 
-                        while target_path.exists() {
-                            if std::path::Path::new(&current_absolute_path) == target_path {
-                                break;
-                            }
+                        while ["png", "jpg", "jpeg", "webp", "gif", "bmp"].iter().any(|e| {
+                            let check_stem = if counter == 1 { stem.clone() } else { format!("{}_{}", stem, counter - 1) };
+                            let p = target_dir.join(format!("{}.{}", check_stem, e));
+                            p.exists() && p != std::path::Path::new(&current_absolute_path)
+                        }) {
                             unique_filename = format!("{}_{}.{}", stem, counter, current_ext);
                             target_path = target_dir.join(&unique_filename);
                             counter += 1;
@@ -599,7 +592,7 @@ pub async fn archive_ip_images(
     };
 
     let now = chrono::Utc::now().to_rfc3339();
-    let default_template = "{ip}-{date}-{index}".to_string();
+    let default_template = "{ip}-{date}-{time}".to_string();
     let template = request.naming_template.unwrap_or(default_template);
 
     for ip_image_id in &request.ip_image_ids {
@@ -631,14 +624,15 @@ pub async fn archive_ip_images(
             .and_then(|e| e.to_str())
             .unwrap_or("png");
 
-        let mut index = result.success_count + 1;
+        let mut now_time = chrono::Local::now().format("%H%M%S").to_string();
         let mut suffix_counter = 1;
 
         let (target_path, new_filename) = loop {
             let filename_candidate = template.clone()
                 .replace("{ip}", &ip_path)
                 .replace("{date}", date)
-                .replace("{index}", &format!("{:03}", index))
+                .replace("{time}", &now_time)
+                .replace("{index}", &now_time)
                 .replace("{original}", &ip_image.original_filename);
 
             let mut path_file = std::path::PathBuf::from(&filename_candidate);
@@ -655,19 +649,31 @@ pub async fn archive_ip_images(
                 .unwrap_or(ext)
                 .to_string();
 
-            let final_candidate = if !template.contains("{index}") && suffix_counter > 1 {
+            let final_candidate = if !template.contains("{time}") && !template.contains("{index}") && suffix_counter > 1 {
                 format!("{}_{}.{}", stem, suffix_counter - 1, current_ext)
             } else {
                 format!("{}.{}", stem, current_ext)
             };
 
             let path_candidate = target_dir.join(&final_candidate);
-            if !path_candidate.exists() {
+
+            let check_stem = if !template.contains("{time}") && !template.contains("{index}") && suffix_counter > 1 {
+                format!("{}_{}", stem, suffix_counter - 1)
+            } else {
+                stem.clone()
+            };
+
+            let stem_exists = ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
+                .iter()
+                .any(|e| target_dir.join(format!("{}.{}", check_stem, e)).exists());
+
+            if !stem_exists {
                 break (path_candidate, final_candidate);
             }
 
-            if template.contains("{index}") {
-                index += 1;
+            if template.contains("{time}") || template.contains("{index}") {
+                let current_time_val = now_time.parse::<u32>().unwrap_or(0);
+                now_time = format!("{:06}", current_time_val + 1);
             } else {
                 suffix_counter += 1;
             }

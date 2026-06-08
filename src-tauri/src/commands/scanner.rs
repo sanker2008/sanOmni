@@ -53,7 +53,7 @@ pub async fn scan_archived_directory(
     };
 
     let template = naming_template
-        .unwrap_or_else(|| "{vendor}-{model}-{date}-{index}".to_string());
+        .unwrap_or_else(|| "{vendor}-{model}-{date}-{time}".to_string());
 
     let archived_root = std::path::Path::new(&library_path);
     if !archived_root.exists() {
@@ -202,14 +202,16 @@ pub async fn scan_archived_directory(
 
                 // 生成新文件名（按命名模板）
                 global_index += 1;
-                let now = chrono::Utc::now();
+                let now = chrono::Local::now();
                 let date_str = now.format("%Y-%m-%d").to_string();
+                let time_str = format!("{:06}", now.format("%H%M%S").to_string().parse::<u32>().unwrap_or(0) + global_index as u32);
 
                 let new_stem = template
                     .replace("{vendor}", &vendor_path_name)
                     .replace("{model}", &model_path_name)
                     .replace("{date}", &date_str)
-                    .replace("{index}", &format!("{:03}", global_index))
+                    .replace("{time}", &time_str)
+                    .replace("{index}", &time_str)
                     .replace("{original}", &original_filename.replace(&format!(".{}", ext), ""));
 
                 let new_filename = format!("{}.{}", new_stem, ext);
@@ -223,7 +225,7 @@ pub async fn scan_archived_directory(
 
                     // 避免目标文件已存在时覆盖
                     let new_path = if new_path.exists() {
-                        let unique_stem = format!("{}-{}", new_stem, chrono::Utc::now().timestamp_millis());
+                        let unique_stem = format!("{}-{}", new_stem, chrono::Local::now().timestamp_millis());
                         let unique_name = format!("{}.{}", unique_stem, ext);
                         model_dir.join(&unique_name)
                     } else {
@@ -611,7 +613,7 @@ pub async fn scan_ip_archived_directory(
     };
 
     let template = naming_template
-        .unwrap_or_else(|| "{ip}-{date}-{index}".to_string());
+        .unwrap_or_else(|| "{ip}-{date}-{time}".to_string());
 
     let archived_root = std::path::Path::new(&library_path);
     if !archived_root.exists() {
@@ -731,14 +733,16 @@ pub async fn scan_ip_archived_directory(
                 .to_string_lossy()
                 .to_string();
 
-            let now = chrono::Utc::now();
+            let now = chrono::Local::now();
             let date_str = now.format("%Y%m%d").to_string();
             global_index += 1;
+            let time_str = format!("{:06}", now.format("%H%M%S").to_string().parse::<u32>().unwrap_or(0) + global_index as u32);
 
             let new_stem = template
                 .replace("{ip}", &dir_name)
                 .replace("{date}", &date_str)
-                .replace("{index}", &format!("{:03}", global_index));
+                .replace("{time}", &time_str)
+                .replace("{index}", &time_str);
             let new_filename = format!("{}.{}", new_stem, ext);
 
             let (final_filename, final_abs_path) = if original_filename == new_filename {

@@ -1,7 +1,7 @@
 export const DEFAULT_SETTINGS: Record<string, any> = {
   // 通用设置
   unifiedRootPath: "", // 统一根目录，代替默认的 AppData 目录
-  namingTemplate: "{vendor}-{model}-{date}-{index}",
+  namingTemplate: "{vendor}-{model}-{date}-{time}",
   customInboxPath: "",  // 自定义待整理路径（留空使用默认）
   customArchivedPath: "",  // 自定义 archived 路径（留空使用默认）
   customWorksPath: "",      // 自定义作品集路径
@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   watchDebounceMs: 1000,
 
   // IP 专属设置
-  ipNamingTemplate: "{ip}-{date}-{index}",
+  ipNamingTemplate: "{ip}-{date}-{time}",
   ipCustomInboxPath: "",
   ipCustomArchivedPath: "",
   ipWatchFolders: [],
@@ -30,10 +30,11 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   showIpWorksTab: true,
 };
 
-export type SettingsTab = "general" | "prompt" | "ip" | "labs" | "shortcuts" | "trash" | "about";
+export type SettingsTab = "general" | "sync" | "prompt" | "ip" | "labs" | "shortcuts" | "trash" | "about";
 
 export const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "general", label: "通用设置" },
+  { key: "sync", label: "同步与云端" },
   { key: "prompt", label: "sanPrompt" },
   { key: "ip", label: "sanIP" },
   { key: "labs", label: "sanLabs" },

@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod database;
 pub mod models;
+pub mod sync;
 
 use tauri::Manager;
 
@@ -131,6 +132,14 @@ pub fn run() {
             commands::fs::check_directory_status,
             commands::fs::repair_database_paths,
             commands::fs::show_in_folder,
+
+            // Sync Commands
+            commands::sync_commands::sync_test_connection,
+            commands::sync_commands::sync_enable,
+            commands::sync_commands::sync_disable,
+            commands::sync_commands::sync_configure,
+            commands::sync_commands::sync_now,
+            commands::sync_commands::sync_get_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

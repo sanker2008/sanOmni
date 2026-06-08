@@ -87,56 +87,48 @@ fn copy_to_ip_archived(
                 "SELECT value FROM settings WHERE key = 'ipNamingTemplate'",
                 [],
                 |row| row.get(0),
-            ).unwrap_or_else(|_| "{ip}-{date}-{index}".to_string())
+            ).unwrap_or_else(|_| "{ip}-{date}-{time}".to_string())
         } else {
-            "{ip}-{date}-{index}".to_string()
+            "{ip}-{date}-{time}".to_string()
         }
     };
 
-    let date = Utc::now().format("%Y-%m-%d").to_string();
     let ext = src_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
-    
-    // Count files already present in dest_dir to determine index
-    let index = if let Ok(entries) = std::fs::read_dir(&dest_dir) {
-        entries.filter_map(|e| e.ok())
-            .filter(|entry| entry.file_type().map(|t| t.is_file()).unwrap_or(false))
-            .count() + 1
-    } else {
-        1
-    };
-
     let original_stem = src_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     
-    let filename_candidate = naming_template
-        .replace("{ip}", ip_path)
-        .replace("{date}", &date)
-        .replace("{index}", &format!("{:03}", index))
-        .replace("{original}", original_stem);
+    // 使用当前时间作为基准
+    let mut current_time = chrono::Local::now();
+    let mut dest_file_path;
 
-    let mut path_candidate = dest_dir.join(&filename_candidate);
-    if path_candidate.extension().is_none() {
-        path_candidate.set_extension(ext);
-    }
+    loop {
+        let date = current_time.format("%Y%m%d").to_string();
+        let time = current_time.format("%H%M%S").to_string();
+        
+        let filename_candidate = naming_template
+            .replace("{ip}", ip_path)
+            .replace("{date}", &date)
+            .replace("{time}", &time)
+            // 如果用户旧配置里还有 {index}，也用 time 替换掉它，保持兼容
+            .replace("{index}", &time)
+            .replace("{original}", original_stem);
 
-    let stem = path_candidate.file_stem().and_then(|s| s.to_str()).unwrap_or(&filename_candidate).to_string();
-    let current_ext = path_candidate.extension().and_then(|e| e.to_str()).unwrap_or(ext).to_string();
-    let mut unique_filename = path_candidate.file_name().and_then(|f| f.to_str()).unwrap_or(&filename_candidate).to_string();
-    let mut dest_file_path = dest_dir.join(&unique_filename);
-    let mut counter = 1;
+        let mut path_candidate = dest_dir.join(&filename_candidate);
+        if path_candidate.extension().is_none() {
+            path_candidate.set_extension(ext);
+        }
 
-    while dest_file_path.exists() {
-        // Check if it is the same file. If so, return it directly.
-        if src_path == dest_file_path {
+        dest_file_path = path_candidate;
+
+        if dest_file_path.exists() {
+            // Check if it is the exact same file path
+            if src_path == dest_file_path {
+                return Ok(dest_file_path.to_str().unwrap().to_string());
+            }
+            // 发生重名冲突，时间加 1 秒后重试
+            current_time = current_time + chrono::Duration::seconds(1);
+        } else {
             break;
         }
-        unique_filename = format!("{}_{}.{}", stem, counter, current_ext);
-        dest_file_path = dest_dir.join(&unique_filename);
-        counter += 1;
-    }
-
-    // 如果源文件与目标文件路径完全一致，则直接返回
-    if src_path == dest_file_path {
-        return Ok(dest_file_path.to_str().unwrap().to_string());
     }
 
     // 执行本地文件拷贝

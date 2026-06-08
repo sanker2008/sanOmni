@@ -12,6 +12,7 @@ import IpSettingsTab from "./IpSettingsTab";
 import LabsSettingsTab from "./LabsSettingsTab";
 import ShortcutsTab from "./ShortcutsTab";
 import AboutTab from "./AboutTab";
+import SyncTab from "./SyncTab";
 import TrashView from "@/components/TrashView";
 
 export default function SettingsView() {
@@ -266,6 +267,8 @@ export default function SettingsView() {
                 onTriggerReset={setResetType} 
               />
             )}
+
+            {activeSettingsTab === "sync" && <SyncTab />}
             
             {activeSettingsTab === "prompt" && (
               <PromptSettingsTab 

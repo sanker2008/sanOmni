@@ -195,7 +195,7 @@ export default function IpInboxView() {
         console.log("Using default archived path:", libraryPath);
       }
 
-      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{time}";
       const result = await ipImageApi.archive(selectedImages, libraryPath, namingTemplate);
 
       if (result.success_count > 0) {
@@ -313,7 +313,7 @@ export default function IpInboxView() {
         libraryPath = await getAppRoot();
       }
 
-      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{time}";
       const result = await ipImageApi.archive([imageId], libraryPath, namingTemplate);
 
       if (result.success_count > 0) {
@@ -607,8 +607,11 @@ export default function IpInboxView() {
 
             {selectedImages.length > 0 && (
               <>
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground flex items-center gap-1 border-r pr-3 mr-1">
                   已选择 {selectedImages.length} 张
+                  <button onClick={clearSelection} className="text-muted-foreground hover:text-foreground p-0.5 rounded-md hover:bg-muted transition-colors" title="清空选中">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </span>
                 <Button variant="ghost" size="sm" className="gap-1 h-7"
                   onClick={() => setShowBatchEdit(true)}>

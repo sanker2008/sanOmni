@@ -482,11 +482,21 @@ pub async fn update_image(
             let mut final_filename = new_filename.clone();
             let mut counter = 1;
 
-            while final_path.exists() {
-                let stem = std::path::Path::new(&new_filename)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or(&new_filename);
+            let stem = std::path::Path::new(&new_filename)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&new_filename)
+                .to_string();
+
+            while ["png", "jpg", "jpeg", "webp", "gif", "bmp"].iter().any(|e| {
+                let check_stem = if counter == 1 { stem.clone() } else { format!("{}_{}", stem, counter - 1) };
+                if let Some(parent) = new_path.parent() {
+                    let p = parent.join(format!("{}.{}", check_stem, e));
+                    p.exists() && p != std::path::Path::new(&current_image.absolute_path)
+                } else {
+                    false
+                }
+            }) {
                 final_filename = format!("{}_{}.{}", stem, counter, ext);
                 if let Some(parent) = new_path.parent() {
                     final_path = parent.join(&final_filename);
@@ -590,7 +600,7 @@ pub async fn archive_images(
     };
 
     let now = chrono::Utc::now().to_rfc3339();
-    let default_template = "{vendor}-{model}-{date}-{index}".to_string();
+    let default_template = "{vendor}-{model}-{date}-{time}".to_string();
     let template = request.naming_template.unwrap_or(default_template);
 
     for image_id in &request.image_ids {
@@ -628,21 +638,22 @@ pub async fn archive_images(
             .join(&model_path);
 
         // Generate unique filename to prevent overwriting existing files
-        let date = &image.created_at[..10]; // YYYY-MM-DD
+        let date = &image.created_at[..10].replace("-", ""); // YYYYMMDD
         let ext = std::path::Path::new(&image.filename)
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("png");
 
-        let mut index = result.success_count + 1;
-        let mut suffix_counter = 1;
+        let mut current_time = chrono::Local::now().naive_local();
 
         let (target_path, new_filename) = loop {
+            let time_str = current_time.format("%H%M%S").to_string();
             let filename_candidate = template.clone()
                 .replace("{vendor}", &vendor_path)
                 .replace("{model}", &model_path)
                 .replace("{date}", date)
-                .replace("{index}", &format!("{:03}", index))
+                .replace("{time}", &time_str)
+                .replace("{index}", &time_str) // 兼容旧配置
                 .replace("{original}", &image.original_filename);
 
             let mut path_file = std::path::PathBuf::from(&filename_candidate);
@@ -650,31 +661,14 @@ pub async fn archive_images(
                 path_file.set_extension(ext);
             }
 
-            let stem = path_file.file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or(&filename_candidate)
-                .to_string();
-            let current_ext = path_file.extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or(ext)
-                .to_string();
-
-            let final_candidate = if !template.contains("{index}") && suffix_counter > 1 {
-                format!("{}_{}.{}", stem, suffix_counter - 1, current_ext)
-            } else {
-                format!("{}.{}", stem, current_ext)
-            };
-
+            let final_candidate = path_file.file_name().unwrap().to_string_lossy().into_owned();
             let path_candidate = target_dir.join(&final_candidate);
+
             if !path_candidate.exists() {
                 break (path_candidate, final_candidate);
             }
 
-            if template.contains("{index}") {
-                index += 1;
-            } else {
-                suffix_counter += 1;
-            }
+            current_time += chrono::Duration::seconds(1);
         };
 
         // Move file
@@ -875,16 +869,22 @@ pub async fn unarchive_images(
         let mut final_path = target_path.clone();
         let mut final_filename = new_filename.clone();
         let mut counter = 1;
+        
+        let stem = std::path::Path::new(&new_filename)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&new_filename)
+            .to_string();
+        let ext = std::path::Path::new(&new_filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png")
+            .to_string();
 
-        while final_path.exists() {
-            let stem = std::path::Path::new(&new_filename)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or(&new_filename);
-            let ext = std::path::Path::new(&new_filename)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("png");
+        while ["png", "jpg", "jpeg", "webp", "gif", "bmp"].iter().any(|e| {
+            let check_stem = if counter == 1 { stem.clone() } else { format!("{}_{}", stem, counter - 1) };
+            inbox_dir.join(format!("{}.{}", check_stem, e)).exists()
+        }) {
             final_filename = format!("{}_{}.{}", stem, counter, ext);
             final_path = inbox_dir.join(&final_filename);
             counter += 1;

@@ -242,7 +242,7 @@ export default function QuickEditModal() {
     if (isIpImage && ipImage) {
       // IP 图片：使用 ipImageApi.update
       const settings = useUIStore.getState().settings;
-      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{time}";
 
       const updatedIp = await ipImageApi.update({
         ip_image_id: image.id,
@@ -262,7 +262,7 @@ export default function QuickEditModal() {
         const { getAppRoot } = await import("@/lib/pathUtils");
         const customPath = settings.customIpArchivedPath;
         const libraryPath = customPath || await getAppRoot();
-        const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+        const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{time}";
         const result = await ipImageApi.archive([image.id], libraryPath, namingTemplate);
         if (result.success_count > 0) {
           removeIpImage(image.id);

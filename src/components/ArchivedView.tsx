@@ -252,6 +252,11 @@ export default function ArchivedView() {
     loadArchivedImages();
   }, []);
 
+  // Clear selection when vendor/model tab changes
+  useEffect(() => {
+    clearSelection();
+  }, [selectedVendor, selectedModel, clearSelection]);
+
   const loadArchivedImages = async () => {
     setLoading(true);
     try {
@@ -798,8 +803,11 @@ export default function ArchivedView() {
               </button>
               {selectedImages.length > 0 && (
                 <>
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-sm text-muted-foreground flex items-center gap-1 border-r pr-3 mr-1">
                     已选择 {selectedImages.length} 张
+                    <button onClick={clearSelection} className="text-muted-foreground hover:text-foreground p-0.5 rounded-md hover:bg-muted transition-colors" title="清空选中">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </span>
                   <Button variant="ghost" size="sm" className="gap-1 h-7"
                     onClick={() => setShowBatchEdit(true)}>

@@ -45,6 +45,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import ImageCard from "./ImageCard";
+import SyncButton from "@/components/SyncButton";
 import IPImagePickerModal from "./IPImagePickerModal";
 import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
@@ -83,7 +84,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
     } else {
       libraryPath = await getAppRoot();
     }
-    const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+    const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{time}";
 
     const fileName = avatarPath.split(/[/\\]/).pop() || "avatar.png";
 
@@ -692,6 +693,11 @@ export default function IpArchivedView() {
     loadIps();
   }, []);
 
+  // Clear selection when IP tab or activeTab changes
+  useEffect(() => {
+    clearSelection();
+  }, [selectedIpId, activeTab, clearSelection]);
+
   useEffect(() => {
     if (selectedIpId) {
       loadIpDetail(selectedIpId);
@@ -912,7 +918,7 @@ export default function IpArchivedView() {
       } else {
         libraryPath = await getAppRoot();
       }
-      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+      const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{time}";
 
       let successCount = 0;
       let failCount = 0;
@@ -1220,11 +1226,11 @@ export default function IpArchivedView() {
                 <div className="flex items-center gap-4">
                   {!selectedIpId ? (
                     <>
-                      <h2 className="text-lg font-semibold flex items-center gap-2">
-                        <Archive className="w-5 h-5" />
+                      <h2 className="text-lg font-semibold flex items-center gap-2 whitespace-nowrap shrink-0">
+                        <Archive className="w-5 h-5 shrink-0" />
                         全部资产
                       </h2>
-                      <Badge variant="secondary">{filteredImages.length} 张图片</Badge>
+                      <Badge variant="secondary" className="whitespace-nowrap shrink-0">{filteredImages.length} 张图片</Badge>
                     </>
                   ) : (
                     <Badge variant="secondary">{filteredImages.length} 张图片</Badge>
@@ -1233,6 +1239,9 @@ export default function IpArchivedView() {
                     <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
                     刷新
                   </Button>
+                  <div className="pl-2 border-l border-border h-6 flex items-center">
+                    <SyncButton />
+                  </div>
                   {selectedIpId && (
                     <Button variant="ghost" size="sm" onClick={() => setSelectedIpId(null)}>
                       清除筛选
@@ -1413,8 +1422,11 @@ export default function IpArchivedView() {
                     </button>
                     {selectedImages.length > 0 && (
                       <>
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground flex items-center gap-1 border-r pr-3 mr-1">
                           已选择 {selectedImages.length} 张
+                          <button onClick={clearSelection} className="text-muted-foreground hover:text-foreground p-0.5 rounded-md hover:bg-muted transition-colors" title="清空选中">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </span>
                         <Button variant="ghost" size="sm" className="gap-1 h-7"
                           onClick={() => setShowBatchEdit(true)}>

@@ -212,7 +212,7 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
           }
 
           const settings = useUIStore.getState().settings;
-          const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{index}";
+          const namingTemplate = settings.ipNamingTemplate || "{ip}-{date}-{time}";
 
           let finalAssociateStickerPackId = undefined;
           if (associateStickerPackId === "ungrouped") {
