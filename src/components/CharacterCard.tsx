@@ -7,12 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import { GripVertical, Edit, Trash2, ChevronDown, ChevronUp, Star, HelpCircle, Film, Sparkles, FolderOpen, Minimize, Loader2 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
+import { convertFileToWebp, convertFileToPng } from "@/lib/webpConverter";
 
 interface CharacterCardProps {
   character: CharacterWithRelations;
@@ -39,7 +35,7 @@ const CHAR_TYPE_COLORS: Record<string, string> = {
 };
 
 export default function CharacterCard({ character, onEdit, onIpSelect }: CharacterCardProps) {
-  const { deleteCharacter } = useCharactersStore();
+  const { deleteCharacter, uploadImages } = useCharactersStore();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -151,7 +147,7 @@ export default function CharacterCard({ character, onEdit, onIpSelect }: Charact
                       size="icon"
                       variant="ghost"
                       className="h-6 w-6 text-white hover:text-primary hover:bg-black/50"
-                      onClick={handleConvertToWebp}
+                      onClick={(e) => handleConvertFormat(e as any, 'webp')}
                       title="转为 WebP"
                       disabled={convertingToWebp}
                     >

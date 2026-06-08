@@ -10,12 +10,7 @@ import WorkEditModal from "./WorkEditModal";
 import CharacterEditModal from "./CharacterEditModal";
 import CharacterCard from "./CharacterCard";
 import ConfirmDialog from "./ConfirmDialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 
 interface WorkDetailViewProps {
   onIpSelect?: (ipId: string | null) => void;
