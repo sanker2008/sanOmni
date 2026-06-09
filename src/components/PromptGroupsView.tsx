@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X } from "lucide-react";
+import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X, ChevronLeft, ChevronRight, LayoutGrid, List } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { SmartPromptRenderer } from "./SmartPromptRenderer";
@@ -67,6 +67,13 @@ export function PromptGroupsView() {
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilterMode, setGroupFilterMode] = useState<"all" | "linked" | "unlinked">("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, groupFilterMode]);
 
   const filteredGroups = useMemo(() => {
     let result = groups;
@@ -90,6 +97,18 @@ export function PromptGroupsView() {
       );
     });
   }, [groups, searchQuery, groupFilterMode]);
+
+  const paginatedGroups = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredGroups.slice(start, start + pageSize);
+  }, [filteredGroups, currentPage, pageSize]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredGroups.length / pageSize));
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [filteredGroups.length, currentPage, pageSize]);
 
   useEffect(() => {
     void loadGroups();
@@ -370,19 +389,10 @@ export function PromptGroupsView() {
     }
 
     const sections = [];
-
-    if (group.name?.trim()) {
-      sections.push(`名称:\n${group.name.trim()}`);
-    }
-
-    sections.push(`Prompt:\n${finalPrompt}`);
+    sections.push(finalPrompt);
 
     if (group.negative_prompt?.trim()) {
       sections.push(`反向提示词:\n${group.negative_prompt.trim()}`);
-    }
-
-    if (group.description?.trim()) {
-      sections.push(`说明:\n${group.description.trim()}`);
     }
 
     return sections.join("\n\n");
@@ -601,6 +611,31 @@ export function PromptGroupsView() {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-md border bg-muted/50 p-0.5">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`flex h-8 items-center justify-center rounded-sm px-2.5 transition-colors ${
+                viewMode === "list"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+              }`}
+              title="列表视图"
+            >
+              <List className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`flex h-8 items-center justify-center rounded-sm px-2.5 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+              }`}
+              title="网格视图"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+          </div>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -642,7 +677,7 @@ export function PromptGroupsView() {
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="space-y-3 p-4">
+        <div className={`p-4 ${viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" : "space-y-3"}`}>
           {filteredGroups.length === 0 ? (
             <Card>
               <CardContent className="pt-6 text-center text-muted-foreground">
@@ -666,16 +701,16 @@ export function PromptGroupsView() {
               </CardContent>
             </Card>
           ) : (
-            filteredGroups.map((group) => (
+            paginatedGroups.map((group) => (
               <Card 
                 key={group.id} 
-                className="transition-shadow hover:shadow-md cursor-pointer select-none"
+                className={`transition-shadow hover:shadow-md cursor-pointer select-none flex flex-col ${viewMode === "grid" ? "h-full" : ""}`}
                 onDoubleClick={() => void openEditDialog(group.id)}
               >
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className={`flex ${viewMode === "grid" ? "flex-col gap-2" : "items-start justify-between gap-3"}`}>
                     <div className="min-w-0 flex-1">
-                      <CardTitle className="line-clamp-2 text-sm font-medium">
+                      <CardTitle className={`font-medium ${viewMode === "grid" ? "line-clamp-3 text-sm" : "line-clamp-2 text-sm"}`}>
                         {group.name ? (
                           <span className="font-bold text-primary mr-2">{group.name}</span>
                         ) : null}
@@ -685,61 +720,63 @@ export function PromptGroupsView() {
                         <CardDescription className="mt-1 text-xs">{group.description}</CardDescription>
                       )}
                     </div>
-                    <Badge variant="outline">{group.image_count} 张</Badge>
+                    <Badge variant="outline" className={viewMode === "grid" ? "self-start" : ""}>{group.image_count} 张</Badge>
                   </div>
                 </CardHeader>
 
-                <CardContent className="pt-0 space-y-3">
-                  {group.negative_prompt && (
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">负面提示词：</span>
-                      <span className="line-clamp-1">{group.negative_prompt}</span>
-                    </div>
-                  )}
+                <CardContent className="pt-0 flex flex-col flex-1">
+                  <div className="space-y-3 flex-1">
+                    {group.negative_prompt && (
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-medium">负面提示词：</span>
+                        <span className={`line-clamp-1`}>{group.negative_prompt}</span>
+                      </div>
+                    )}
 
-                  {/* 图片缩略图 */}
-                  {groupImages.get(group.id) && groupImages.get(group.id)!.length > 0 && (
-                    <div className="flex gap-2">
-                      {groupImages.get(group.id)!.map((img) => (
-                        <div key={img.id} className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center">
-                          <img
-                             src={convertFileSrc(img.absolute_path)}
-                            alt=""
-                            className={`h-full w-full ${showFullImage ? "object-contain" : "object-cover"}`}
-                          />
-                        </div>
-                      ))}
-                      {group.image_count > 4 && (
-                        <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                          +{group.image_count - 4}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    {/* 图片缩略图 */}
+                    {groupImages.get(group.id) && groupImages.get(group.id)!.length > 0 && (
+                      <div className="flex gap-2">
+                        {groupImages.get(group.id)!.map((img) => (
+                          <div key={img.id} className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center">
+                            <img
+                               src={convertFileSrc(img.absolute_path)}
+                              alt=""
+                              className={`h-full w-full ${showFullImage ? "object-contain" : "object-cover"}`}
+                            />
+                          </div>
+                        ))}
+                        {group.image_count > 4 && (
+                          <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                            +{group.image_count - 4}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                  <div className="flex items-center justify-between">
+                  <div className={`flex items-center justify-between mt-4 ${viewMode === "grid" ? "flex-col items-start gap-3" : ""}`}>
                     <span className="text-xs text-muted-foreground">
                       更新于 {new Date(group.updated_at).toLocaleDateString("zh-CN")}
                     </span>
 
-                    <div className="flex gap-2" onDoubleClick={(e) => e.stopPropagation()}>
-                      <Button variant="outline" size="sm" onClick={() => void handleCopyFullPrompt(group)}>
+                    <div className={`flex gap-2 ${viewMode === "grid" ? "w-full justify-between" : ""}`} onDoubleClick={(e) => e.stopPropagation()}>
+                      <Button variant="outline" size="sm" onClick={() => void handleCopyFullPrompt(group)} title="完整复制">
                         {copiedGroupId === group.id ? (
-                          <Check className="mr-1 h-3 w-3" />
+                          <Check className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
                         ) : (
-                          <Copy className="mr-1 h-3 w-3" />
+                          <Copy className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
                         )}
-                        {copiedGroupId === group.id ? "已复制" : "完整复制"}
+                        {viewMode === "list" && (copiedGroupId === group.id ? "已复制" : "完整复制")}
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => void viewGroupDetails(group.id)}>
-                        <Eye className="mr-1 h-3 w-3" />
-                        查看
+                      <Button variant="outline" size="sm" onClick={() => void viewGroupDetails(group.id)} title="查看">
+                        <Eye className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
+                        {viewMode === "list" && "查看"}
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => void openEditDialog(group.id)}>
-                        <Pencil className="mr-1 h-3 w-3" />
-                        编辑
+                      <Button variant="outline" size="sm" onClick={() => void openEditDialog(group.id)} title="编辑">
+                        <Pencil className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
+                        {viewMode === "list" && "编辑"}
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => void deleteGroup(group.id)}>
+                      <Button variant="ghost" size="sm" onClick={() => void deleteGroup(group.id)} title="删除">
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -751,15 +788,68 @@ export function PromptGroupsView() {
         </div>
       </ScrollArea>
 
+      {filteredGroups.length > 0 && (
+        <div className="flex items-center justify-between border-t p-3 bg-card shadow-sm z-10 text-sm">
+          <div className="text-muted-foreground flex items-center gap-3">
+            <span>共 {filteredGroups.length} 条记录</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="h-7 rounded-md border border-input bg-background px-2 py-0.5 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+            >
+              <option value={12}>12 条/页</option>
+              <option value={24}>24 条/页</option>
+              <option value={48}>48 条/页</option>
+              <option value={96}>96 条/页</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="h-8"
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              上一页
+            </Button>
+            <div className="text-muted-foreground px-2">
+              第 {currentPage} / {Math.max(1, Math.ceil(filteredGroups.length / pageSize))} 页
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(Math.ceil(filteredGroups.length / pageSize), p + 1))}
+              disabled={currentPage >= Math.ceil(filteredGroups.length / pageSize) || Math.ceil(filteredGroups.length / pageSize) === 0}
+              className="h-8"
+            >
+              下一页
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-h-[90vh] max-w-6xl">
           <DialogHeader>
-            <DialogTitle>{selectedGroup?.group.name || "Prompt 详情"}</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-primary">
+              {selectedGroup?.group.name || "Prompt 详情"}
+            </DialogTitle>
+            {selectedGroup?.group.description && (
+              <DialogDescription className="text-sm mt-3 bg-muted/40 p-3 rounded-md border text-left text-muted-foreground">
+                {selectedGroup.group.description}
+              </DialogDescription>
+            )}
           </DialogHeader>
 
           {selectedGroup && (
             <ScrollArea className="max-h-[70vh]">
-              <div className="space-y-6">
+              <div className="space-y-6 pt-2">
                 <SmartPromptRenderer 
                   templateSchemaStr={selectedGroup.group.template_schema || ""} 
                   basePrompt={selectedGroup.group.prompt} 
@@ -781,26 +871,6 @@ export function PromptGroupsView() {
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap bg-muted/40 p-2.5 rounded border">
                       {selectedGroup.group.negative_prompt}
-                    </p>
-                  </div>
-                )}
-
-                {selectedGroup.group.description && (
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">说明：</span>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-7 px-2 text-xs" 
-                        onClick={() => void handleCopyText(selectedGroup.group.description || "", "说明")}
-                      >
-                        <Copy className="mr-1 h-3 w-3" />
-                        复制
-                      </Button>
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground bg-muted/40 p-2.5 rounded border">
-                      {selectedGroup.group.description}
                     </p>
                   </div>
                 )}

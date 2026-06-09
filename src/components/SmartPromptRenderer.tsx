@@ -158,7 +158,7 @@ export function SmartPromptRenderer({ templateSchemaStr, basePrompt }: SmartProm
                         <Badge 
                           key={idx}
                           variant={isSelected ? "default" : "outline"}
-                          className="cursor-pointer transition-colors text-xs font-normal"
+                          className={`cursor-pointer transition-colors text-xs font-normal ${!isSelected ? "bg-muted/50 hover:bg-muted" : ""}`}
                           onClick={() => handleValueChange(v.key, opt.value)}
                         >
                           {opt.label}

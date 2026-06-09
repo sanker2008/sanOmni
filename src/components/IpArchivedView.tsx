@@ -39,6 +39,7 @@ import {
   ChevronRight,
   Minimize,
   ChevronDown,
+  Menu,
 } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -54,6 +55,7 @@ import { IpAssociateCharacterModal } from "./IpAssociateCharacterModal";
 
 import IpSidebar from "./IpSidebar";
 import { useWorksStore, type CharacterWithRelations } from "@/stores";
+import { cn } from "@/lib/utils";
 
 // 自动拷贝并归档头像到当前 IP 形象
 const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
@@ -175,6 +177,7 @@ export default function IpArchivedView() {
   const [batchDeleteStep, setBatchDeleteStep] = useState(0);
   const [sortBy, setSortBy] = useState<"time" | "size">("time");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"profile" | "emojis" | "creations" | "relations" | "works">("creations");
   const [ipRoles, setIpRoles] = useState<CharacterWithRelations[]>([]);
@@ -1114,23 +1117,40 @@ export default function IpArchivedView() {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative">
       {/* Sidebar - IP Tree */}
-      <IpSidebar
-        key={sidebarKey}
-        onIpSelect={setSelectedIpId}
-        selectedIpId={selectedIpId}
-        imageCounts={ipImageCounts}
-        totalCount={archivedImages.length}
-        onRefreshImages={loadArchivedImages}
-      />
+      <div className={cn(
+        "absolute inset-y-0 left-0 z-50 transform transition-transform duration-300 md:relative md:transform-none",
+        isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <IpSidebar
+          key={sidebarKey}
+          onIpSelect={setSelectedIpId}
+          selectedIpId={selectedIpId}
+          imageCounts={ipImageCounts}
+          totalCount={archivedImages.length}
+          onRefreshImages={loadArchivedImages}
+          onClose={() => setIsMobileSidebarOpen(false)}
+        />
+      </div>
+
+      {/* Mobile overlay */}
+      {isMobileSidebarOpen && (
+        <div 
+          className="absolute inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* IP 详情 Header */}
         {selectedIpId && ipDetail && (
           <div className="p-6 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/45 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
+                <Menu className="w-5 h-5" />
+              </Button>
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted border shadow-sm">
                 {ipDetail.ip.avatar_path ? (
                   <img
@@ -1226,6 +1246,9 @@ export default function IpArchivedView() {
                 <div className="flex items-center gap-4">
                   {!selectedIpId ? (
                     <>
+                      <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
+                        <Menu className="w-5 h-5" />
+                      </Button>
                       <h2 className="text-lg font-semibold flex items-center gap-2 whitespace-nowrap shrink-0">
                         <Archive className="w-5 h-5 shrink-0" />
                         全部资产
@@ -1233,7 +1256,12 @@ export default function IpArchivedView() {
                       <Badge variant="secondary" className="whitespace-nowrap shrink-0">{filteredImages.length} 张图片</Badge>
                     </>
                   ) : (
-                    <Badge variant="secondary">{filteredImages.length} 张图片</Badge>
+                    <>
+                      <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
+                        <Menu className="w-5 h-5" />
+                      </Button>
+                      <Badge variant="secondary">{filteredImages.length} 张图片</Badge>
+                    </>
                   )}
                   <Button variant="outline" size="sm" className="gap-2" onClick={loadArchivedImages} disabled={isLoading}>
                     <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />

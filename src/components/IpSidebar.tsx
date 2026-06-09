@@ -20,6 +20,8 @@ interface IpSidebarProps {
   imageCounts?: Record<string, number>;
   totalCount?: number;
   onRefreshImages?: () => void;
+  className?: string;
+  onClose?: () => void;
 }
 
 // 自动拷贝并归档头像到当前 IP 形象
@@ -118,7 +120,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
   }
 };
 
-export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, totalCount, onRefreshImages }: IpSidebarProps) {
+export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, totalCount, onRefreshImages, className, onClose }: IpSidebarProps) {
   const [ips, setIps] = useState<IpAsset[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -230,16 +232,23 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
   );
 
   return (
-    <div className="w-80 border-r flex flex-col bg-muted/40 h-full overflow-hidden">
+    <div className={cn("w-80 border-r flex flex-col bg-background md:bg-muted/40 h-full overflow-hidden shrink-0", className)}>
       <div className="p-4 border-b flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" />
             sanIP
           </h2>
-          <Button size="icon" variant="ghost" onClick={handleOpenCreateIp} className="h-8 w-8">
-            <Plus className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button size="icon" variant="ghost" onClick={handleOpenCreateIp} className="h-8 w-8">
+              <Plus className="w-4 h-4" />
+            </Button>
+            {onClose && (
+              <Button size="icon" variant="ghost" onClick={onClose} className="h-8 w-8 md:hidden">
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="relative">
