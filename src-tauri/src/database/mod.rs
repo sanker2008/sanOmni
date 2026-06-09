@@ -82,19 +82,13 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         );
 
         // Add name column if not exists
-        let _ = conn.execute(
-            "ALTER TABLE prompt_groups ADD COLUMN name TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN name TEXT", []);
 
         // Migration: Move IP images from images table to ip_images table
         migrate_ip_images(conn)?;
 
         // Add path column to ip_assets if not exists (migration for existing DBs)
-        let _ = conn.execute(
-            "ALTER TABLE ip_assets ADD COLUMN path TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE ip_assets ADD COLUMN path TEXT", []);
         // Backfill path from name for existing rows that have no path
         let _ = conn.execute(
             "UPDATE ip_assets SET path = id WHERE path IS NULL OR path = ''",
@@ -102,10 +96,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         );
 
         // Add path column to ip_sticker_packs if not exists (migration for existing DBs)
-        let _ = conn.execute(
-            "ALTER TABLE ip_sticker_packs ADD COLUMN path TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE ip_sticker_packs ADD COLUMN path TEXT", []);
         // Backfill path from id for existing rows that have no path
         let _ = conn.execute(
             "UPDATE ip_sticker_packs SET path = id WHERE path IS NULL OR path = ''",
@@ -113,10 +104,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         );
 
         // Add path column to works if not exists (migration for existing DBs)
-        let _ = conn.execute(
-            "ALTER TABLE works ADD COLUMN path TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE works ADD COLUMN path TEXT", []);
         // Backfill path from id for existing works that have no path
         let _ = conn.execute(
             "UPDATE works SET path = id WHERE path IS NULL OR path = ''",
@@ -152,10 +140,10 @@ pub fn init_database(db_path: &Path) -> Result<()> {
 
     // Run versioned migrations
     run_migrations(&conn)?;
-    
+
     // Insert default vendors and models
     insert_defaults(&conn)?;
-    
+
     Ok(())
 }
 
@@ -165,7 +153,7 @@ pub fn reset_database(db_path: &Path) -> Result<()> {
         std::fs::remove_file(db_path)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
     }
-    
+
     // Reinitialize
     init_database(db_path)
 }
@@ -508,22 +496,22 @@ fn migrate_ip_images(conn: &Connection) -> Result<()> {
     let has_image_type: bool = conn
         .prepare("SELECT image_type FROM images LIMIT 1")
         .is_ok();
-    
+
     if !has_image_type {
         // No migration needed - fresh install
         return Ok(());
     }
-    
+
     // Check if image_ip_relations table exists
     let has_ip_relations: bool = conn
         .prepare("SELECT * FROM image_ip_relations LIMIT 1")
         .is_ok();
-    
+
     if !has_ip_relations {
         // No migration needed
         return Ok(());
     }
-    
+
     // Migrate images with image_type = 'ip' to ip_images table
     let mut stmt = conn.prepare(
         "SELECT i.id, i.filename, i.original_filename, i.relative_path, i.absolute_path,
@@ -532,41 +520,58 @@ fn migrate_ip_images(conn: &Connection) -> Result<()> {
                 i.created_at, i.imported_at, i.archived_at, r.ip_id
          FROM images i
          LEFT JOIN image_ip_relations r ON i.id = r.image_id
-         WHERE i.image_type = 'ip'"
+         WHERE i.image_type = 'ip'",
     )?;
-    
+
     let rows = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, String>(0)?,  // id
-            row.get::<_, String>(1)?,  // filename
-            row.get::<_, String>(2)?,  // original_filename
-            row.get::<_, String>(3)?,  // relative_path
-            row.get::<_, String>(4)?,  // absolute_path
-            row.get::<_, String>(5)?,  // status
-            row.get::<_, Option<i64>>(6)?,  // file_size
-            row.get::<_, Option<i32>>(7)?,  // width
-            row.get::<_, Option<i32>>(8)?,  // height
+            row.get::<_, String>(0)?,          // id
+            row.get::<_, String>(1)?,          // filename
+            row.get::<_, String>(2)?,          // original_filename
+            row.get::<_, String>(3)?,          // relative_path
+            row.get::<_, String>(4)?,          // absolute_path
+            row.get::<_, String>(5)?,          // status
+            row.get::<_, Option<i64>>(6)?,     // file_size
+            row.get::<_, Option<i32>>(7)?,     // width
+            row.get::<_, Option<i32>>(8)?,     // height
             row.get::<_, Option<String>>(9)?,  // file_hash
-            row.get::<_, Option<String>>(10)?,  // format
-            row.get::<_, i32>(11)?,  // has_watermark
-            row.get::<_, Option<String>>(12)?,  // watermark_platform
-            row.get::<_, i32>(13)?,  // watermark_detected
-            row.get::<_, i32>(14)?,  // watermark_removed
-            row.get::<_, String>(15)?,  // created_at
-            row.get::<_, String>(16)?,  // imported_at
-            row.get::<_, Option<String>>(17)?,  // archived_at
-            row.get::<_, Option<String>>(18)?,  // ip_id
+            row.get::<_, Option<String>>(10)?, // format
+            row.get::<_, i32>(11)?,            // has_watermark
+            row.get::<_, Option<String>>(12)?, // watermark_platform
+            row.get::<_, i32>(13)?,            // watermark_detected
+            row.get::<_, i32>(14)?,            // watermark_removed
+            row.get::<_, String>(15)?,         // created_at
+            row.get::<_, String>(16)?,         // imported_at
+            row.get::<_, Option<String>>(17)?, // archived_at
+            row.get::<_, Option<String>>(18)?, // ip_id
         ))
     })?;
-    
+
     for row_result in rows {
-        if let Ok((id, filename, original_filename, relative_path, absolute_path,
-                   status, file_size, width, height, file_hash, format,
-                   has_watermark, watermark_platform, watermark_detected, watermark_removed,
-                   created_at, imported_at, archived_at, ip_id)) = row_result {
-            
+        if let Ok((
+            id,
+            filename,
+            original_filename,
+            relative_path,
+            absolute_path,
+            status,
+            file_size,
+            width,
+            height,
+            file_hash,
+            format,
+            has_watermark,
+            watermark_platform,
+            watermark_detected,
+            watermark_removed,
+            created_at,
+            imported_at,
+            archived_at,
+            ip_id,
+        )) = row_result
+        {
             let ip_id = ip_id.unwrap_or_else(|| "unknown".to_string());
-            
+
             // Insert into ip_images
             let _ = conn.execute(
                 "INSERT OR IGNORE INTO ip_images 
@@ -576,13 +581,28 @@ fn migrate_ip_images(conn: &Connection) -> Result<()> {
                   created_at, imported_at, archived_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 rusqlite::params![
-                    id, filename, original_filename, ip_id, relative_path, absolute_path,
-                    status, file_size, width, height, file_hash, format,
-                    has_watermark, watermark_platform, watermark_detected, watermark_removed,
-                    created_at, imported_at, archived_at
+                    id,
+                    filename,
+                    original_filename,
+                    ip_id,
+                    relative_path,
+                    absolute_path,
+                    status,
+                    file_size,
+                    width,
+                    height,
+                    file_hash,
+                    format,
+                    has_watermark,
+                    watermark_platform,
+                    watermark_detected,
+                    watermark_removed,
+                    created_at,
+                    imported_at,
+                    archived_at
                 ],
             );
-            
+
             // Migrate tags
             let _ = conn.execute(
                 "INSERT OR IGNORE INTO ip_image_tag_relations (ip_image_id, tag_id)
@@ -591,115 +611,118 @@ fn migrate_ip_images(conn: &Connection) -> Result<()> {
             );
         }
     }
-    
+
     // Delete migrated images from images table
     let _ = conn.execute("DELETE FROM images WHERE image_type = 'ip'", []);
-    
+
     // Drop old tables and columns
     let _ = conn.execute("DROP TABLE IF EXISTS image_ip_relations", []);
-    
+
     Ok(())
 }
 
 fn insert_defaults(conn: &Connection) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     // Insert default unknown IP asset
     let ip_count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM ip_assets WHERE id = 'unknown'",
         [],
-        |row| row.get(0)
+        |row| row.get(0),
     )?;
-    
+
     if ip_count == 0 {
         conn.execute(
             "INSERT INTO ip_assets (id, name, path, description, created_at, updated_at) 
              VALUES (?, ?, ?, ?, ?, ?)",
-            ("unknown", "Unknown", "unknown", "Default unknown IP character", &now, &now),
+            (
+                "unknown",
+                "Unknown",
+                "unknown",
+                "Default unknown IP character",
+                &now,
+                &now,
+            ),
         )?;
     }
-    
+
     // Check if vendors already exist
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM vendors",
-        [],
-        |row| row.get(0)
-    )?;
-    
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM vendors", [], |row| row.get(0))?;
+
     if count > 0 {
         return Ok(());
     }
-    
+
     // Insert Unknown vendor and model as fallback
     conn.execute(
         "INSERT INTO vendors (id, name, path, sort_order, is_active, created_at, updated_at) 
          VALUES (?, ?, ?, ?, ?, ?, ?)",
         ("unknown", "Unknown", "unknown", 0, 1, &now, &now),
     )?;
-    
+
     conn.execute(
         "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ("unknown", "unknown", "Unknown Model", "unknown", "1", "Fallback for unclassified images", 0, 1, &now, &now),
     )?;
-    
+
     // Insert OpenAI
     conn.execute(
         "INSERT INTO vendors (id, name, path, sort_order, is_active, created_at, updated_at) 
          VALUES (?, ?, ?, ?, ?, ?, ?)",
         ("openai", "OpenAI", "openai", 1, 1, &now, &now),
     )?;
-    
+
     conn.execute(
         "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ("gpt-image-2", "openai", "GPT Image 2", "gpt-image-2", "2", "OpenAI image generation model", 1, 1, &now, &now),
     )?;
-    
+
     conn.execute(
         "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ("dalle-3", "openai", "DALL-E 3", "dalle-3", "3", "OpenAI DALL-E 3 model", 2, 1, &now, &now),
     )?;
-    
+
     // Insert Google
     conn.execute(
         "INSERT INTO vendors (id, name, path, sort_order, is_active, created_at, updated_at) 
          VALUES (?, ?, ?, ?, ?, ?, ?)",
         ("google", "Google", "google", 2, 1, &now, &now),
     )?;
-    
+
     conn.execute(
         "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ("nano-banana", "google", "Nano Banana", "nano-banana", "2.5", "Gemini 2.5 Flash Image", 1, 1, &now, &now),
     )?;
-    
+
     conn.execute(
         "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ("nano-banana-pro", "google", "Nano Banana Pro", "nano-banana-pro", "3", "Gemini 3 Flash Image", 2, 1, &now, &now),
     )?;
-    
+
     conn.execute(
         "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ("imagen-3", "google", "Imagen 3", "imagen-3", "3", "Professional API model", 3, 1, &now, &now),
     )?;
-    
+
     // Insert Midjourney
     conn.execute(
         "INSERT INTO vendors (id, name, path, sort_order, is_active, created_at, updated_at) 
          VALUES (?, ?, ?, ?, ?, ?, ?)",
         ("midjourney", "Midjourney", "midjourney", 3, 1, &now, &now),
     )?;
-    
+
     conn.execute(
         "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ("midjourney-v6", "midjourney", "Midjourney v6", "midjourney-v6", "6", "Midjourney v6 model", 1, 1, &now, &now),
     )?;
-    
+
     // Insert default tags
     let default_tags: &[(&str, &str, Option<&str>, Option<&str>)] = &[
         ("landscape", "风景", None, Some("#22c55e")),
@@ -708,7 +731,7 @@ fn insert_defaults(conn: &Connection) -> Result<()> {
         ("anime", "动漫", None, Some("#f43f5e")),
         ("realistic", "写实", None, Some("#f97316")),
     ];
-    
+
     for (id, name, parent, color) in default_tags {
         conn.execute(
             "INSERT OR IGNORE INTO tags (id, name, name_en, color, is_builtin, created_at)
@@ -716,6 +739,6 @@ fn insert_defaults(conn: &Connection) -> Result<()> {
             (id, name, parent, color, &now),
         )?;
     }
-    
+
     Ok(())
 }

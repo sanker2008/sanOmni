@@ -554,8 +554,8 @@ interface UIStore {
 
 export const useUIStore = create<UIStore>((set, get) => ({
   activeTab: "prompt",
-  promptTab: "inbox",
-  ipTab: "inbox",
+  promptTab: "templates",
+  ipTab: "archived",
   searchQuery: "",
   selectedVendorFilter: null,
   selectedModelFilter: null,

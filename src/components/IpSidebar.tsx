@@ -437,7 +437,11 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
                 value={ipPath}
                 onChange={(e) => setIpPath(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-"))}
               />
-              <p className="text-xs text-muted-foreground">用于文件夹命名和目录匹配，只允许小写字母、数字、连字符和下划线</p>
+              <p className="text-xs text-muted-foreground">
+                用于文件夹命名和目录匹配，只允许小写字母、数字、连字符和下划线。
+                <br />
+                <span className="text-amber-600 dark:text-amber-500 font-medium">⚠️ 注意：为保证关联和同步安全，创建后该标识不可修改</span>
+              </p>
             </div>
 
             <div className="flex flex-col gap-1.5">

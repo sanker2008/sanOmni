@@ -1,12 +1,12 @@
-use std::path::Path;
-use rusqlite::{params, Connection};
-use uuid::Uuid;
-use chrono::Utc;
 use crate::commands::CommandResult;
 use crate::models::{
-    IpAsset, IpCharacterSheet, IpCreation, IpStickerPack, IpEmoji,
-    IpStickerPackPlatform, IpRelation, IpAssetDetail, IpImage, IpImageWithTags, Tag
+    IpAsset, IpAssetDetail, IpCharacterSheet, IpCreation, IpEmoji, IpImage, IpImageWithTags,
+    IpRelation, IpStickerPack, IpStickerPackPlatform, Tag,
 };
+use chrono::Utc;
+use rusqlite::{params, Connection};
+use std::path::Path;
+use uuid::Uuid;
 
 // 辅助函数：将选择的图片拷贝到 app_data_dir 的独立子目录中，并返回拷贝后的绝对路径
 fn copy_to_ip_archived(
@@ -17,9 +17,13 @@ fn copy_to_ip_archived(
     src_file_path: &str,
 ) -> std::io::Result<String> {
     let db_path_obj = Path::new(db_path);
-    let data_dir = db_path_obj.parent().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Parent folder not found"))?;
-    let app_data_dir = data_dir.parent().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "App data folder not found"))?;
-    
+    let data_dir = db_path_obj.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "Parent folder not found")
+    })?;
+    let app_data_dir = data_dir.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "App data folder not found")
+    })?;
+
     // 从 settings 表里读取 customIpArchivedPath
     let custom_path: Option<String> = {
         if let Ok(conn) = Connection::open(db_path_obj) {
@@ -27,7 +31,8 @@ fn copy_to_ip_archived(
                 "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
                 [],
                 |row| row.get(0),
-            ).ok()
+            )
+            .ok()
         } else {
             None
         }
@@ -58,7 +63,7 @@ fn copy_to_ip_archived(
     };
 
     std::fs::create_dir_all(&dest_dir)?;
-    
+
     let src_path = Path::new(src_file_path);
     if src_path.exists() {
         if let Ok(src_abs) = std::fs::canonicalize(src_path) {
@@ -70,7 +75,7 @@ fn copy_to_ip_archived(
                     return Ok(src_file_path.to_string());
                 }
             }
-            
+
             // 兼容旧逻辑：检查文件是否在目标目录的直接子文件
             if let Ok(dest_abs) = std::fs::canonicalize(&dest_dir) {
                 if src_abs.parent() == Some(&dest_abs) {
@@ -79,7 +84,7 @@ fn copy_to_ip_archived(
             }
         }
     }
-    
+
     // Fetch naming template from settings
     let naming_template: String = {
         if let Ok(conn) = Connection::open(db_path_obj) {
@@ -87,15 +92,19 @@ fn copy_to_ip_archived(
                 "SELECT value FROM settings WHERE key = 'ipNamingTemplate'",
                 [],
                 |row| row.get(0),
-            ).unwrap_or_else(|_| "{ip}-{date}-{time}".to_string())
+            )
+            .unwrap_or_else(|_| "{ip}-{date}-{time}".to_string())
         } else {
             "{ip}-{date}-{time}".to_string()
         }
     };
 
-    let ext = src_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
+    let ext = src_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png");
     let original_stem = src_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-    
+
     // 使用当前时间作为基准
     let mut current_time = chrono::Local::now();
     let mut dest_file_path;
@@ -103,7 +112,7 @@ fn copy_to_ip_archived(
     loop {
         let date = current_time.format("%Y%m%d").to_string();
         let time = current_time.format("%H%M%S").to_string();
-        
+
         let filename_candidate = naming_template
             .replace("{ip}", ip_path)
             .replace("{date}", &date)
@@ -133,7 +142,7 @@ fn copy_to_ip_archived(
 
     // 执行本地文件拷贝
     std::fs::copy(src_path, &dest_file_path)?;
-    
+
     Ok(dest_file_path.to_str().unwrap().to_string())
 }
 
@@ -147,7 +156,7 @@ pub fn get_ip_assets(db_path: String) -> CommandResult<Vec<IpAsset>> {
     let mut stmt = match conn.prepare(
         "SELECT id, name, path, avatar_path, inspiration, description, created_at, updated_at
          FROM ip_assets
-         ORDER BY (id = 'unknown') DESC, updated_at DESC"
+         ORDER BY (id = 'unknown') DESC, updated_at DESC",
     ) {
         Ok(s) => s,
         Err(e) => return CommandResult::err(format!("准备查询语句失败: {}", e)),
@@ -165,7 +174,9 @@ pub fn get_ip_assets(db_path: String) -> CommandResult<Vec<IpAsset>> {
         Ok(IpAsset {
             id: row.get(0)?,
             name: row.get(1)?,
-            path: row.get(2).unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
+            path: row
+                .get(2)
+                .unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
             avatar_path: verified_avatar_path,
             inspiration: row.get(4)?,
             description: row.get(5)?,
@@ -224,7 +235,7 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
     let mut stmt = match conn.prepare(
         "SELECT id, name, path, avatar_path, inspiration, description, created_at, updated_at
          FROM ip_assets
-         WHERE id = ?"
+         WHERE id = ?",
     ) {
         Ok(s) => s,
         Err(e) => return CommandResult::err(format!("查询准备失败: {}", e)),
@@ -242,7 +253,9 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
         Ok(IpAsset {
             id: row.get(0)?,
             name: row.get(1)?,
-            path: row.get(2).unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
+            path: row
+                .get(2)
+                .unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
             avatar_path: verified_avatar_path,
             inspiration: row.get(4)?,
             description: row.get(5)?,
@@ -259,7 +272,7 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
         "SELECT id, ip_id, image_path, sheet_type, sort_order, created_at
          FROM ip_character_sheets
          WHERE ip_id = ?
-         ORDER BY sort_order ASC, created_at DESC"
+         ORDER BY sort_order ASC, created_at DESC",
     ) {
         Ok(s) => s,
         Err(e) => return CommandResult::err(format!("查询三视图准备失败: {}", e)),
@@ -284,7 +297,7 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
         "SELECT ip_id, image_path, creation_name, created_at
          FROM ip_creations
          WHERE ip_id = ?
-         ORDER BY created_at DESC"
+         ORDER BY created_at DESC",
     ) {
         Ok(s) => s,
         Err(e) => return CommandResult::err(format!("查询创作准备失败: {}", e)),
@@ -307,7 +320,7 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
         "SELECT id, ip_id, name, path, description, created_at, updated_at
          FROM ip_sticker_packs
          WHERE ip_id = ?
-         ORDER BY created_at DESC"
+         ORDER BY created_at DESC",
     ) {
         Ok(s) => s,
         Err(e) => return CommandResult::err(format!("查询表情包套件准备失败: {}", e)),
@@ -317,7 +330,9 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
             id: row.get(0)?,
             ip_id: row.get(1)?,
             name: row.get(2)?,
-            path: row.get(3).unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
+            path: row
+                .get(3)
+                .unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
             description: row.get(4)?,
             created_at: row.get(5)?,
             updated_at: row.get(6)?,
@@ -333,7 +348,7 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
         "SELECT id, ip_id, pack_id, image_path, trigger_word, sort_order, created_at
          FROM ip_emojis
          WHERE ip_id = ?
-         ORDER BY sort_order ASC, created_at DESC"
+         ORDER BY sort_order ASC, created_at DESC",
     ) {
         Ok(s) => s,
         Err(e) => return CommandResult::err(format!("查询表情图片准备失败: {}", e)),
@@ -417,7 +432,7 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
                 created_at, imported_at, archived_at
          FROM ip_images
          WHERE ip_id = ? OR id IN (SELECT ip_image_id FROM ip_image_relations WHERE ip_id = ?)
-         ORDER BY imported_at DESC"
+         ORDER BY imported_at DESC",
     ) {
         Ok(s) => s,
         Err(e) => return CommandResult::err(format!("查询关联图片准备失败: {}", e)),
@@ -507,15 +522,19 @@ pub fn create_ip_asset(
     // 路径标识清洗
     let path = sanitize_ip_path(&path);
     if path.is_empty() {
-        return CommandResult::err("路径标识无可用的合法字符（限小写字母、数字、横杠、下划线组合）".to_string());
+        return CommandResult::err(
+            "路径标识无可用的合法字符（限小写字母、数字、横杠、下划线组合）".to_string(),
+        );
     }
 
     // 检查 path 唯一性
-    let path_exists: bool = conn.query_row(
-        "SELECT COUNT(*) FROM ip_assets WHERE path = ?",
-        params![path],
-        |row| Ok(row.get::<_, i64>(0)? > 0),
-    ).unwrap_or(false);
+    let path_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM ip_assets WHERE path = ?",
+            params![path],
+            |row| Ok(row.get::<_, i64>(0)? > 0),
+        )
+        .unwrap_or(false);
     if path_exists {
         return CommandResult::err(format!("路径标识 '{}' 已被使用", path));
     }
@@ -609,15 +628,19 @@ pub fn update_ip_asset(
     // 路径标识清洗
     let path = sanitize_ip_path(&path);
     if path.is_empty() {
-        return CommandResult::err("路径标识无可用的合法字符（限小写字母、数字、横杠、下划线组合）".to_string());
+        return CommandResult::err(
+            "路径标识无可用的合法字符（限小写字母、数字、横杠、下划线组合）".to_string(),
+        );
     }
 
     // 检查 path 唯一性（排除自身）
-    let path_exists: bool = conn.query_row(
-        "SELECT COUNT(*) FROM ip_assets WHERE path = ? AND id != ?",
-        params![path, ip_id],
-        |row| Ok(row.get::<_, i64>(0)? > 0),
-    ).unwrap_or(false);
+    let path_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM ip_assets WHERE path = ? AND id != ?",
+            params![path, ip_id],
+            |row| Ok(row.get::<_, i64>(0)? > 0),
+        )
+        .unwrap_or(false);
     if path_exists {
         return CommandResult::err(format!("路径标识 '{}' 已被使用", path));
     }
@@ -633,7 +656,7 @@ pub fn update_ip_asset(
             old_avatar_path = row.get(0).ok();
             old_path = row.get(1).unwrap_or_default();
             Ok(())
-        }
+        },
     );
 
     let copied_avatar_path = match avatar_path {
@@ -656,7 +679,7 @@ pub fn update_ip_asset(
                             }
                         }
                         Some(dest)
-                    },
+                    }
                     Err(e) => return CommandResult::err(format!("拷贝头像文件失败: {}", e)),
                 }
             }
@@ -668,20 +691,30 @@ pub fn update_ip_asset(
         "UPDATE ip_assets 
          SET name = ?, path = ?, avatar_path = ?, inspiration = ?, description = ?, updated_at = ?
          WHERE id = ?",
-        params![name, path, copied_avatar_path, inspiration, description, now, ip_id],
+        params![
+            name,
+            path,
+            copied_avatar_path,
+            inspiration,
+            description,
+            now,
+            ip_id
+        ],
     ) {
         Ok(_) => {
             // Rename or Create the ip_archived/{ip_path} directory
-            let custom_path: Option<String> = conn.query_row(
-                "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
-                [],
-                |row| row.get(0),
-            ).ok();
+            let custom_path: Option<String> = conn
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok();
 
             let db_path_obj = Path::new(&db_path);
             if let Some(data_dir) = db_path_obj.parent() {
                 if let Some(base_app_data_dir) = data_dir.parent() {
-            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
+                    let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                     let library_path = if let Some(ref path_str) = custom_path {
                         if !path_str.trim().is_empty() {
                             Path::new(path_str).to_path_buf()
@@ -691,7 +724,7 @@ pub fn update_ip_asset(
                     } else {
                         app_data_dir.to_path_buf()
                     };
-                    
+
                     if !old_path.is_empty() && old_path != path {
                         let old_target_dir = library_path.join("ip_archived").join(&old_path);
                         let new_target_dir = library_path.join("ip_archived").join(&path);
@@ -704,6 +737,8 @@ pub fn update_ip_asset(
                         // 数据库物理路径引用热更新（将包含 /ip_archived/old_path/ 字符的记录全局替换为新 path 结构）
                         let old_pattern = format!("/ip_archived/{}/", old_path);
                         let new_pattern = format!("/ip_archived/{}/", path);
+                        let old_pattern_no_slash = format!("ip_archived/{}/", old_path);
+                        let new_pattern_no_slash = format!("ip_archived/{}/", path);
 
                         let _ = conn.execute(
                             "UPDATE ip_assets SET avatar_path = replace(avatar_path, ?, ?) WHERE id = ?",
@@ -721,6 +756,10 @@ pub fn update_ip_asset(
                             "UPDATE ip_emojis SET image_path = replace(image_path, ?, ?) WHERE ip_id = ?",
                             params![old_pattern, new_pattern, ip_id],
                         );
+                        let _ = conn.execute(
+                            "UPDATE ip_images SET absolute_path = replace(absolute_path, ?, ?), relative_path = replace(relative_path, ?, ?) WHERE ip_id = ? OR id IN (SELECT ip_image_id FROM ip_image_relations WHERE ip_id = ?)",
+                            params![old_pattern, new_pattern, old_pattern_no_slash, new_pattern_no_slash, ip_id, ip_id],
+                        );
                     } else {
                         let target_dir = library_path.join("ip_archived").join(&path);
                         let _ = std::fs::create_dir_all(&target_dir);
@@ -737,7 +776,7 @@ pub fn update_ip_asset(
                         created_at = c;
                     }
                     Ok(())
-                }
+                },
             );
 
             CommandResult::ok(IpAsset {
@@ -767,11 +806,13 @@ pub fn delete_ip_asset(db_path: String, ip_id: String, keep_images: bool) -> Com
     };
 
     // 获取 library_path 以便做文件移动或彻底删除
-    let custom_path: Option<String> = conn.query_row(
-        "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
-        [],
-        |row| row.get(0),
-    ).ok();
+    let custom_path: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
 
     let db_path_buf = Path::new(&db_path);
     let base_app_data_dir = match db_path_buf.parent().and_then(|d| d.parent()) {
@@ -790,15 +831,19 @@ pub fn delete_ip_asset(db_path: String, ip_id: String, keep_images: bool) -> Com
         app_data_dir
     };
 
-    let ip_path: Option<String> = conn.query_row(
-        "SELECT path FROM ip_assets WHERE id = ?",
-        params![ip_id],
-        |row| row.get(0),
-    ).ok();
+    let ip_path: Option<String> = conn
+        .query_row(
+            "SELECT path FROM ip_assets WHERE id = ?",
+            params![ip_id],
+            |row| row.get(0),
+        )
+        .ok();
 
     if keep_images {
         // 1. 查询该 IP 下的所有图片，准备迁移
-        let mut stmt = match conn.prepare("SELECT id, filename, absolute_path FROM ip_images WHERE ip_id = ?") {
+        let mut stmt = match conn
+            .prepare("SELECT id, filename, absolute_path FROM ip_images WHERE ip_id = ?")
+        {
             Ok(s) => s,
             Err(e) => return CommandResult::err(format!("准备迁移查询失败: {}", e)),
         };
@@ -814,11 +859,13 @@ pub fn delete_ip_asset(db_path: String, ip_id: String, keep_images: bool) -> Com
         };
 
         // 获取自定义 IP inbox 目录
-        let custom_inbox_path: Option<String> = conn.query_row(
-            "SELECT value FROM settings WHERE key = 'customIpInboxPath'",
-            [],
-            |row| row.get(0),
-        ).ok();
+        let custom_inbox_path: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'customIpInboxPath'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
 
         let ip_inbox_dir = if let Some(ref path_str) = custom_inbox_path {
             if !path_str.trim().is_empty() {
@@ -1141,11 +1188,13 @@ pub fn create_ip_sticker_pack(
     }
 
     // 检查在当前 IP 下 path 是否重复
-    let path_exists: bool = conn.query_row(
-        "SELECT COUNT(*) FROM ip_sticker_packs WHERE ip_id = ? AND path = ?",
-        params![ip_id, path],
-        |row| Ok(row.get::<_, i64>(0)? > 0),
-    ).unwrap_or(false);
+    let path_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM ip_sticker_packs WHERE ip_id = ? AND path = ?",
+            params![ip_id, path],
+            |row| Ok(row.get::<_, i64>(0)? > 0),
+        )
+        .unwrap_or(false);
     if path_exists {
         return CommandResult::err(format!("在此 IP 下，路径标识 '{}' 已被使用", path));
     }
@@ -1171,16 +1220,18 @@ pub fn create_ip_sticker_pack(
         Ok(_) => {
             // Create target pack directory under the IP archived folder:
             // library_path/ip_archived/{ip_path}/emojis/{pack_path}
-            let custom_path: Option<String> = conn.query_row(
-                "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
-                [],
-                |row| row.get(0),
-            ).ok();
+            let custom_path: Option<String> = conn
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok();
 
             let db_path_obj = Path::new(&db_path);
             if let Some(data_dir) = db_path_obj.parent() {
                 if let Some(base_app_data_dir) = data_dir.parent() {
-            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
+                    let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                     let library_path = if let Some(ref path_str) = custom_path {
                         if !path_str.trim().is_empty() {
                             Path::new(path_str).to_path_buf()
@@ -1190,8 +1241,12 @@ pub fn create_ip_sticker_pack(
                     } else {
                         app_data_dir.to_path_buf()
                     };
-                    
-                    let pack_dir = library_path.join("ip_archived").join(&ip_path).join("emojis").join(&path);
+
+                    let pack_dir = library_path
+                        .join("ip_archived")
+                        .join(&ip_path)
+                        .join("emojis")
+                        .join(&path);
                     let _ = std::fs::create_dir_all(&pack_dir);
                 }
             }
@@ -1235,18 +1290,26 @@ pub fn update_ip_sticker_pack(
          JOIN ip_assets ip ON pg.ip_id = ip.id 
          WHERE pg.id = ?",
         params![pack_id],
-        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        },
     ) {
         Ok(res) => res,
         Err(e) => return CommandResult::err(format!("获取表情包套件关联 IP 失败: {}", e)),
     };
 
     // 检查在当前 IP 下 path 是否重复（排除自身）
-    let path_exists: bool = conn.query_row(
-        "SELECT COUNT(*) FROM ip_sticker_packs WHERE ip_id = ? AND path = ? AND id != ?",
-        params![ip_id, path, pack_id],
-        |row| Ok(row.get::<_, i64>(0)? > 0),
-    ).unwrap_or(false);
+    let path_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM ip_sticker_packs WHERE ip_id = ? AND path = ? AND id != ?",
+            params![ip_id, path, pack_id],
+            |row| Ok(row.get::<_, i64>(0)? > 0),
+        )
+        .unwrap_or(false);
     if path_exists {
         return CommandResult::err(format!("在此 IP 下，路径标识 '{}' 已被使用", path));
     }
@@ -1325,23 +1388,31 @@ pub fn delete_ip_sticker_pack(db_path: String, pack_id: String) -> CommandResult
          JOIN ip_assets ip ON pg.ip_id = ip.id 
          WHERE pg.id = ?",
         params![pack_id],
-        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        },
     ) {
         Ok(res) => res,
         Err(_) => ("".to_string(), "".to_string(), "".to_string()),
     };
 
     if !ip_path.is_empty() && !pack_path.is_empty() {
-        let custom_path: Option<String> = conn.query_row(
-            "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
-            [],
-            |row| row.get(0),
-        ).ok();
+        let custom_path: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
 
         let db_path_obj = Path::new(&db_path);
         if let Some(data_dir) = db_path_obj.parent() {
             if let Some(base_app_data_dir) = data_dir.parent() {
-            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
+                let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
                 let library_path = if let Some(ref path_str) = custom_path {
                     if !path_str.trim().is_empty() {
                         Path::new(path_str).to_path_buf()
@@ -1351,7 +1422,11 @@ pub fn delete_ip_sticker_pack(db_path: String, pack_id: String) -> CommandResult
                 } else {
                     app_data_dir.to_path_buf()
                 };
-                let pack_dir = library_path.join("ip_archived").join(&ip_path).join("emojis").join(&pack_path);
+                let pack_dir = library_path
+                    .join("ip_archived")
+                    .join(&ip_path)
+                    .join("emojis")
+                    .join(&pack_path);
                 if pack_dir.exists() {
                     let _ = std::fs::remove_dir_all(pack_dir);
                 }
@@ -1375,7 +1450,10 @@ pub fn delete_ip_sticker_pack(db_path: String, pack_id: String) -> CommandResult
         }
     }
 
-    match conn.execute("DELETE FROM ip_sticker_packs WHERE id = ?", params![pack_id]) {
+    match conn.execute(
+        "DELETE FROM ip_sticker_packs WHERE id = ?",
+        params![pack_id],
+    ) {
         Ok(_) => CommandResult::ok(true),
         Err(e) => CommandResult::err(format!("删除表情包套件失败: {}", e)),
     }
@@ -1449,13 +1527,19 @@ pub fn update_ip_sticker_pack_platform(
 }
 
 #[tauri::command]
-pub fn delete_ip_sticker_pack_platform(db_path: String, platform_id: String) -> CommandResult<bool> {
+pub fn delete_ip_sticker_pack_platform(
+    db_path: String,
+    platform_id: String,
+) -> CommandResult<bool> {
     let conn = match Connection::open(Path::new(&db_path)) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
 
-    match conn.execute("DELETE FROM ip_sticker_pack_platforms WHERE id = ?", params![platform_id]) {
+    match conn.execute(
+        "DELETE FROM ip_sticker_pack_platforms WHERE id = ?",
+        params![platform_id],
+    ) {
         Ok(_) => CommandResult::ok(true),
         Err(e) => CommandResult::err(format!("删除发布平台记录失败: {}", e)),
     }
@@ -1488,7 +1572,8 @@ pub fn add_ip_emojis(
             "SELECT path FROM ip_sticker_packs WHERE id = ?",
             params![pid],
             |row| row.get(0),
-        ).ok()
+        )
+        .ok()
     } else {
         None
     };
@@ -1502,10 +1587,14 @@ pub fn add_ip_emojis(
 
     for (idx, src_path) in image_paths.iter().enumerate() {
         // 拷贝至表情包目录 ip_archived/{ip_path}/emojis/{pack_path}/
-        let copied_path = match copy_to_ip_archived(&db_path, &ip_path, "emojis", pack_path.as_deref(), src_path) {
-            Ok(p) => p,
-            Err(e) => return CommandResult::err(format!("复制表情图片失败 {}: {}", src_path, e)),
-        };
+        let copied_path =
+            match copy_to_ip_archived(&db_path, &ip_path, "emojis", pack_path.as_deref(), src_path)
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    return CommandResult::err(format!("复制表情图片失败 {}: {}", src_path, e))
+                }
+            };
 
         let trigger_word = trigger_words.get(idx).cloned().flatten();
         let id = Uuid::new_v4().to_string();
@@ -1522,9 +1611,17 @@ pub fn add_ip_emojis(
         let uuid_str = Uuid::new_v4().to_string().replace("-", "");
         let ip_image_id = format!("ipimg_{}", &uuid_str[..12]);
         let copied_path_buf = Path::new(&copied_path);
-        let filename = copied_path_buf.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
-        let original_filename = Path::new(src_path).file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
-        
+        let filename = copied_path_buf
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("")
+            .to_string();
+        let original_filename = Path::new(src_path)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("")
+            .to_string();
+
         let relative_path = if let Some(ref pp) = pack_path {
             Path::new("ip_archived")
                 .join(&ip_path)
@@ -1538,8 +1635,15 @@ pub fn add_ip_emojis(
                 .join(&filename)
         };
         let relative_path_str = relative_path.to_string_lossy().to_string();
-        let file_size = copied_path_buf.metadata().map(|m| m.len() as i64).unwrap_or(0);
-        let format_upper = copied_path_buf.extension().and_then(|e| e.to_str()).unwrap_or("png").to_uppercase();
+        let file_size = copied_path_buf
+            .metadata()
+            .map(|m| m.len() as i64)
+            .unwrap_or(0);
+        let format_upper = copied_path_buf
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png")
+            .to_uppercase();
 
         if let Err(e) = tx.execute(
             "INSERT INTO ip_images (
@@ -1550,10 +1654,17 @@ pub fn add_ip_emojis(
                 created_at, imported_at, archived_at
             ) VALUES (?, ?, ?, ?, ?, ?, 'archived', ?, ?, 0, 0, 0, ?, ?, ?)",
             params![
-                ip_image_id, filename, original_filename, ip_id,
-                relative_path_str, copied_path,
-                file_size, format_upper,
-                now, now, now
+                ip_image_id,
+                filename,
+                original_filename,
+                ip_id,
+                relative_path_str,
+                copied_path,
+                file_size,
+                format_upper,
+                now,
+                now,
+                now
             ],
         ) {
             return CommandResult::err(format!("同步导入表情为 IP 资产失败: {}", e));
@@ -1587,10 +1698,7 @@ pub fn update_ip_emoji_trigger_word(
 }
 
 #[tauri::command]
-pub fn delete_ip_emojis(
-    db_path: String,
-    emoji_ids: Vec<String>,
-) -> CommandResult<bool> {
+pub fn delete_ip_emojis(db_path: String, emoji_ids: Vec<String>) -> CommandResult<bool> {
     let mut conn = match Connection::open(Path::new(&db_path)) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
@@ -1609,10 +1717,7 @@ pub fn delete_ip_emojis(
         };
         let image_path: Option<String> = stmt.query_row(params![id], |row| row.get(0)).ok();
 
-        if let Err(e) = tx.execute(
-            "DELETE FROM ip_emojis WHERE id = ?",
-            params![id],
-        ) {
+        if let Err(e) = tx.execute("DELETE FROM ip_emojis WHERE id = ?", params![id]) {
             return CommandResult::err(format!("彻底删除表情记录失败: {}", e));
         }
 
@@ -1669,4 +1774,3 @@ pub fn move_ip_emojis_to_pack(
 }
 
 // ==================== IP Image Relations ====================
-

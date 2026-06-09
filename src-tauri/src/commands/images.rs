@@ -69,11 +69,13 @@ pub async fn import_image(
     }
 
     // Check if absolute_path already exists
-    let existing_id: Option<String> = conn.query_row(
-        "SELECT id FROM images WHERE absolute_path = ?",
-        [&request.file_path],
-        |row| row.get(0),
-    ).ok();
+    let existing_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM images WHERE absolute_path = ?",
+            [&request.file_path],
+            |row| row.get(0),
+        )
+        .ok();
 
     if let Some(id) = existing_id {
         return CommandResult::err(format!("Image already exists in database with id: {}", id));
@@ -85,14 +87,16 @@ pub async fn import_image(
 
     let mut valid_model_ids = Vec::new();
     for model_id in &request.model_ids {
-        let exists: bool = conn.query_row(
-            "SELECT COUNT(*) FROM models WHERE id = ?",
-            [model_id],
-            |row| {
-                let count: i64 = row.get(0)?;
-                Ok(count > 0)
-            },
-        ).unwrap_or(false);
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM models WHERE id = ?",
+                [model_id],
+                |row| {
+                    let count: i64 = row.get(0)?;
+                    Ok(count > 0)
+                },
+            )
+            .unwrap_or(false);
         if exists {
             valid_model_ids.push(model_id.clone());
         } else {
@@ -100,19 +104,25 @@ pub async fn import_image(
         }
     }
 
-    let primary_model_id = request.primary_model_id
+    let primary_model_id = request
+        .primary_model_id
         .filter(|id| valid_model_ids.contains(id))
         .or_else(|| valid_model_ids.first().cloned())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let vendor_id: String = conn.query_row(
-        "SELECT vendor_id FROM models WHERE id = ?",
-        [&primary_model_id],
-        |row| row.get(0),
-    ).unwrap_or_else(|e| {
-        eprintln!("Failed to get vendor_id for model '{}': {}", primary_model_id, e);
-        "unknown".to_string()
-    });
+    let vendor_id: String = conn
+        .query_row(
+            "SELECT vendor_id FROM models WHERE id = ?",
+            [&primary_model_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "Failed to get vendor_id for model '{}': {}",
+                primary_model_id, e
+            );
+            "unknown".to_string()
+        });
 
     // Build relative path using Path for cross-platform compatibility
     let relative_path = std::path::Path::new("inbox")
@@ -153,8 +163,10 @@ pub async fn import_image(
         archived_at: None,
     };
 
-    eprintln!("Inserting image with vendor_id='{}', storage_model_id='{}', primary_model_id='{}'", 
-        &image.storage_vendor_id, &image.storage_model_id, &image.primary_model_id);
+    eprintln!(
+        "Inserting image with vendor_id='{}', storage_model_id='{}', primary_model_id='{}'",
+        &image.storage_vendor_id, &image.storage_model_id, &image.primary_model_id
+    );
 
     // Insert required fields first (within 16-param limit)
     if let Err(e) = conn.execute(
@@ -164,11 +176,22 @@ pub async fn import_image(
             negative_prompt, file_size, width, height, created_at, imported_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rusqlite::params![
-            &image.id, &image.filename, &image.original_filename,
-            &image.storage_vendor_id, &image.storage_model_id,
-            &image.relative_path, &image.absolute_path, &image.primary_model_id,
-            &image.status, &image.prompt, &image.negative_prompt,
-            image.file_size, image.width, image.height, &image.created_at, &image.imported_at,
+            &image.id,
+            &image.filename,
+            &image.original_filename,
+            &image.storage_vendor_id,
+            &image.storage_model_id,
+            &image.relative_path,
+            &image.absolute_path,
+            &image.primary_model_id,
+            &image.status,
+            &image.prompt,
+            &image.negative_prompt,
+            image.file_size,
+            image.width,
+            image.height,
+            &image.created_at,
+            &image.imported_at,
         ],
     ) {
         return CommandResult::err(format!("Failed to insert image: {}", e));
@@ -182,9 +205,14 @@ pub async fn import_image(
             file_hash = ?, format = ?, archived_at = ?
         WHERE id = ?",
         rusqlite::params![
-            image.has_watermark as i32, &image.watermark_platform,
-            image.watermark_detected as i32, image.watermark_removed as i32,
-            &image.file_hash, &image.format, &image.archived_at, &image.id,
+            image.has_watermark as i32,
+            &image.watermark_platform,
+            image.watermark_detected as i32,
+            image.watermark_removed as i32,
+            &image.file_hash,
+            &image.format,
+            &image.archived_at,
+            &image.id,
         ],
     ) {
         return CommandResult::err(format!("Failed to update image optional fields: {}", e));
@@ -197,7 +225,7 @@ pub async fn import_image(
             (&image_id, model_id, is_primary as i32),
         );
     }
-    
+
     // If no valid model_ids provided, insert at least the primary model relation
     if valid_model_ids.is_empty() {
         let _ = conn.execute(
@@ -227,7 +255,12 @@ pub async fn import_image(
     let tags = fetch_image_tags(&conn, &image_id).unwrap_or_default();
     let prompt_groups = fetch_image_prompt_groups(&conn, &image_id).unwrap_or_default();
 
-    CommandResult::ok(ImageResponse { image, models, tags, prompt_groups })
+    CommandResult::ok(ImageResponse {
+        image,
+        models,
+        tags,
+        prompt_groups,
+    })
 }
 
 // ==================== Get Inbox ====================
@@ -314,7 +347,7 @@ pub async fn update_image(
     // Update model relations
     let mut new_primary_model_id = current_image.primary_model_id.clone();
     let mut new_vendor_id = current_image.storage_vendor_id.clone();
-    
+
     if !request.model_ids.is_empty() {
         // Delete old relations
         let _ = conn.execute(
@@ -323,7 +356,8 @@ pub async fn update_image(
         );
 
         // Insert new relations
-        let primary = request.primary_model_id
+        let primary = request
+            .primary_model_id
             .or_else(|| request.model_ids.first().cloned())
             .unwrap_or_else(|| "unknown".to_string());
 
@@ -336,11 +370,13 @@ pub async fn update_image(
         }
 
         // Get vendor_id for the new primary model
-        new_vendor_id = conn.query_row(
-            "SELECT vendor_id FROM models WHERE id = ?",
-            [&primary],
-            |row| row.get(0),
-        ).unwrap_or_else(|_| "unknown".to_string());
+        new_vendor_id = conn
+            .query_row(
+                "SELECT vendor_id FROM models WHERE id = ?",
+                [&primary],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "unknown".to_string());
 
         new_primary_model_id = primary.clone();
 
@@ -372,17 +408,21 @@ pub async fn update_image(
     }
 
     // Fetch vendor and model path
-    let vendor_path: String = conn.query_row(
-        "SELECT path FROM vendors WHERE id = ?",
-        [&new_vendor_id],
-        |row| row.get(0),
-    ).unwrap_or_else(|_| new_vendor_id.clone());
+    let vendor_path: String = conn
+        .query_row(
+            "SELECT path FROM vendors WHERE id = ?",
+            [&new_vendor_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| new_vendor_id.clone());
 
-    let model_path: String = conn.query_row(
-        "SELECT path FROM models WHERE id = ?",
-        [&new_primary_model_id],
-        |row| row.get(0),
-    ).unwrap_or_else(|_| new_primary_model_id.clone());
+    let model_path: String = conn
+        .query_row(
+            "SELECT path FROM models WHERE id = ?",
+            [&new_primary_model_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| new_primary_model_id.clone());
 
     let is_vendor_changed = new_vendor_id != current_image.storage_vendor_id;
     let is_model_changed = new_primary_model_id != current_image.primary_model_id;
@@ -393,7 +433,9 @@ pub async fn update_image(
         .and_then(|s| s.to_str())
         .unwrap_or("");
     let is_filename_invalid = current_filename_stem.chars().any(|c| {
-        c.is_uppercase() || c.is_whitespace() || (!c.is_ascii_alphanumeric() && c != '-' && c != '_')
+        c.is_uppercase()
+            || c.is_whitespace()
+            || (!c.is_ascii_alphanumeric() && c != '-' && c != '_')
     });
 
     let is_path_mismatched = if current_image.status == "archived" {
@@ -405,24 +447,25 @@ pub async fn update_image(
         !current_image.filename.starts_with(&expected_prefix)
     };
 
-    let need_rename = is_vendor_changed || is_model_changed || is_filename_invalid || is_path_mismatched;
+    let need_rename =
+        is_vendor_changed || is_model_changed || is_filename_invalid || is_path_mismatched;
 
     // Rename file if vendor or model changed, or naming invalidity/path mismatch detected
     if need_rename {
-        
         let old_path = std::path::Path::new(&current_image.absolute_path);
         if old_path.exists() {
             // Get file extension
-            let ext = old_path.extension()
+            let ext = old_path
+                .extension()
                 .and_then(|e| e.to_str())
                 .unwrap_or("png");
-            
+
             let timestamp = chrono::Utc::now().timestamp();
-            
+
             // Generate new filename and path based on status
             let (new_filename, new_path) = if current_image.status == "archived" {
                 // For archived images, move to new vendor/model directory
-                
+
                 // Get library path from old path (go up to archived directory)
                 let library_path = if let Some(old_parent) = old_path.parent() {
                     if let Some(model_dir) = old_parent.parent() {
@@ -441,33 +484,39 @@ pub async fn update_image(
                 } else {
                     std::path::PathBuf::from(".")
                 };
-                
+
                 // Build new directory structure
                 let target_dir = library_path
                     .join("archived")
                     .join(&vendor_path)
                     .join(&model_path);
-                
+
                 // Create directory if it doesn't exist
                 if let Err(e) = std::fs::create_dir_all(&target_dir) {
                     eprintln!("Failed to create directory: {}", e);
                     return CommandResult::err(format!("Failed to create directory: {}", e));
                 }
-                
+
                 // Use template: {vendor}-{model}-{date}-{timestamp}
                 let date = &current_image.created_at[..10]; // YYYY-MM-DD
-                let filename = format!("{}-{}-{}-{}.{}", vendor_path, model_path, date, timestamp, ext);
+                let filename = format!(
+                    "{}-{}-{}-{}.{}",
+                    vendor_path, model_path, date, timestamp, ext
+                );
                 let path = target_dir.join(&filename);
-                
+
                 (filename, path)
             } else {
                 // For inbox images, stay in same directory with new prefix
                 if let Some(parent_dir) = old_path.parent() {
-                    let filename = format!("{}_{}_{}_{}.{}", 
-                        new_vendor_id, 
-                        new_primary_model_id, 
+                    let filename = format!(
+                        "{}_{}_{}_{}.{}",
+                        new_vendor_id,
+                        new_primary_model_id,
                         timestamp,
-                        current_image.original_filename.replace(&format!(".{}", ext), ""),
+                        current_image
+                            .original_filename
+                            .replace(&format!(".{}", ext), ""),
                         ext
                     );
                     let path = parent_dir.join(&filename);
@@ -477,7 +526,7 @@ pub async fn update_image(
                     return CommandResult::err("Failed to get parent directory".to_string());
                 }
             };
-            
+
             let mut final_path = new_path.clone();
             let mut final_filename = new_filename.clone();
             let mut counter = 1;
@@ -488,15 +537,22 @@ pub async fn update_image(
                 .unwrap_or(&new_filename)
                 .to_string();
 
-            while ["png", "jpg", "jpeg", "webp", "gif", "bmp"].iter().any(|e| {
-                let check_stem = if counter == 1 { stem.clone() } else { format!("{}_{}", stem, counter - 1) };
-                if let Some(parent) = new_path.parent() {
-                    let p = parent.join(format!("{}.{}", check_stem, e));
-                    p.exists() && p != std::path::Path::new(&current_image.absolute_path)
-                } else {
-                    false
-                }
-            }) {
+            while ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
+                .iter()
+                .any(|e| {
+                    let check_stem = if counter == 1 {
+                        stem.clone()
+                    } else {
+                        format!("{}_{}", stem, counter - 1)
+                    };
+                    if let Some(parent) = new_path.parent() {
+                        let p = parent.join(format!("{}.{}", check_stem, e));
+                        p.exists() && p != std::path::Path::new(&current_image.absolute_path)
+                    } else {
+                        false
+                    }
+                })
+            {
                 final_filename = format!("{}_{}.{}", stem, counter, ext);
                 if let Some(parent) = new_path.parent() {
                     final_path = parent.join(&final_filename);
@@ -513,22 +569,26 @@ pub async fn update_image(
                 eprintln!("Failed to move/rename file: {}", e);
                 return CommandResult::err(format!("Failed to move/rename file: {}", e));
             }
-            
+
             // Update database with new filename and path
             let new_relative = if current_image.status == "archived" {
                 // For archived, use new vendor/model structure
-                let vendor_path: String = conn.query_row(
-                    "SELECT path FROM vendors WHERE id = ?",
-                    [&new_vendor_id],
-                    |row| row.get(0),
-                ).unwrap_or_else(|_| new_vendor_id.clone());
-                
-                let model_path: String = conn.query_row(
-                    "SELECT path FROM models WHERE id = ?",
-                    [&new_primary_model_id],
-                    |row| row.get(0),
-                ).unwrap_or_else(|_| new_primary_model_id.clone());
-                
+                let vendor_path: String = conn
+                    .query_row(
+                        "SELECT path FROM vendors WHERE id = ?",
+                        [&new_vendor_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or_else(|_| new_vendor_id.clone());
+
+                let model_path: String = conn
+                    .query_row(
+                        "SELECT path FROM models WHERE id = ?",
+                        [&new_primary_model_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or_else(|_| new_primary_model_id.clone());
+
                 std::path::Path::new("archived")
                     .join(&vendor_path)
                     .join(&model_path)
@@ -542,9 +602,9 @@ pub async fn update_image(
                     .to_string_lossy()
                     .to_string()
             };
-            
+
             let new_absolute = final_path.to_string_lossy().to_string();
-            
+
             if let Err(e) = conn.execute(
                 "UPDATE images SET filename = ?, relative_path = ?, absolute_path = ? WHERE id = ?",
                 (&final_filename, &new_relative, &new_absolute, image_id),
@@ -552,7 +612,7 @@ pub async fn update_image(
                 eprintln!("Failed to update database: {}", e);
                 return CommandResult::err(format!("Failed to update database: {}", e));
             }
-            
+
             // Log the move operation
             let _ = conn.execute(
                 "INSERT INTO processing_history (image_id, action, status, details, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -576,7 +636,12 @@ pub async fn update_image(
     let tags = fetch_image_tags(&conn, image_id).unwrap_or_default();
     let prompt_groups = fetch_image_prompt_groups(&conn, image_id).unwrap_or_default();
 
-    CommandResult::ok(ImageResponse { image, models, tags, prompt_groups })
+    CommandResult::ok(ImageResponse {
+        image,
+        models,
+        tags,
+        prompt_groups,
+    })
 }
 
 // ==================== Archive ====================
@@ -620,17 +685,21 @@ pub async fn archive_images(
         }
 
         // Get vendor and model path for prompt images
-        let vendor_path: String = conn.query_row(
-            "SELECT path FROM vendors WHERE id = ?",
-            [&image.storage_vendor_id],
-            |row| row.get(0),
-        ).unwrap_or_else(|_| image.storage_vendor_id.clone());
+        let vendor_path: String = conn
+            .query_row(
+                "SELECT path FROM vendors WHERE id = ?",
+                [&image.storage_vendor_id],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| image.storage_vendor_id.clone());
 
-        let model_path: String = conn.query_row(
-            "SELECT path FROM models WHERE id = ?",
-            [&image.storage_model_id],
-            |row| row.get(0),
-        ).unwrap_or_else(|_| image.storage_model_id.clone());
+        let model_path: String = conn
+            .query_row(
+                "SELECT path FROM models WHERE id = ?",
+                [&image.storage_model_id],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| image.storage_model_id.clone());
 
         let target_dir = std::path::Path::new(&library_path)
             .join("archived")
@@ -648,7 +717,8 @@ pub async fn archive_images(
 
         let (target_path, new_filename) = loop {
             let time_str = current_time.format("%H%M%S").to_string();
-            let filename_candidate = template.clone()
+            let filename_candidate = template
+                .clone()
                 .replace("{vendor}", &vendor_path)
                 .replace("{model}", &model_path)
                 .replace("{date}", date)
@@ -661,7 +731,11 @@ pub async fn archive_images(
                 path_file.set_extension(ext);
             }
 
-            let final_candidate = path_file.file_name().unwrap().to_string_lossy().into_owned();
+            let final_candidate = path_file
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
             let path_candidate = target_dir.join(&final_candidate);
 
             if !path_candidate.exists() {
@@ -676,7 +750,9 @@ pub async fn archive_images(
         if source.exists() {
             if let Err(e) = std::fs::create_dir_all(&target_dir) {
                 result.failed_count += 1;
-                result.errors.push(format!("{}: Failed to create directory: {}", image_id, e));
+                result
+                    .errors
+                    .push(format!("{}: Failed to create directory: {}", image_id, e));
                 continue;
             }
 
@@ -684,7 +760,9 @@ pub async fn archive_images(
                 std::fs::copy(source, &target_path).and_then(|_| std::fs::remove_file(source))
             }) {
                 result.failed_count += 1;
-                result.errors.push(format!("{}: Failed to move file: {}", image_id, e));
+                result
+                    .errors
+                    .push(format!("{}: Failed to move file: {}", image_id, e));
                 continue;
             }
         }
@@ -695,7 +773,7 @@ pub async fn archive_images(
             .join(&vendor_path)
             .join(&model_path)
             .join(&new_filename);
-        
+
         let new_relative = relative_path.to_string_lossy().to_string();
         let new_absolute = target_path.to_string_lossy().to_string();
 
@@ -707,7 +785,9 @@ pub async fn archive_images(
             (&new_filename, &new_relative, &new_absolute, &now, image_id),
         ) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: Failed to update database: {}", image_id, e));
+            result
+                .errors
+                .push(format!("{}: Failed to update database: {}", image_id, e));
             continue;
         }
 
@@ -754,10 +834,22 @@ pub async fn delete_image(db_path: String, image_id: String) -> CommandResult<bo
         Err(e) => return CommandResult::err(format!("Failed to start transaction: {}", e)),
     };
 
-    let _ = tx.execute("DELETE FROM image_model_relations WHERE image_id = ?", [&image_id]);
-    let _ = tx.execute("DELETE FROM image_tag_relations WHERE image_id = ?", [&image_id]);
-    let _ = tx.execute("DELETE FROM image_prompt_group_relations WHERE image_id = ?", [&image_id]);
-    let _ = tx.execute("DELETE FROM processing_history WHERE image_id = ?", [&image_id]);
+    let _ = tx.execute(
+        "DELETE FROM image_model_relations WHERE image_id = ?",
+        [&image_id],
+    );
+    let _ = tx.execute(
+        "DELETE FROM image_tag_relations WHERE image_id = ?",
+        [&image_id],
+    );
+    let _ = tx.execute(
+        "DELETE FROM image_prompt_group_relations WHERE image_id = ?",
+        [&image_id],
+    );
+    let _ = tx.execute(
+        "DELETE FROM processing_history WHERE image_id = ?",
+        [&image_id],
+    );
 
     match tx.execute("DELETE FROM images WHERE id = ?", [&image_id]) {
         Ok(affected) if affected > 0 => {
@@ -781,17 +873,17 @@ pub async fn update_missing_formats(db_path: String) -> CommandResult<usize> {
     };
 
     // Get all images without format
-    let mut stmt = match conn.prepare("SELECT id, filename FROM images WHERE format IS NULL OR format = ''") {
-        Ok(stmt) => stmt,
-        Err(e) => return CommandResult::err(format!("Failed to prepare query: {}", e)),
-    };
+    let mut stmt =
+        match conn.prepare("SELECT id, filename FROM images WHERE format IS NULL OR format = ''") {
+            Ok(stmt) => stmt,
+            Err(e) => return CommandResult::err(format!("Failed to prepare query: {}", e)),
+        };
 
-    let images: Vec<(String, String)> = match stmt.query_map([], |row| {
-        Ok((row.get(0)?, row.get(1)?))
-    }) {
-        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
-        Err(e) => return CommandResult::err(format!("Failed to query images: {}", e)),
-    };
+    let images: Vec<(String, String)> =
+        match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?))) {
+            Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+            Err(e) => return CommandResult::err(format!("Failed to query images: {}", e)),
+        };
 
     let mut updated_count = 0;
 
@@ -801,10 +893,8 @@ pub async fn update_missing_formats(db_path: String) -> CommandResult<usize> {
             .and_then(|e| e.to_str())
         {
             let format = ext.to_uppercase();
-            if let Ok(_) = conn.execute(
-                "UPDATE images SET format = ? WHERE id = ?",
-                (&format, &id),
-            ) {
+            if let Ok(_) = conn.execute("UPDATE images SET format = ? WHERE id = ?", (&format, &id))
+            {
                 updated_count += 1;
             }
         }
@@ -853,11 +943,14 @@ pub async fn unarchive_images(
 
         // Build target path in inbox
         let inbox_dir = std::path::Path::new(&inbox_path).join("inbox");
-        
+
         // Ensure inbox directory exists
         if let Err(e) = std::fs::create_dir_all(&inbox_dir) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: Failed to create inbox directory: {}", image_id, e));
+            result.errors.push(format!(
+                "{}: Failed to create inbox directory: {}",
+                image_id, e
+            ));
             continue;
         }
 
@@ -869,7 +962,7 @@ pub async fn unarchive_images(
         let mut final_path = target_path.clone();
         let mut final_filename = new_filename.clone();
         let mut counter = 1;
-        
+
         let stem = std::path::Path::new(&new_filename)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -881,10 +974,17 @@ pub async fn unarchive_images(
             .unwrap_or("png")
             .to_string();
 
-        while ["png", "jpg", "jpeg", "webp", "gif", "bmp"].iter().any(|e| {
-            let check_stem = if counter == 1 { stem.clone() } else { format!("{}_{}", stem, counter - 1) };
-            inbox_dir.join(format!("{}.{}", check_stem, e)).exists()
-        }) {
+        while ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
+            .iter()
+            .any(|e| {
+                let check_stem = if counter == 1 {
+                    stem.clone()
+                } else {
+                    format!("{}_{}", stem, counter - 1)
+                };
+                inbox_dir.join(format!("{}.{}", check_stem, e)).exists()
+            })
+        {
             final_filename = format!("{}_{}.{}", stem, counter, ext);
             final_path = inbox_dir.join(&final_filename);
             counter += 1;
@@ -897,7 +997,9 @@ pub async fn unarchive_images(
                 std::fs::copy(source, &final_path).and_then(|_| std::fs::remove_file(source))
             }) {
                 result.failed_count += 1;
-                result.errors.push(format!("{}: Failed to move file: {}", image_id, e));
+                result
+                    .errors
+                    .push(format!("{}: Failed to move file: {}", image_id, e));
                 continue;
             }
         }
@@ -915,7 +1017,9 @@ pub async fn unarchive_images(
             (&final_filename, &new_relative_str, &new_absolute, image_id),
         ) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: Failed to update database: {}", image_id, e));
+            result
+                .errors
+                .push(format!("{}: Failed to update database: {}", image_id, e));
             continue;
         }
 
@@ -935,7 +1039,7 @@ pub async fn unarchive_images(
 
 fn ensure_unknown_vendor_model(conn: &Connection) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     // Check if unknown vendor exists
     let vendor_exists: bool = conn.query_row(
         "SELECT COUNT(*) FROM vendors WHERE id = 'unknown'",
@@ -945,7 +1049,7 @@ fn ensure_unknown_vendor_model(conn: &Connection) -> Result<()> {
             Ok(count > 0)
         },
     )?;
-    
+
     if !vendor_exists {
         conn.execute(
             "INSERT INTO vendors (id, name, path, sort_order, is_active, created_at, updated_at) 
@@ -953,7 +1057,7 @@ fn ensure_unknown_vendor_model(conn: &Connection) -> Result<()> {
             ("unknown", "Unknown", "unknown", 0, 1, &now, &now),
         )?;
     }
-    
+
     // Check if unknown model exists
     let model_exists: bool = conn.query_row(
         "SELECT COUNT(*) FROM models WHERE id = 'unknown'",
@@ -963,7 +1067,7 @@ fn ensure_unknown_vendor_model(conn: &Connection) -> Result<()> {
             Ok(count > 0)
         },
     )?;
-    
+
     if !model_exists {
         conn.execute(
             "INSERT INTO models (id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at)
@@ -971,7 +1075,7 @@ fn ensure_unknown_vendor_model(conn: &Connection) -> Result<()> {
             ("unknown", "unknown", "Unknown Model", "unknown", "1", "Fallback for unclassified images", 0, 1, &now, &now),
         )?;
     }
-    
+
     Ok(())
 }
 
@@ -990,7 +1094,10 @@ fn fetch_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<ImageResp
         }
     };
 
-    let params: Vec<&dyn rusqlite::types::ToSql> = statuses.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+    let params: Vec<&dyn rusqlite::types::ToSql> = statuses
+        .iter()
+        .map(|s| s as &dyn rusqlite::types::ToSql)
+        .collect();
 
     let image_iter = match stmt.query_map(params.as_slice(), |row| {
         Ok(Image {
@@ -1032,7 +1139,12 @@ fn fetch_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<ImageResp
             let models = fetch_image_models(conn, &image.id).unwrap_or_default();
             let tags = fetch_image_tags(conn, &image.id).unwrap_or_default();
             let prompt_groups = fetch_image_prompt_groups(conn, &image.id).unwrap_or_default();
-            images.push(ImageResponse { image, models, tags, prompt_groups });
+            images.push(ImageResponse {
+                image,
+                models,
+                tags,
+                prompt_groups,
+            });
         }
     }
 
@@ -1040,37 +1152,34 @@ fn fetch_images_by_status(conn: &Connection, statuses: &[&str]) -> Vec<ImageResp
 }
 
 fn fetch_image_by_id(conn: &Connection, image_id: &str) -> Option<Image> {
-    conn.query_row(
-        "SELECT * FROM images WHERE id = ?",
-        [image_id],
-        |row| {
-            Ok(Image {
-                id: row.get(0)?,
-                filename: row.get(1)?,
-                original_filename: row.get(2)?,
-                storage_vendor_id: row.get(3)?,
-                storage_model_id: row.get(4)?,
-                relative_path: row.get(5)?,
-                absolute_path: row.get(6)?,
-                primary_model_id: row.get(7)?,
-                status: row.get(8)?,
-                prompt: row.get(9)?,
-                negative_prompt: row.get(10)?,
-                file_size: row.get(11)?,
-                width: row.get(12)?,
-                height: row.get(13)?,
-                file_hash: row.get(14)?,
-                format: row.get(15)?,
-                has_watermark: row.get::<_, i32>(16)? != 0,
-                watermark_platform: row.get(17)?,
-                watermark_detected: row.get::<_, i32>(18)? != 0,
-                watermark_removed: row.get::<_, i32>(19)? != 0,
-                created_at: row.get(20)?,
-                imported_at: row.get(21)?,
-                archived_at: row.get(22)?,
-            })
-        },
-    ).ok()
+    conn.query_row("SELECT * FROM images WHERE id = ?", [image_id], |row| {
+        Ok(Image {
+            id: row.get(0)?,
+            filename: row.get(1)?,
+            original_filename: row.get(2)?,
+            storage_vendor_id: row.get(3)?,
+            storage_model_id: row.get(4)?,
+            relative_path: row.get(5)?,
+            absolute_path: row.get(6)?,
+            primary_model_id: row.get(7)?,
+            status: row.get(8)?,
+            prompt: row.get(9)?,
+            negative_prompt: row.get(10)?,
+            file_size: row.get(11)?,
+            width: row.get(12)?,
+            height: row.get(13)?,
+            file_hash: row.get(14)?,
+            format: row.get(15)?,
+            has_watermark: row.get::<_, i32>(16)? != 0,
+            watermark_platform: row.get(17)?,
+            watermark_detected: row.get::<_, i32>(18)? != 0,
+            watermark_removed: row.get::<_, i32>(19)? != 0,
+            created_at: row.get(20)?,
+            imported_at: row.get(21)?,
+            archived_at: row.get(22)?,
+        })
+    })
+    .ok()
 }
 
 fn fetch_image_models(conn: &Connection, image_id: &str) -> Result<Vec<ModelInfo>> {
@@ -1078,9 +1187,9 @@ fn fetch_image_models(conn: &Connection, image_id: &str) -> Result<Vec<ModelInfo
         "SELECT m.id, m.name, r.is_primary 
          FROM models m 
          JOIN image_model_relations r ON m.id = r.model_id 
-         WHERE r.image_id = ?"
+         WHERE r.image_id = ?",
     )?;
-    
+
     let models = stmt.query_map([image_id], |row| {
         Ok(ModelInfo {
             id: row.get(0)?,
@@ -1088,7 +1197,7 @@ fn fetch_image_models(conn: &Connection, image_id: &str) -> Result<Vec<ModelInfo
             is_primary: row.get::<_, i32>(2)? != 0,
         })
     })?;
-    
+
     models.collect()
 }
 
@@ -1111,7 +1220,7 @@ fn fetch_image_prompt_groups(conn: &Connection, image_id: &str) -> Result<Vec<Pr
          FROM prompt_groups pg
          INNER JOIN image_prompt_group_relations ipgr ON pg.id = ipgr.prompt_group_id
          WHERE ipgr.image_id = ?
-         ORDER BY pg.updated_at DESC"
+         ORDER BY pg.updated_at DESC",
     )?;
 
     let groups = stmt.query_map([image_id], |row| {
@@ -1136,9 +1245,9 @@ fn fetch_image_tags(conn: &Connection, image_id: &str) -> Result<Vec<Tag>> {
         "SELECT t.id, t.name, t.name_en, t.color 
          FROM tags t 
          JOIN image_tag_relations r ON t.id = r.tag_id 
-         WHERE r.image_id = ?"
+         WHERE r.image_id = ?",
     )?;
-    
+
     let tags = stmt.query_map([image_id], |row| {
         Ok(Tag {
             id: row.get(0)?,
@@ -1151,7 +1260,7 @@ fn fetch_image_tags(conn: &Connection, image_id: &str) -> Result<Vec<Tag>> {
             created_at: String::new(),
         })
     })?;
-    
+
     tags.collect()
 }
 

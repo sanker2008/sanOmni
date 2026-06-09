@@ -1,7 +1,7 @@
+use super::CommandResult;
+use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use rusqlite::Connection;
-use super::CommandResult;
 
 #[tauri::command]
 pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
@@ -18,10 +18,7 @@ pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
     };
 
     let rows = match stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-        ))
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     }) {
         Ok(r) => r,
         Err(e) => return CommandResult::err(format!("Failed to query settings: {}", e)),
@@ -41,10 +38,7 @@ pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
 }
 
 #[tauri::command]
-pub fn save_settings(
-    db_path: String,
-    settings: HashMap<String, String>,
-) -> CommandResult<bool> {
+pub fn save_settings(db_path: String, settings: HashMap<String, String>) -> CommandResult<bool> {
     let conn = match Connection::open(&db_path) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
@@ -55,7 +49,7 @@ pub fn save_settings(
     let now = chrono::Utc::now().to_rfc3339();
 
     match conn.execute_batch("BEGIN TRANSACTION") {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => return CommandResult::err(format!("Failed to begin transaction: {}", e)),
     }
 
@@ -65,7 +59,7 @@ pub fn save_settings(
                    ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = ?3";
 
         match conn.execute(sql, rusqlite::params![key, value, now]) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 let _ = conn.execute_batch("ROLLBACK");
                 return CommandResult::err(format!("Failed to save setting '{}': {}", key, e));
@@ -82,7 +76,7 @@ pub fn save_settings(
 #[tauri::command]
 pub fn reset_database(db_path: String) -> CommandResult<bool> {
     let path = PathBuf::from(&db_path);
-    
+
     match crate::database::reset_database(&path) {
         Ok(_) => CommandResult::ok(true),
         Err(e) => CommandResult::err(format!("Failed to reset database: {}", e)),
@@ -115,17 +109,21 @@ pub fn reset_prompt_data(db_path: String, delete_files: bool) -> CommandResult<b
 
     if delete_files {
         // 1. 获取自定义目录设置
-        let custom_inbox: Option<String> = conn.query_row(
-            "SELECT value FROM settings WHERE key = 'customInboxPath'",
-            [],
-            |row| row.get(0),
-        ).ok();
+        let custom_inbox: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'customInboxPath'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
 
-        let custom_archived: Option<String> = conn.query_row(
-            "SELECT value FROM settings WHERE key = 'customArchivedPath'",
-            [],
-            |row| row.get(0),
-        ).ok();
+        let custom_archived: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'customArchivedPath'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
 
         let db_path_buf = std::path::Path::new(&db_path);
         if let Some(base_app_data_dir) = db_path_buf.parent().and_then(|p| p.parent()) {
@@ -190,17 +188,21 @@ pub fn reset_ip_data(db_path: String, delete_files: bool) -> CommandResult<bool>
 
     if delete_files {
         // 1. 获取自定义目录设置
-        let custom_inbox: Option<String> = conn.query_row(
-            "SELECT value FROM settings WHERE key = 'customIpInboxPath'",
-            [],
-            |row| row.get(0),
-        ).ok();
+        let custom_inbox: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'customIpInboxPath'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
 
-        let custom_archived: Option<String> = conn.query_row(
-            "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
-            [],
-            |row| row.get(0),
-        ).ok();
+        let custom_archived: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
 
         let db_path_buf = std::path::Path::new(&db_path);
         if let Some(base_app_data_dir) = db_path_buf.parent().and_then(|p| p.parent()) {

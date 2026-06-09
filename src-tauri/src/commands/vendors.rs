@@ -1,6 +1,6 @@
 use crate::commands::CommandResult;
-use crate::models::{Vendor, Model};
-use rusqlite::{Connection};
+use crate::models::{Model, Vendor};
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,24 +19,26 @@ pub async fn get_vendors(db_path: String) -> CommandResult<Vec<VendorWithModels>
 
     let mut stmt = match conn.prepare(
         "SELECT id, name, path, icon, sort_order, is_active, created_at, updated_at 
-         FROM vendors WHERE is_active = 1 ORDER BY sort_order ASC, name ASC"
+         FROM vendors WHERE is_active = 1 ORDER BY sort_order ASC, name ASC",
     ) {
         Ok(stmt) => stmt,
         Err(e) => return CommandResult::err(format!("Failed to prepare query: {}", e)),
     };
 
-    let vendor_iter = stmt.query_map([], |row| {
-        Ok(Vendor {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            path: row.get(2)?,
-            icon: row.get(3)?,
-            sort_order: row.get(4)?,
-            is_active: row.get::<_, i32>(5)? != 0,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
+    let vendor_iter = stmt
+        .query_map([], |row| {
+            Ok(Vendor {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                icon: row.get(3)?,
+                sort_order: row.get(4)?,
+                is_active: row.get::<_, i32>(5)? != 0,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
         })
-    }).unwrap();
+        .unwrap();
 
     let mut vendors = Vec::new();
     for vendor_result in vendor_iter {
@@ -123,7 +125,7 @@ pub async fn update_vendor(
             if rows == 0 {
                 return CommandResult::err("Vendor not found".to_string());
             }
-            
+
             // Fetch the updated vendor
             let mut stmt = match conn.prepare(
                 "SELECT id, name, path, icon, sort_order, is_active, created_at, updated_at FROM vendors WHERE id = ?"
@@ -234,7 +236,7 @@ pub async fn update_model(
             if rows == 0 {
                 return CommandResult::err("Model not found".to_string());
             }
-            
+
             // Fetch the updated model
             let mut stmt = match conn.prepare(
                 "SELECT id, vendor_id, name, path, version, description, sort_order, is_active, created_at, updated_at FROM models WHERE id = ?"
@@ -273,10 +275,7 @@ pub async fn delete_model(db_path: String, model_id: String) -> CommandResult<bo
     };
 
     // Soft delete by setting is_active to 0
-    match conn.execute(
-        "UPDATE models SET is_active = 0 WHERE id = ?",
-        [&model_id],
-    ) {
+    match conn.execute("UPDATE models SET is_active = 0 WHERE id = ?", [&model_id]) {
         Ok(rows) => {
             if rows == 0 {
                 CommandResult::err("Model not found".to_string())
@@ -288,8 +287,6 @@ pub async fn delete_model(db_path: String, model_id: String) -> CommandResult<bo
     }
 }
 
-
-
 // ==================== Cascade Deletion ====================
 
 #[tauri::command]
@@ -299,11 +296,13 @@ pub async fn check_model_usage(db_path: String, model_id: String) -> CommandResu
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
 
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM image_model_relations WHERE model_id = ?",
-        [&model_id],
-        |row| row.get(0),
-    ).unwrap_or(0);
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM image_model_relations WHERE model_id = ?",
+            [&model_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
 
     CommandResult::ok(count)
 }
@@ -314,23 +313,24 @@ pub async fn delete_model_cascade(
     model_id: String,
     action: String,
 ) -> CommandResult<bool> {
-    
     let mut image_ids_to_delete = Vec::new();
-    
+
     if action == "delete_images" {
         let conn = match Connection::open(&db_path) {
             Ok(conn) => conn,
             Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
         };
-        let mut stmt = match conn.prepare("SELECT image_id FROM image_model_relations WHERE model_id = ?") {
-            Ok(stmt) => stmt,
-            Err(e) => return CommandResult::err(format!("Failed to prepare query: {}", e)),
-        };
-        image_ids_to_delete = stmt.query_map([&model_id], |row| row.get(0))
+        let mut stmt =
+            match conn.prepare("SELECT image_id FROM image_model_relations WHERE model_id = ?") {
+                Ok(stmt) => stmt,
+                Err(e) => return CommandResult::err(format!("Failed to prepare query: {}", e)),
+            };
+        image_ids_to_delete = stmt
+            .query_map([&model_id], |row| row.get(0))
             .map(|iter| iter.filter_map(Result::ok).collect())
             .unwrap_or_default();
     }
-    
+
     // Now no DB connection is open across the .await!
     if action == "delete_images" {
         for img_id in image_ids_to_delete {
@@ -345,34 +345,37 @@ pub async fn delete_model_cascade(
             Ok(stmt) => stmt,
             Err(e) => return CommandResult::err(format!("Failed to prepare query: {}", e)),
         };
-        let image_ids: Vec<String> = stmt.query_map([&model_id], |row| row.get(0))
+        let image_ids: Vec<String> = stmt
+            .query_map([&model_id], |row| row.get(0))
             .map(|iter| iter.filter_map(Result::ok).collect())
             .unwrap_or_default();
-            
+
         for img_id in image_ids {
             let mut other_models_stmt = conn.prepare(
                 "SELECT model_id FROM image_model_relations WHERE image_id = ? AND model_id != ?"
             ).unwrap();
-            let other_models: Vec<String> = other_models_stmt.query_map([&img_id, &model_id], |row| row.get(0))
+            let other_models: Vec<String> = other_models_stmt
+                .query_map([&img_id, &model_id], |row| row.get(0))
                 .map(|iter| iter.filter_map(Result::ok).collect())
                 .unwrap_or_default();
-                
+
             let new_primary = if !other_models.is_empty() {
                 other_models[0].clone()
             } else {
                 "unknown".to_string()
             };
-            
+
             let new_vendor = if new_primary == "unknown" {
                 "unknown".to_string()
             } else {
                 conn.query_row(
                     "SELECT vendor_id FROM models WHERE id = ?",
                     [&new_primary],
-                    |row| row.get::<_, String>(0)
-                ).unwrap_or_else(|_| "unknown".to_string())
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap_or_else(|_| "unknown".to_string())
             };
-            
+
             let _ = conn.execute(
                 "UPDATE images SET primary_model_id = ?, storage_model_id = ?, storage_vendor_id = ? WHERE id = ?",
                 [&new_primary, &new_primary, &new_vendor, &img_id]
@@ -389,18 +392,18 @@ pub async fn delete_model_cascade(
                 );
             }
         }
-        let _ = conn.execute("DELETE FROM image_model_relations WHERE model_id = ?", [&model_id]);
+        let _ = conn.execute(
+            "DELETE FROM image_model_relations WHERE model_id = ?",
+            [&model_id],
+        );
     }
-    
+
     // Finally soft delete the model
     let conn = match Connection::open(&db_path) {
         Ok(conn) => conn,
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
-    match conn.execute(
-        "UPDATE models SET is_active = 0 WHERE id = ?",
-        [&model_id],
-    ) {
+    match conn.execute("UPDATE models SET is_active = 0 WHERE id = ?", [&model_id]) {
         Ok(rows) => {
             if rows == 0 {
                 CommandResult::err("Model not found".to_string())
@@ -419,15 +422,13 @@ pub async fn check_vendor_usage(db_path: String, vendor_id: String) -> CommandRe
         Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
     };
 
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM images WHERE storage_vendor_id = ?",
-        [&vendor_id],
-        |row| row.get(0),
-    ).unwrap_or(0);
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM images WHERE storage_vendor_id = ?",
+            [&vendor_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
 
     CommandResult::ok(count)
 }
-
-
-
-

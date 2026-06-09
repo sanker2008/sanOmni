@@ -287,7 +287,17 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
                   placeholder="例如: wandering-earth-2 (选填)"
                   value={path}
                   onChange={(e) => setPath(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-"))}
+                  disabled={!!work}
                 />
+                {work ? (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-500 font-medium">
+                    ⚠️ 为保证关联和同步安全，作品创建后路径标识不可修改
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-500 font-medium mt-0.5">
+                    ⚠️ 注意：为保证数据安全，创建后将不可修改
+                  </p>
+                )}
               </div>
             </div>
 

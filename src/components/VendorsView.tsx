@@ -76,6 +76,8 @@ export default function VendorsView() {
                                   }
                                   placeholder="路径标识"
                                   className="flex-1"
+                                  disabled
+                                  title="为保证数据关联安全，创建后不可修改"
                                 />
                                 <Button
                                   size="sm"
@@ -184,6 +186,8 @@ export default function VendorsView() {
                                           }
                                           placeholder="路径标识"
                                           className="flex-1"
+                                          disabled
+                                          title="为保证数据关联安全，创建后不可修改"
                                         />
                                         <Button
                                           size="sm"
@@ -290,8 +294,9 @@ export default function VendorsView() {
                                     onChange={(e) =>
                                       setModelForm({ ...modelForm, path: e.target.value })
                                     }
-                                    placeholder="路径标识"
+                                    placeholder="路径标识 (创建后不可改)"
                                     className="flex-1"
+                                    title="为保证数据关联安全，创建后不可修改"
                                   />
                                   <Button
                                     size="sm"
@@ -368,8 +373,9 @@ export default function VendorsView() {
                           onChange={(e) =>
                             setVendorForm({ ...vendorForm, path: e.target.value })
                           }
-                          placeholder="路径标识（如：openai）"
+                          placeholder="路径标识 (如: openai，创建后不可改)"
                           className="flex-1"
+                          title="为保证数据关联安全，创建后不可修改"
                         />
                         <Button
                           size="sm"

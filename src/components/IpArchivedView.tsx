@@ -2107,8 +2107,18 @@ export default function IpArchivedView() {
                 placeholder="例如: bunny-daily-vol1 (留空则自动生成)"
                 value={packPath}
                 onChange={(e) => setPackPath(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-"))}
+                disabled={!!editingPack}
               />
-              <p className="text-[10px] text-muted-foreground">限定小写字母、数字、连字符和下划线，用于本地存储文件夹命名</p>
+              {editingPack ? (
+                <p className="text-[10px] text-amber-600 dark:text-amber-500 font-medium">
+                  ⚠️ 为保证文件关联和同步安全，表情包创建后路径标识不可修改
+                </p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">
+                  限定小写字母、数字、连字符和下划线，用于本地存储文件夹命名。<br/>
+                  <span className="text-amber-600 dark:text-amber-500 font-medium">⚠️ 注意：为保证文件关联安全，创建后不可修改</span>
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -2381,8 +2391,19 @@ export default function IpArchivedView() {
                 placeholder="例如: luna（留空则自动生成）"
                 value={ipPath}
                 onChange={(e) => setIpPath(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-"))}
+                disabled={!!editingIp}
               />
-              <p className="text-xs text-muted-foreground">用于文件夹命名和目录匹配，只允许小写字母、数字、连字符和下划线</p>
+              {editingIp ? (
+                <p className="text-xs text-amber-600 dark:text-amber-500 font-medium">
+                  ⚠️ 为保证文件关联和同步安全，IP 创建后路径标识不可修改
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  用于文件夹命名和目录匹配，只允许小写字母、数字、连字符和下划线。
+                  <br />
+                  <span className="text-amber-600 dark:text-amber-500 font-medium">⚠️ 注意：为保证关联和同步安全，创建后该标识不可修改</span>
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">

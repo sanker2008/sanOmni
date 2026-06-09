@@ -1,8 +1,8 @@
-use std::path::Path;
-use std::path::PathBuf;
+use super::CommandResult;
 use std::fs;
 use std::io;
-use super::CommandResult;
+use std::path::Path;
+use std::path::PathBuf;
 
 fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
     fs::create_dir_all(&dst)?;
@@ -48,7 +48,11 @@ pub async fn migrate_directory(old_path: String, new_path: String) -> CommandRes
 }
 
 #[tauri::command]
-pub fn update_database_paths(db_path: String, old_path: String, new_path: String) -> CommandResult<bool> {
+pub fn update_database_paths(
+    db_path: String,
+    old_path: String,
+    new_path: String,
+) -> CommandResult<bool> {
     let mut conn = match rusqlite::Connection::open(&db_path) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("Failed to open DB: {}", e)),
@@ -59,9 +63,17 @@ pub fn update_database_paths(db_path: String, old_path: String, new_path: String
         Err(e) => return CommandResult::err(format!("Failed to start transaction: {}", e)),
     };
 
-    let old_dir = if old_path.ends_with('/') || old_path.ends_with('\\') { old_path.clone() } else { format!("{}\\", old_path) };
-    let new_dir = if new_path.ends_with('/') || new_path.ends_with('\\') { new_path.clone() } else { format!("{}\\", new_path) };
-    
+    let old_dir = if old_path.ends_with('/') || old_path.ends_with('\\') {
+        old_path.clone()
+    } else {
+        format!("{}\\", old_path)
+    };
+    let new_dir = if new_path.ends_with('/') || new_path.ends_with('\\') {
+        new_path.clone()
+    } else {
+        format!("{}\\", new_path)
+    };
+
     let old_dir_fwd = old_dir.replace("\\", "/");
     let new_dir_fwd = new_dir.replace("\\", "/");
 
@@ -83,18 +95,28 @@ pub fn update_database_paths(db_path: String, old_path: String, new_path: String
 
     for (table, col) in tables_cols {
         let sql = format!("UPDATE {} SET {} = REPLACE(REPLACE({}, ?1, ?2), ?3, ?4) WHERE {} LIKE ?1 || '%' OR {} LIKE ?3 || '%'", table, col, col, col, col);
-        if let Err(e) = tx.execute(&sql, rusqlite::params![old_dir, new_dir, old_dir_fwd, new_dir_fwd]) {
+        if let Err(e) = tx.execute(
+            &sql,
+            rusqlite::params![old_dir, new_dir, old_dir_fwd, new_dir_fwd],
+        ) {
             return CommandResult::err(format!("Failed to update {} in {}: {}", col, table, e));
         }
     }
-    
+
     let sql_char = "UPDATE characters SET image_paths = REPLACE(REPLACE(REPLACE(REPLACE(image_paths, ?1, ?2), ?3, ?4), ?5, ?6), ?7, ?8)";
-    if let Err(e) = tx.execute(sql_char, rusqlite::params![
-        old_dir, new_dir, 
-        old_dir_fwd, new_dir_fwd,
-        old_dir_json, new_dir_json,
-        old_dir_fwd.replace("/", "\\/"), new_dir_fwd.replace("/", "\\/")
-    ]) {
+    if let Err(e) = tx.execute(
+        sql_char,
+        rusqlite::params![
+            old_dir,
+            new_dir,
+            old_dir_fwd,
+            new_dir_fwd,
+            old_dir_json,
+            new_dir_json,
+            old_dir_fwd.replace("/", "\\/"),
+            new_dir_fwd.replace("/", "\\/")
+        ],
+    ) {
         return CommandResult::err(format!("Failed to update characters.image_paths: {}", e));
     }
 
@@ -115,20 +137,26 @@ pub struct DirectoryStatus {
 pub async fn check_directory_status(path: String) -> CommandResult<DirectoryStatus> {
     let p = PathBuf::from(&path);
     if !p.exists() {
-        return CommandResult::ok(DirectoryStatus { exists: false, is_empty: true });
+        return CommandResult::ok(DirectoryStatus {
+            exists: false,
+            is_empty: true,
+        });
     }
     if !p.is_dir() {
         return CommandResult::err("Path exists but is not a directory".to_string());
     }
-    
+
     let mut is_empty = true;
     if let Ok(mut entries) = fs::read_dir(&p) {
         if entries.next().is_some() {
             is_empty = false;
         }
     }
-    
-    CommandResult::ok(DirectoryStatus { exists: true, is_empty })
+
+    CommandResult::ok(DirectoryStatus {
+        exists: true,
+        is_empty,
+    })
 }
 
 #[derive(serde::Serialize)]
@@ -142,12 +170,16 @@ pub struct RepairReport {
 }
 
 #[tauri::command]
-pub fn repair_database_paths(db_path: String, search_dirs: Vec<String>, auto_fix: bool) -> CommandResult<RepairReport> {
+pub fn repair_database_paths(
+    db_path: String,
+    search_dirs: Vec<String>,
+    auto_fix: bool,
+) -> CommandResult<RepairReport> {
     let mut conn = match rusqlite::Connection::open(&db_path) {
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("Failed to open DB: {}", e)),
     };
-    
+
     let mut total_records = 0;
     let mut valid_count = 0;
     let mut broken_count = 0;
@@ -159,7 +191,7 @@ pub fn repair_database_paths(db_path: String, search_dirs: Vec<String>, auto_fix
         ("images", "id", "absolute_path"),
         ("ip_images", "id", "absolute_path"),
         ("ip_character_sheets", "id", "image_path"),
-        ("ip_creations", "ip_id", "image_path"), 
+        ("ip_creations", "ip_id", "image_path"),
         ("ip_emojis", "id", "image_path"),
         ("works", "id", "cover_path"),
         ("works", "id", "path"),
@@ -174,37 +206,42 @@ pub fn repair_database_paths(db_path: String, search_dirs: Vec<String>, auto_fix
     };
 
     for (table, id_col, path_col) in tables_cols {
-        let sql = format!("SELECT {}, {} FROM {} WHERE {} IS NOT NULL AND {} != ''", id_col, path_col, table, path_col, path_col);
-        
+        let sql = format!(
+            "SELECT {}, {} FROM {} WHERE {} IS NOT NULL AND {} != ''",
+            id_col, path_col, table, path_col, path_col
+        );
+
         let mut rows_to_update = Vec::new();
         {
             let mut stmt = match tx.prepare(&sql) {
                 Ok(s) => s,
-                Err(_) => continue, 
+                Err(_) => continue,
             };
-            
+
             let mut rows = match stmt.query([]) {
                 Ok(r) => r,
                 Err(_) => continue,
             };
-            
+
             while let Ok(Some(row)) = rows.next() {
                 total_records += 1;
                 let id: String = row.get(0).unwrap_or_default();
                 let path: String = row.get(1).unwrap_or_default();
-                
+
                 let p = PathBuf::from(&path);
                 if p.exists() {
                     valid_count += 1;
                 } else {
                     broken_count += 1;
                     let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                    
+
                     let mut found_path = None;
                     if !file_name.is_empty() {
                         for sdir in &search_dirs {
-                            if sdir.is_empty() { continue; }
-                            
+                            if sdir.is_empty() {
+                                continue;
+                            }
+
                             let spath = PathBuf::from(sdir).join(file_name);
                             if spath.exists() {
                                 found_path = Some(spath.to_string_lossy().to_string());
@@ -212,7 +249,7 @@ pub fn repair_database_paths(db_path: String, search_dirs: Vec<String>, auto_fix
                             }
                         }
                     }
-                    
+
                     if let Some(new_path) = found_path {
                         fixable_count += 1;
                         if auto_fix {
@@ -226,7 +263,7 @@ pub fn repair_database_paths(db_path: String, search_dirs: Vec<String>, auto_fix
                 }
             }
         }
-        
+
         for (t, i_c, p_c, id, new_path) in rows_to_update {
             let update_sql = format!("UPDATE {} SET {} = ?1 WHERE {} = ?2", t, p_c, i_c);
             if let Ok(_) = tx.execute(&update_sql, rusqlite::params![new_path, id]) {
@@ -234,11 +271,11 @@ pub fn repair_database_paths(db_path: String, search_dirs: Vec<String>, auto_fix
             }
         }
     }
-    
+
     if auto_fix {
         let _ = tx.commit();
     }
-    
+
     CommandResult::ok(RepairReport {
         total_records,
         valid_count,
@@ -269,8 +306,8 @@ pub fn show_in_folder(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        use std::process::Command;
         use std::fs::metadata;
+        use std::process::Command;
         if metadata(&path).map(|m| m.is_dir()).unwrap_or(false) {
             Command::new("xdg-open")
                 .arg(&path)

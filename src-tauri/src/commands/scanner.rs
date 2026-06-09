@@ -52,15 +52,11 @@ pub async fn scan_archived_directory(
         Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
     };
 
-    let template = naming_template
-        .unwrap_or_else(|| "{vendor}-{model}-{date}-{time}".to_string());
+    let template = naming_template.unwrap_or_else(|| "{vendor}-{model}-{date}-{time}".to_string());
 
     let archived_root = std::path::Path::new(&library_path);
     if !archived_root.exists() {
-        return CommandResult::err(format!(
-            "归档目录不存在: {}",
-            archived_root.display()
-        ));
+        return CommandResult::err(format!("归档目录不存在: {}", archived_root.display()));
     }
 
     let mut result = ScanResult {
@@ -75,12 +71,10 @@ pub async fn scan_archived_directory(
     // 收集所有已在数据库中的 absolute_path，用于去重
     let existing_paths: std::collections::HashSet<String> = {
         match conn.prepare("SELECT absolute_path FROM images") {
-            Ok(mut stmt) => {
-                match stmt.query_map([], |row| row.get::<_, String>(0)) {
-                    Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-                    Err(_) => std::collections::HashSet::new(),
-                }
-            }
+            Ok(mut stmt) => match stmt.query_map([], |row| row.get::<_, String>(0)) {
+                Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                Err(_) => std::collections::HashSet::new(),
+            },
             Err(e) => return CommandResult::err(format!("查询数据库失败: {}", e)),
         }
     };
@@ -174,7 +168,14 @@ pub async fn scan_archived_directory(
                     .and_then(|e| e.to_str())
                     .map(|s| s.to_lowercase())
                 {
-                    Some(e) if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") => e,
+                    Some(e)
+                        if matches!(
+                            e.as_str(),
+                            "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp"
+                        ) =>
+                    {
+                        e
+                    }
                     _ => continue,
                 };
 
@@ -189,10 +190,7 @@ pub async fn scan_archived_directory(
                 }
 
                 // 获取文件元数据
-                let file_size = file_path
-                    .metadata()
-                    .map(|m| m.len() as i64)
-                    .unwrap_or(0);
+                let file_size = file_path.metadata().map(|m| m.len() as i64).unwrap_or(0);
 
                 let original_filename = file_path
                     .file_name()
@@ -204,7 +202,11 @@ pub async fn scan_archived_directory(
                 global_index += 1;
                 let now = chrono::Local::now();
                 let date_str = now.format("%Y-%m-%d").to_string();
-                let time_str = format!("{:06}", now.format("%H%M%S").to_string().parse::<u32>().unwrap_or(0) + global_index as u32);
+                let time_str = format!(
+                    "{:06}",
+                    now.format("%H%M%S").to_string().parse::<u32>().unwrap_or(0)
+                        + global_index as u32
+                );
 
                 let new_stem = template
                     .replace("{vendor}", &vendor_path_name)
@@ -212,7 +214,10 @@ pub async fn scan_archived_directory(
                     .replace("{date}", &date_str)
                     .replace("{time}", &time_str)
                     .replace("{index}", &time_str)
-                    .replace("{original}", &original_filename.replace(&format!(".{}", ext), ""));
+                    .replace(
+                        "{original}",
+                        &original_filename.replace(&format!(".{}", ext), ""),
+                    );
 
                 let new_filename = format!("{}.{}", new_stem, ext);
 
@@ -225,7 +230,8 @@ pub async fn scan_archived_directory(
 
                     // 避免目标文件已存在时覆盖
                     let new_path = if new_path.exists() {
-                        let unique_stem = format!("{}-{}", new_stem, chrono::Local::now().timestamp_millis());
+                        let unique_stem =
+                            format!("{}-{}", new_stem, chrono::Local::now().timestamp_millis());
                         let unique_name = format!("{}.{}", unique_stem, ext);
                         model_dir.join(&unique_name)
                     } else {
@@ -236,16 +242,19 @@ pub async fn scan_archived_directory(
                         Ok(_) => {
                             result.renamed_count += 1;
                             (
-                                new_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                                new_path
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string(),
                                 new_path.to_string_lossy().to_string(),
                             )
                         }
                         Err(e) => {
                             result.failed_count += 1;
-                            result.errors.push(format!(
-                                "重命名失败 {}: {}",
-                                original_filename, e
-                            ));
+                            result
+                                .errors
+                                .push(format!("重命名失败 {}: {}", original_filename, e));
                             continue;
                         }
                     }
@@ -317,10 +326,9 @@ pub async fn scan_archived_directory(
                     }
                     Err(e) => {
                         result.failed_count += 1;
-                        result.errors.push(format!(
-                            "写入数据库失败 {}: {}",
-                            final_filename, e
-                        ));
+                        result
+                            .errors
+                            .push(format!("写入数据库失败 {}: {}", final_filename, e));
                     }
                 }
             }
@@ -343,10 +351,7 @@ pub async fn scan_inbox_directory(
 
     let inbox_root = std::path::Path::new(&inbox_path);
     if !inbox_root.exists() {
-        return CommandResult::err(format!(
-            "待整理目录不存在: {}",
-            inbox_root.display()
-        ));
+        return CommandResult::err(format!("待整理目录不存在: {}", inbox_root.display()));
     }
 
     let mut result = InboxScanResult {
@@ -358,9 +363,9 @@ pub async fn scan_inbox_directory(
     let mut db_paths = std::collections::HashSet::new();
 
     // 1. Get DB records
-    let mut stmt = match conn.prepare(
-        "SELECT id, absolute_path FROM images WHERE status IN ('inbox', 'tagged')"
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT id, absolute_path FROM images WHERE status IN ('inbox', 'tagged')")
+    {
         Ok(stmt) => stmt,
         Err(e) => {
             result.errors.push(format!("查询待整理数据失败: {}", e));
@@ -368,7 +373,9 @@ pub async fn scan_inbox_directory(
         }
     };
 
-    let rows = match stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))) {
+    let rows = match stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) {
         Ok(rows) => rows,
         Err(e) => {
             result.errors.push(format!("读取待整理数据失败: {}", e));
@@ -384,7 +391,7 @@ pub async fn scan_inbox_directory(
                 absolute_path: absolute_path.clone(),
             });
         }
-        
+
         db_paths.insert(absolute_path.to_lowercase()); // normalize for comparison
     }
 
@@ -392,18 +399,32 @@ pub async fn scan_inbox_directory(
     if let Ok(entries) = std::fs::read_dir(inbox_root) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if !path.is_file() { continue; }
-            let _ext = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
-                Some(e) if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") => e,
+            if !path.is_file() {
+                continue;
+            }
+            let _ext = match path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+            {
+                Some(e)
+                    if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") =>
+                {
+                    e
+                }
                 _ => continue,
             };
             let abs_path = path.to_string_lossy().to_string();
-            
+
             // Check if missing in DB
             if !db_paths.contains(&abs_path.to_lowercase()) {
-                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let filename = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
                 let file_size = path.metadata().map(|m| m.len() as i64).unwrap_or(0);
-                
+
                 result.missing_in_db.push(InboxMissingInDbItem {
                     absolute_path: abs_path,
                     filename,
@@ -438,29 +459,51 @@ pub async fn execute_inbox_cleanup(
     };
 
     for image_id in image_ids {
-        if let Err(e) = tx.execute("DELETE FROM image_model_relations WHERE image_id = ?", [&image_id]) {
+        if let Err(e) = tx.execute(
+            "DELETE FROM image_model_relations WHERE image_id = ?",
+            [&image_id],
+        ) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: 删除模型关联失败: {}", image_id, e));
+            result
+                .errors
+                .push(format!("{}: 删除模型关联失败: {}", image_id, e));
             continue;
         }
-        if let Err(e) = tx.execute("DELETE FROM image_tag_relations WHERE image_id = ?", [&image_id]) {
+        if let Err(e) = tx.execute(
+            "DELETE FROM image_tag_relations WHERE image_id = ?",
+            [&image_id],
+        ) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: 删除标签关联失败: {}", image_id, e));
+            result
+                .errors
+                .push(format!("{}: 删除标签关联失败: {}", image_id, e));
             continue;
         }
-        if let Err(e) = tx.execute("DELETE FROM image_prompt_group_relations WHERE image_id = ?", [&image_id]) {
+        if let Err(e) = tx.execute(
+            "DELETE FROM image_prompt_group_relations WHERE image_id = ?",
+            [&image_id],
+        ) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: 删除提示词组关联失败: {}", image_id, e));
+            result
+                .errors
+                .push(format!("{}: 删除提示词组关联失败: {}", image_id, e));
             continue;
         }
-        if let Err(e) = tx.execute("DELETE FROM processing_history WHERE image_id = ?", [&image_id]) {
+        if let Err(e) = tx.execute(
+            "DELETE FROM processing_history WHERE image_id = ?",
+            [&image_id],
+        ) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: 删除处理历史失败: {}", image_id, e));
+            result
+                .errors
+                .push(format!("{}: 删除处理历史失败: {}", image_id, e));
             continue;
         }
         if let Err(e) = tx.execute("DELETE FROM images WHERE id = ?", [&image_id]) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: 删除图片记录失败: {}", image_id, e));
+            result
+                .errors
+                .push(format!("{}: 删除图片记录失败: {}", image_id, e));
             continue;
         }
 
@@ -487,10 +530,7 @@ pub async fn scan_ip_inbox_directory(
 
     let inbox_root = std::path::Path::new(&inbox_path);
     if !inbox_root.exists() {
-        return CommandResult::err(format!(
-            "待整理目录不存在: {}",
-            inbox_root.display()
-        ));
+        return CommandResult::err(format!("待整理目录不存在: {}", inbox_root.display()));
     }
 
     let mut result = InboxScanResult {
@@ -501,9 +541,9 @@ pub async fn scan_ip_inbox_directory(
 
     let mut db_paths = std::collections::HashSet::new();
 
-    let mut stmt = match conn.prepare(
-        "SELECT id, absolute_path FROM ip_images WHERE status IN ('inbox', 'tagged')"
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT id, absolute_path FROM ip_images WHERE status IN ('inbox', 'tagged')")
+    {
         Ok(stmt) => stmt,
         Err(e) => {
             result.errors.push(format!("查询待整理数据失败: {}", e));
@@ -511,7 +551,9 @@ pub async fn scan_ip_inbox_directory(
         }
     };
 
-    let rows = match stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))) {
+    let rows = match stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) {
         Ok(rows) => rows,
         Err(e) => {
             result.errors.push(format!("读取待整理数据失败: {}", e));
@@ -527,24 +569,38 @@ pub async fn scan_ip_inbox_directory(
                 absolute_path: absolute_path.clone(),
             });
         }
-        
+
         db_paths.insert(absolute_path.to_lowercase());
     }
 
     if let Ok(entries) = std::fs::read_dir(inbox_root) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if !path.is_file() { continue; }
-            let _ext = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
-                Some(e) if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") => e,
+            if !path.is_file() {
+                continue;
+            }
+            let _ext = match path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+            {
+                Some(e)
+                    if matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") =>
+                {
+                    e
+                }
                 _ => continue,
             };
             let abs_path = path.to_string_lossy().to_string();
-            
+
             if !db_paths.contains(&abs_path.to_lowercase()) {
-                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let filename = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
                 let file_size = path.metadata().map(|m| m.len() as i64).unwrap_or(0);
-                
+
                 result.missing_in_db.push(InboxMissingInDbItem {
                     absolute_path: abs_path,
                     filename,
@@ -579,14 +635,21 @@ pub async fn execute_ip_inbox_cleanup(
     };
 
     for ip_image_id in image_ids {
-        if let Err(e) = tx.execute("DELETE FROM ip_image_tag_relations WHERE ip_image_id = ?", [&ip_image_id]) {
+        if let Err(e) = tx.execute(
+            "DELETE FROM ip_image_tag_relations WHERE ip_image_id = ?",
+            [&ip_image_id],
+        ) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: 删除标签关联失败: {}", ip_image_id, e));
+            result
+                .errors
+                .push(format!("{}: 删除标签关联失败: {}", ip_image_id, e));
             continue;
         }
         if let Err(e) = tx.execute("DELETE FROM ip_images WHERE id = ?", [&ip_image_id]) {
             result.failed_count += 1;
-            result.errors.push(format!("{}: 删除图片记录失败: {}", ip_image_id, e));
+            result
+                .errors
+                .push(format!("{}: 删除图片记录失败: {}", ip_image_id, e));
             continue;
         }
 
@@ -612,15 +675,11 @@ pub async fn scan_ip_archived_directory(
         Err(e) => return CommandResult::err(format!("无法打开数据库: {}", e)),
     };
 
-    let template = naming_template
-        .unwrap_or_else(|| "{ip}-{date}-{time}".to_string());
+    let template = naming_template.unwrap_or_else(|| "{ip}-{date}-{time}".to_string());
 
     let archived_root = std::path::Path::new(&library_path);
     if !archived_root.exists() {
-        return CommandResult::err(format!(
-            "归档目录不存在: {}",
-            archived_root.display()
-        ));
+        return CommandResult::err(format!("归档目录不存在: {}", archived_root.display()));
     }
 
     let mut result = ScanResult {
@@ -635,21 +694,21 @@ pub async fn scan_ip_archived_directory(
     // 收集所有已在数据库中的 absolute_path，用于去重
     let existing_paths: std::collections::HashSet<String> = {
         match conn.prepare("SELECT absolute_path FROM ip_images") {
-            Ok(mut stmt) => {
-                match stmt.query_map([], |row| row.get::<_, String>(0)) {
-                    Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-                    Err(_) => std::collections::HashSet::new(),
-                }
-            }
+            Ok(mut stmt) => match stmt.query_map([], |row| row.get::<_, String>(0)) {
+                Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                Err(_) => std::collections::HashSet::new(),
+            },
             Err(e) => return CommandResult::err(format!("查询数据库失败: {}", e)),
         }
     };
 
-    let mut global_index: usize = conn.query_row(
-        "SELECT COUNT(*) FROM ip_images WHERE status = 'archived'",
-        [],
-        |row| row.get::<_, usize>(0),
-    ).unwrap_or(0);
+    let mut global_index: usize = conn
+        .query_row(
+            "SELECT COUNT(*) FROM ip_images WHERE status = 'archived'",
+            [],
+            |row| row.get::<_, usize>(0),
+        )
+        .unwrap_or(0);
 
     // 遍历 IP 子目录（按 IP 形象的 path 字段匹配）
     let ip_dirs = match std::fs::read_dir(&archived_root) {
@@ -736,7 +795,10 @@ pub async fn scan_ip_archived_directory(
             let now = chrono::Local::now();
             let date_str = now.format("%Y%m%d").to_string();
             global_index += 1;
-            let time_str = format!("{:06}", now.format("%H%M%S").to_string().parse::<u32>().unwrap_or(0) + global_index as u32);
+            let time_str = format!(
+                "{:06}",
+                now.format("%H%M%S").to_string().parse::<u32>().unwrap_or(0) + global_index as u32
+            );
 
             let new_stem = template
                 .replace("{ip}", &dir_name)
@@ -760,13 +822,19 @@ pub async fn scan_ip_archived_directory(
                     Ok(_) => {
                         result.renamed_count += 1;
                         (
-                            new_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                            new_path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string(),
                             new_path.to_string_lossy().to_string(),
                         )
                     }
                     Err(e) => {
                         result.failed_count += 1;
-                        result.errors.push(format!("重命名失败 {}: {}", original_filename, e));
+                        result
+                            .errors
+                            .push(format!("重命名失败 {}: {}", original_filename, e));
                         continue;
                     }
                 }
@@ -792,10 +860,17 @@ pub async fn scan_ip_archived_directory(
                     created_at, imported_at, archived_at
                 ) VALUES (?, ?, ?, ?, ?, ?, 'archived', ?, ?, 0, 0, 0, ?, ?, ?)",
                 rusqlite::params![
-                    ip_image_id, final_filename, original_filename, resolved_ip_id,
-                    relative_path, final_abs_path,
-                    file_size, format_upper,
-                    now_str, now_str, now_str,
+                    ip_image_id,
+                    final_filename,
+                    original_filename,
+                    resolved_ip_id,
+                    relative_path,
+                    final_abs_path,
+                    file_size,
+                    format_upper,
+                    now_str,
+                    now_str,
+                    now_str,
                 ],
             );
 
@@ -803,7 +878,9 @@ pub async fn scan_ip_archived_directory(
                 Ok(_) => result.imported_count += 1,
                 Err(e) => {
                     result.failed_count += 1;
-                    result.errors.push(format!("写入数据库失败 {}: {}", final_filename, e));
+                    result
+                        .errors
+                        .push(format!("写入数据库失败 {}: {}", final_filename, e));
                 }
             }
         }

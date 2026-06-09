@@ -15,17 +15,19 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Use Tauri's app data directory
-            let app_data_dir = app.path().app_data_dir()
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
                 .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-            
+
             let data_dir = app_data_dir.join("data");
             std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data dir: {}", e))?;
-            
+
             let db_path = data_dir.join("database.sqlite");
             database::init_database(&db_path)
                 .map_err(|e| format!("Failed to init database: {}", e))?;
-            
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -64,7 +66,6 @@ pub fn run() {
             commands::gemini_watermark_removal::remove_gemini_watermark,
             commands::gemini_watermark_removal::batch_remove_gemini_watermarks,
             commands::gemini_watermark_removal::auto_remove_gemini_watermark,
-
             commands::classifier::classify_image,
             commands::settings::get_settings,
             commands::settings::save_settings,
@@ -132,7 +133,6 @@ pub fn run() {
             commands::fs::check_directory_status,
             commands::fs::repair_database_paths,
             commands::fs::show_in_folder,
-
             // Sync Commands
             commands::sync_commands::sync_test_connection,
             commands::sync_commands::sync_enable,

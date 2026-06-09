@@ -15,10 +15,10 @@ pub async fn create_prompt_group(
     image_ids: Vec<String>,
 ) -> Result<PromptGroup, String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
+
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     // 插入 prompt 组
     conn.execute(
         "INSERT INTO prompt_groups (id, prompt, negative_prompt, name, description, template_schema, created_at, updated_at)
@@ -26,7 +26,7 @@ pub async fn create_prompt_group(
         rusqlite::params![&id, &prompt, &negative_prompt, &name, &description, &template_schema, &now, &now],
     )
     .map_err(|e| e.to_string())?;
-    
+
     // 关联图片
     for image_id in &image_ids {
         conn.execute(
@@ -36,7 +36,7 @@ pub async fn create_prompt_group(
         )
         .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(PromptGroup {
         id,
         prompt,
@@ -54,7 +54,7 @@ pub async fn create_prompt_group(
 #[tauri::command]
 pub async fn get_prompt_groups(db_path: PathBuf) -> Result<Vec<PromptGroup>, String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
+
     let mut stmt = conn
         .prepare(
             "SELECT
@@ -73,7 +73,7 @@ pub async fn get_prompt_groups(db_path: PathBuf) -> Result<Vec<PromptGroup>, Str
              ORDER BY created_at DESC",
         )
         .map_err(|e| e.to_string())?;
-    
+
     let groups = stmt
         .query_map([], |row| {
             Ok(PromptGroup {
@@ -91,7 +91,7 @@ pub async fn get_prompt_groups(db_path: PathBuf) -> Result<Vec<PromptGroup>, Str
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-    
+
     Ok(groups)
 }
 
@@ -102,7 +102,7 @@ pub async fn get_prompt_group_with_images(
     group_id: String,
 ) -> Result<PromptGroupWithImages, String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
+
     // 获取 prompt 组信息
     let group: PromptGroup = conn
         .query_row(
@@ -125,7 +125,7 @@ pub async fn get_prompt_group_with_images(
             },
         )
         .map_err(|e| e.to_string())?;
-    
+
     // 获取关联的图片（包含模型信息）
     let mut stmt = conn
         .prepare(
@@ -141,7 +141,7 @@ pub async fn get_prompt_group_with_images(
              ORDER BY v.name, m.name, i.created_at",
         )
         .map_err(|e| e.to_string())?;
-    
+
     let images = stmt
         .query_map([&group_id], |row| {
             Ok(serde_json::json!({
@@ -162,7 +162,7 @@ pub async fn get_prompt_group_with_images(
 
     let mut group = group;
     group.image_count = images.len() as i32;
-    
+
     Ok(PromptGroupWithImages { group, images })
 }
 
@@ -174,7 +174,7 @@ pub async fn add_images_to_prompt_group(
     image_ids: Vec<String>,
 ) -> Result<(), String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
+
     for image_id in image_ids {
         conn.execute(
             "INSERT OR IGNORE INTO image_prompt_group_relations (image_id, prompt_group_id)
@@ -183,7 +183,7 @@ pub async fn add_images_to_prompt_group(
         )
         .map_err(|e| e.to_string())?;
     }
-    
+
     // 更新 prompt 组的更新时间
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
@@ -191,7 +191,7 @@ pub async fn add_images_to_prompt_group(
         rusqlite::params![&now, &group_id],
     )
     .map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
@@ -291,7 +291,7 @@ pub async fn remove_images_from_prompt_group(
     image_ids: Vec<String>,
 ) -> Result<(), String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
+
     for image_id in image_ids {
         conn.execute(
             "DELETE FROM image_prompt_group_relations 
@@ -300,7 +300,7 @@ pub async fn remove_images_from_prompt_group(
         )
         .map_err(|e| e.to_string())?;
     }
-    
+
     // 更新 prompt 组的更新时间
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
@@ -308,7 +308,7 @@ pub async fn remove_images_from_prompt_group(
         rusqlite::params![&now, &group_id],
     )
     .map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
@@ -325,45 +325,45 @@ pub async fn update_prompt_group(
 ) -> Result<(), String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     // 构建动态更新语句
     let mut updates = vec!["updated_at = ?1"];
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(now)];
-    
+
     if let Some(p) = prompt {
         updates.push("prompt = ?");
         params.push(Box::new(p));
     }
-    
+
     if let Some(np) = negative_prompt {
         updates.push("negative_prompt = ?");
         params.push(Box::new(np));
     }
-    
+
     if let Some(n) = name {
         updates.push("name = ?");
         params.push(Box::new(n));
     }
-    
+
     if let Some(d) = description {
         updates.push("description = ?");
         params.push(Box::new(d));
     }
-    
+
     if let Some(ts) = template_schema {
         updates.push("template_schema = ?");
         params.push(Box::new(ts));
     }
-    
+
     let sql = format!(
         "UPDATE prompt_groups SET {} WHERE id = ?",
         updates.join(", ")
     );
     params.push(Box::new(group_id));
-    
+
     conn.execute(&sql, rusqlite::params_from_iter(params.iter()))
         .map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
@@ -371,13 +371,10 @@ pub async fn update_prompt_group(
 #[tauri::command]
 pub async fn delete_prompt_group(db_path: PathBuf, group_id: String) -> Result<(), String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
-    conn.execute(
-        "DELETE FROM prompt_groups WHERE id = ?1",
-        [&group_id],
-    )
-    .map_err(|e| e.to_string())?;
-    
+
+    conn.execute("DELETE FROM prompt_groups WHERE id = ?1", [&group_id])
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -385,7 +382,7 @@ pub async fn delete_prompt_group(db_path: PathBuf, group_id: String) -> Result<(
 #[tauri::command]
 pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
+
     // 查找有相同 prompt 的图片（至少 2 张）
     let mut stmt = conn
         .prepare(
@@ -396,10 +393,10 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
              HAVING count >= 2",
         )
         .map_err(|e| e.to_string())?;
-    
+
     let mut created_groups = Vec::new();
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     let rows = stmt
         .query_map([], |row| {
             Ok((
@@ -409,11 +406,11 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
             ))
         })
         .map_err(|e| e.to_string())?;
-    
+
     for row in rows {
         let (prompt, negative_prompt, image_ids_str) = row.map_err(|e| e.to_string())?;
         let image_ids: Vec<String> = image_ids_str.split(',').map(|s| s.to_string()).collect();
-        
+
         // 检查是否已存在相同的 prompt 组
         let exists: bool = conn
             .query_row(
@@ -422,10 +419,10 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
                 |row| row.get(0),
             )
             .map_err(|e| e.to_string())?;
-        
+
         if !exists {
             let id = Uuid::new_v4().to_string();
-            
+
             // 创建 prompt 组
             conn.execute(
                 "INSERT INTO prompt_groups (id, prompt, negative_prompt, name, description, template_schema, created_at, updated_at)
@@ -442,7 +439,7 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
                 ],
             )
             .map_err(|e| e.to_string())?;
-            
+
             // 关联图片
             for image_id in &image_ids {
                 conn.execute(
@@ -452,7 +449,7 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
                 )
                 .map_err(|e| e.to_string())?;
             }
-            
+
             created_groups.push(PromptGroup {
                 id,
                 prompt: prompt.clone(),
@@ -466,6 +463,6 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
             });
         }
     }
-    
+
     Ok(created_groups)
 }
