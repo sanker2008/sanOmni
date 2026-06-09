@@ -4,7 +4,7 @@ import { getDbPath } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/useToast";
-import { CheckCircle, XCircle } from "lucide-react";
+import { CheckCircle, XCircle, History, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function SyncTab() {
   const [serverUrl, setServerUrl] = useState("");
@@ -12,6 +12,10 @@ export default function SyncTab() {
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [historyRecords, setHistoryRecords] = useState<any[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const loadStatus = async () => {
     try {
@@ -24,6 +28,28 @@ export default function SyncTab() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const loadHistory = async (page = 0) => {
+    if (!serverUrl || !apiKey) return;
+    setHistoryLoading(true);
+    try {
+      const res = await invoke<any>("sync_get_history", {
+        serverUrl,
+        apiKey,
+        limit: 20,
+        offset: page * 20,
+      });
+      if (res && res.success !== false && res.data) {
+        setHistoryRecords(res.data.records || []);
+        setHistoryTotal(res.data.total || 0);
+        setHistoryPage(page);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -90,6 +116,24 @@ export default function SyncTab() {
     }
   };
 
+  const handleForceRepush = async () => {
+    if (!confirm("这会将本地所有 IP 和图片数据重新排入推送队列。确定继续吗？")) return;
+    setLoading(true);
+    try {
+      const dbPath = await getDbPath();
+      const res = await invoke<any>("sync_force_repush", { dbPath });
+      if (res && res.success === false) {
+        throw new Error(res.error || "未知错误");
+      }
+      toast({ title: "队列已重置", description: "现在可以点击同步按钮将数据全量推送至云端", variant: "success" });
+      await loadStatus();
+    } catch (e: any) {
+      toast({ title: "重推失败", description: e.toString(), variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -147,18 +191,102 @@ export default function SyncTab() {
               <span className="text-sm font-medium">{status.pending_changes}</span>
             </div>
             
-            <div className="pt-2">
+            <div className="pt-2 flex gap-2">
               {status.enabled ? (
                 <Button variant="destructive" onClick={() => handleToggle(false)}>停用同步引擎</Button>
               ) : (
                 <Button variant="default" onClick={() => handleToggle(true)}>启用同步引擎</Button>
               )}
+              <Button variant="outline" onClick={handleForceRepush} disabled={loading}>
+                强制全量重推
+              </Button>
             </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">加载中...</p>
         )}
       </div>
+
+      {status?.enabled && serverUrl && (
+        <>
+          <div className="h-px bg-border my-6"></div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4" />
+                <h3 className="text-md font-medium">同步记录</h3>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => loadHistory(0)} disabled={historyLoading}>
+                {historyLoading ? "加载中..." : "刷新"}
+              </Button>
+            </div>
+
+            {historyRecords.length > 0 ? (
+              <div className="rounded-lg border overflow-hidden">
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500 }}>时间</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500 }}>设备</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500 }}>表</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500 }}>操作</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500 }}>记录ID</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500 }}>版本</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyRecords.map((r: any, i: number) => (
+                      <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "6px 12px" }}>{r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</td>
+                        <td style={{ padding: "6px 12px", fontFamily: "monospace", fontSize: 12 }}>{(r.device_id || "").substring(0, 8)}</td>
+                        <td style={{ padding: "6px 12px" }}>{r.table_name}</td>
+                        <td style={{ padding: "6px 12px" }}>
+                          <span style={{
+                            background: r.operation === "INSERT" ? "#22c55e20" : r.operation === "UPDATE" ? "#3b82f620" : "#ef444420",
+                            color: r.operation === "INSERT" ? "#22c55e" : r.operation === "UPDATE" ? "#3b82f6" : "#ef4444",
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            fontSize: 12,
+                          }}>
+                            {r.operation}
+                          </span>
+                        </td>
+                        <td style={{ padding: "6px 12px", fontFamily: "monospace", fontSize: 12 }}>{(r.record_id || "").substring(0, 8)}</td>
+                        <td style={{ padding: "6px 12px" }}>{r.version}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex items-center justify-between p-2 border-t">
+                  <span className="text-xs text-muted-foreground">共 {historyTotal} 条</span>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={historyPage === 0 || historyLoading}
+                      onClick={() => loadHistory(historyPage - 1)}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      上一页
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={(historyPage + 1) * 20 >= historyTotal || historyLoading}
+                      onClick={() => loadHistory(historyPage + 1)}
+                    >
+                      下一页
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">暂无同步记录，点击刷新加载。</p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

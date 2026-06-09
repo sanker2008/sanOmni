@@ -113,6 +113,32 @@ npm run tauri:dev
 npm run tauri:build
 ```
 
+### 发布流程
+
+打 tag 之前，先运行预检脚本确认可以正常打包：
+
+```bash
+# 预检（检查版本号一致性、TypeScript 编译、Rust 编译等）
+npm run release:check
+
+# 预检通过后手动打 tag
+git tag v1.x.x && git push origin v1.x.x
+
+# 或者让脚本自动打 tag 并 push
+npm run release:check -- --tag
+```
+
+预检内容：
+| 检查项 | 说明 |
+|--------|------|
+| 版本号一致性 | `package.json`、`tauri.conf.json`、`Cargo.toml` 三处版本必须一致 |
+| Git 状态 | 是否有未提交的代码 |
+| Tag 冲突 | 对应版本的 tag 是否已存在 |
+| TypeScript 编译 | `tsc --noEmit` |
+| Rust 编译 | `cargo check` |
+
+推送 tag 后会自动触发 GitHub Actions 构建并发布 Release。
+
 ### 按需构建 (例如：纯 sanPrompt 专属版)
 ```bash
 # 开发模式预览
@@ -205,7 +231,7 @@ npm run tauri:build:prompt
 - ✅ 自定义路径与统一根目录
 - ✅ 模块化的设置页面
 - ✅ 路径迁移工具与数据自修复
-- ✅ **全量双向云端同步** (支持 CAS 架构、极致去重与断点续传) 🆕
+- ✅ **全量双向云端同步** (支持 CAS 去重架构、实时的同步日志追踪、一键强制重推机制，以及安全的 API Key 级认证) 🆕
 
 ### 待开发功能
 - [ ] 数据导出/导入

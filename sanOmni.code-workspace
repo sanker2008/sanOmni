@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../sanomni-sync-server"
+		}
+	],
+	"settings": {}
+}

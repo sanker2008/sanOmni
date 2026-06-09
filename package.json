@@ -13,7 +13,8 @@
     "tauri:build": "tauri build",
     "dev:prompt": "vite --mode prompt",
     "build:prompt": "tsc && vite build --mode prompt",
-    "tauri:build:prompt": "vite build --mode prompt && tauri build"
+    "tauri:build:prompt": "vite build --mode prompt && tauri build",
+    "release:check": "node scripts/pre-release-check.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.5",

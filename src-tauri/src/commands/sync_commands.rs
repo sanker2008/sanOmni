@@ -120,3 +120,42 @@ pub fn sync_get_status(db_path: String) -> CommandResult<serde_json::Value> {
         "pending_changes": pending_changes
     }))
 }
+
+#[tauri::command]
+pub async fn sync_get_history(server_url: String, api_key: String, limit: Option<i64>, offset: Option<i64>) -> CommandResult<serde_json::Value> {
+    let client = crate::sync::client::SyncClient::new(server_url, api_key);
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    match client.fetch_sync_history(limit, offset).await {
+        Ok(data) => CommandResult::ok(data),
+        Err(e) => CommandResult::err(format!("获取同步历史失败: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub fn sync_force_repush(db_path: String) -> CommandResult<bool> {
+    let conn = match Connection::open(Path::new(&db_path)) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+    
+    let sql = r#"
+        BEGIN;
+        
+        -- 清空现有的变更记录避免重复
+        DELETE FROM sync_changelog;
+        
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_assets', id, 'INSERT', json_object('id', id, 'name', name, 'path', path, 'avatar_path', avatar_path, 'inspiration', inspiration, 'description', description, 'created_at', created_at, 'updated_at', updated_at) FROM ip_assets;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_images', id, 'INSERT', json_object('id', id, 'filename', filename, 'original_filename', original_filename, 'ip_id', ip_id, 'relative_path', relative_path, 'absolute_path', absolute_path, 'status', status, 'file_size', file_size, 'width', width, 'height', height, 'file_hash', file_hash, 'format', format, 'has_watermark', has_watermark, 'watermark_platform', watermark_platform, 'watermark_detected', watermark_detected, 'watermark_removed', watermark_removed, 'created_at', created_at, 'imported_at', imported_at, 'archived_at', archived_at) FROM ip_images;
+        
+        COMMIT;
+    "#;
+    
+    match conn.execute_batch(sql) {
+        Ok(_) => CommandResult::ok(true),
+        Err(e) => CommandResult::err(format!("执行重推语句失败: {}", e)),
+    }
+}

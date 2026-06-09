@@ -136,4 +136,19 @@ impl SyncClient {
             Err(format!("Download failed: {}", resp.status()).into())
         }
     }
+
+    pub async fn fetch_sync_history(&self, limit: i64, offset: i64) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!("{}/api/sync/history?limit={}&offset={}", self.server_url, limit, offset);
+        let resp = self.client.get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .send()
+            .await?;
+            
+        if resp.status().is_success() {
+            let data: serde_json::Value = resp.json().await?;
+            Ok(data)
+        } else {
+            Err(format!("Fetch history failed: {}", resp.status()).into())
+        }
+    }
 }

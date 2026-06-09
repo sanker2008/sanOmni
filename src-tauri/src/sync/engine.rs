@@ -188,8 +188,82 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                     }
                 }
                 
-                // TODO: 写库应用变更
-                pulled_count = resp.changes.len();
+                // 写库应用变更
+                {
+                    let conn = Connection::open(Path::new(db_path))
+                        .map_err(|e| format!("打开数据库失败: {}", e))?;
+                    
+                    // 临时移除同步触发器，防止写库时产生循环 changelog
+                    let _ = conn.execute_batch(crate::sync::triggers::DROP_TRIGGERS);
+                    
+                    let mut applied = 0usize;
+                    for change in &resp.changes {
+                        let result = match (change.table.as_str(), change.operation.as_str()) {
+                            ("ip_assets", "INSERT") | ("ip_assets", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let name = json.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let path = json.get("path").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let avatar_path: Option<String> = json.get("avatar_path").and_then(|v| v.as_str()).map(String::from);
+                                        let inspiration: Option<String> = json.get("inspiration").and_then(|v| v.as_str()).map(String::from);
+                                        let description: Option<String> = json.get("description").and_then(|v| v.as_str()).map(String::from);
+                                        let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let updated_at = json.get("updated_at").and_then(|v| v.as_str()).unwrap_or_default();
+                                        conn.execute(
+                                            "INSERT OR REPLACE INTO ip_assets (id, name, path, avatar_path, inspiration, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                            rusqlite::params![id, name, path, avatar_path, inspiration, description, created_at, updated_at],
+                                        ).ok()
+                                    } else { None }
+                                } else { None }
+                            }
+                            ("ip_assets", "DELETE") => {
+                                conn.execute("DELETE FROM ip_assets WHERE id = ?", rusqlite::params![change.record_id]).ok()
+                            }
+                            ("ip_images", "INSERT") | ("ip_images", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let filename = json.get("filename").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let original_filename: Option<String> = json.get("original_filename").and_then(|v| v.as_str()).map(String::from);
+                                        let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let relative_path: Option<String> = json.get("relative_path").and_then(|v| v.as_str()).map(String::from);
+                                        let absolute_path: Option<String> = json.get("absolute_path").and_then(|v| v.as_str()).map(String::from);
+                                        let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("inbox");
+                                        let file_size: i64 = json.get("file_size").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let width: i64 = json.get("width").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let height: i64 = json.get("height").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let file_hash: Option<String> = json.get("file_hash").and_then(|v| v.as_str()).map(String::from);
+                                        let format: Option<String> = json.get("format").and_then(|v| v.as_str()).map(String::from);
+                                        let has_watermark: i64 = json.get("has_watermark").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let watermark_platform: Option<String> = json.get("watermark_platform").and_then(|v| v.as_str()).map(String::from);
+                                        let watermark_detected: Option<String> = json.get("watermark_detected").and_then(|v| v.as_str()).map(String::from);
+                                        let watermark_removed: Option<String> = json.get("watermark_removed").and_then(|v| v.as_str()).map(String::from);
+                                        let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let imported_at: Option<String> = json.get("imported_at").and_then(|v| v.as_str()).map(String::from);
+                                        let archived_at: Option<String> = json.get("archived_at").and_then(|v| v.as_str()).map(String::from);
+                                        conn.execute(
+                                            "INSERT OR REPLACE INTO ip_images (id, filename, original_filename, ip_id, relative_path, absolute_path, status, file_size, width, height, file_hash, format, has_watermark, watermark_platform, watermark_detected, watermark_removed, created_at, imported_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                            rusqlite::params![id, filename, original_filename, ip_id, relative_path, absolute_path, status, file_size, width, height, file_hash, format, has_watermark, watermark_platform, watermark_detected, watermark_removed, created_at, imported_at, archived_at],
+                                        ).ok()
+                                    } else { None }
+                                } else { None }
+                            }
+                            ("ip_images", "DELETE") => {
+                                conn.execute("DELETE FROM ip_images WHERE id = ?", rusqlite::params![change.record_id]).ok()
+                            }
+                            _ => None,
+                        };
+                        if result.is_some() {
+                            applied += 1;
+                        }
+                    }
+                    
+                    // 重新创建同步触发器
+                    let _ = conn.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
+                    
+                    pulled_count = applied;
+                }
             }
             if resp.latest_version > current_version {
                 let conn = Connection::open(Path::new(db_path)).unwrap();
