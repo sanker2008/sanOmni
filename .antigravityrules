@@ -6,3 +6,14 @@ This project uses specific directory organization rules for artifacts generated 
 - **Plan Documents**: All plan documents and documentation artifacts MUST be placed inside the `docs/` directory.
 - **Testing and Debugging**: Any test files, debugging scripts, or temporary debugging outputs MUST be placed inside the `debug/` directory.
 - **Avoid Root Clutter**: Do not place these files directly in the root directory.
+
+## Changelog Management Skill
+When asked to write or update a changelog, the agent MUST follow these professional guidelines:
+1. **File Location**: The project uses a single unified `CHANGELOG.md` file located at the root directory (`d:\dev\san\sanOmni\CHANGELOG.md`). Do NOT create scattered changelog files in `docs/`.
+2. **Standard**: Follow the "Keep a Changelog" (keepachangelog.com) standard.
+3. **Format**:
+   - The latest version is always at the top under `## [Unreleased]` or `## [x.y.z] - YYYY-MM-DD`.
+   - Use standard subheadings to categorize changes: `### Added`, `### Changed`, `### Fixed`, `### Removed`, `### Deprecated`, `### Security`.
+   - Never mix bug fixes with new features in the same list.
+4. **Release Notes**: If a feature requires extensive explanation, write a separate Markdown file in `docs/release-notes/` and link to it from the bullet point in `CHANGELOG.md`.
+5. **Commit Standard**: When writing git commit messages, strictly follow Conventional Commits (e.g., `feat: xxx`, `fix: xxx`, `docs: xxx`, `refactor: xxx`).

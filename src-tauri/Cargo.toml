@@ -11,6 +11,14 @@ autobins = false
 name = "sanomni"
 path = "src/main.rs"
 
+[[bin]]
+name = "test_pull"
+path = "src/bin/test_pull.rs"
+
+[[bin]]
+name = "test_insert"
+path = "src/bin/test_insert.rs"
+
 [lib]
 name = "sanomni_lib"
 crate-type = ["lib", "cdylib"]

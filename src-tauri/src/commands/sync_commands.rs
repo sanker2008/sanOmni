@@ -173,6 +173,15 @@ pub fn sync_force_repush(db_path: String) -> CommandResult<bool> {
         INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
         SELECT 'ip_images', id, 'INSERT', json_object('id', id, 'filename', filename, 'original_filename', original_filename, 'ip_id', ip_id, 'relative_path', relative_path, 'absolute_path', absolute_path, 'status', status, 'file_size', file_size, 'width', width, 'height', height, 'file_hash', file_hash, 'format', format, 'has_watermark', has_watermark, 'watermark_platform', watermark_platform, 'watermark_detected', watermark_detected, 'watermark_removed', watermark_removed, 'created_at', created_at, 'imported_at', imported_at, 'archived_at', archived_at) FROM ip_images;
         
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_image_relations', ip_image_id || '_' || ip_id, 'INSERT', json_object('ip_image_id', ip_image_id, 'ip_id', ip_id, 'is_primary', is_primary) FROM ip_image_relations;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_image_tag_relations', ip_image_id || '_' || tag_id, 'INSERT', json_object('ip_image_id', ip_image_id, 'tag_id', tag_id) FROM ip_image_tag_relations;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'tags', id, 'INSERT', json_object('id', id, 'name', name, 'name_en', name_en, 'color', color, 'parent_id', parent_id, 'use_count', use_count, 'is_builtin', is_builtin, 'created_at', created_at) FROM tags;
+        
         COMMIT;
     "#;
 

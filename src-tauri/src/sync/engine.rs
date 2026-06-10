@@ -89,13 +89,16 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
     let mut files_to_upload = Vec::new(); // (hash, absolute_path, i)
 
     for (i, change) in changes.iter_mut().enumerate() {
-        if (change.table == "images" || change.table == "ip_assets" || change.table == "ip_images")
-            && change.operation != "DELETE"
-        {
+        if (change.table == "ip_assets" || change.table == "ip_images") && change.operation != "DELETE" {
             if let Some(data_str) = &change.data {
                 if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                    let path_key = if change.table == "ip_assets" {
+                        "avatar_path"
+                    } else {
+                        "absolute_path"
+                    };
                     if let Some(abs_path) = json
-                        .get("absolute_path")
+                        .get(path_key)
                         .and_then(|v| v.as_str())
                         .map(String::from)
                     {
@@ -138,7 +141,9 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                             "path": abs_path
                         }),
                     );
-                    let _ = client.upload_file(&abs_path).await; // 忽略单个失败，尽量传
+                    if let Err(e) = client.upload_file(&abs_path).await {
+                        eprintln!("[Sync] Failed to upload file {}: {}", abs_path, e);
+                    }
                 }
             }
         }
@@ -156,13 +161,15 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                 new_server_version = resp.server_version;
 
                 // 写库清理已推送日志
-                let conn = Connection::open(Path::new(db_path)).unwrap();
+                let mut conn = Connection::open(Path::new(db_path)).unwrap();
+                let tx = conn.transaction().unwrap();
                 for id in pending_ids {
-                    let _ = conn.execute(
+                    let _ = tx.execute(
                         "DELETE FROM sync_changelog WHERE id = ?",
                         rusqlite::params![id],
                     );
                 }
+                let _ = tx.commit();
                 let _ = conn.execute("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('last_sync_version', ?)", rusqlite::params![new_server_version.to_string()]);
             }
             Err(e) => return Err(format!("推送失败: {}", e)),
@@ -206,13 +213,26 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
         // <--- 又一个 .await 点
         Ok(mut resp) => {
             if !resp.changes.is_empty() {
+                let mut deleted_records = std::collections::HashSet::new();
+                for change in &resp.changes {
+                    if change.operation == "DELETE" {
+                        deleted_records.insert(change.record_id.clone());
+                    }
+                }
+                resp.changes.retain(|change| {
+                    if change.operation != "DELETE" && deleted_records.contains(&change.record_id) {
+                        false
+                    } else {
+                        true
+                    }
+                });
+
                 let total = resp.changes.len();
                 let mut current = 0;
 
                 // 下载文件并修正 absolute_path
                 for change in &mut resp.changes {
-                    if (change.table == "images"
-                        || change.table == "ip_assets"
+                    if (change.table == "ip_assets"
                         || change.table == "ip_images")
                         && change.operation != "DELETE"
                     {
@@ -220,46 +240,63 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                             if let Ok(mut json) =
                                 serde_json::from_str::<serde_json::Value>(data_str)
                             {
-                                if let (Some(hash), Some(rel_path)) = (
-                                    json.get("file_hash")
-                                        .and_then(|v| v.as_str())
-                                        .map(String::from),
-                                    json.get("relative_path").and_then(|v| v.as_str()),
-                                ) {
-                                    let rel_path_normalized = rel_path.replace("\\", "/");
-                                    let local_abs_path = app_root.join(&rel_path_normalized);
+                                if let Some(hash) = json.get("file_hash").and_then(|v| v.as_str()).map(String::from) {
+                                    let rel_path_normalized = if change.table == "ip_images" {
+                                        json.get("relative_path")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s.replace("\\", "/"))
+                                    } else if change.table == "ip_assets" {
+                                        // For ip_assets, we construct relative path from `path` and `avatar_path`'s filename
+                                        let ip_path = json.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                        let filename = json.get("avatar_path")
+                                            .and_then(|v| v.as_str())
+                                            .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().into_owned());
+                                        
+                                        filename.map(|f| format!("ip_archived/{}/{}", ip_path, f))
+                                    } else {
+                                        None
+                                    };
 
-                                    current += 1;
-                                    let _ = app.emit(
-                                        "sync-progress",
-                                        serde_json::json!({
-                                            "phase": "download",
-                                            "current": current,
-                                            "total": total,
-                                            "path": local_abs_path.to_string_lossy()
-                                        }),
-                                    );
+                                    if let Some(rel_path) = rel_path_normalized {
+                                        let local_abs_path = app_root.join(&rel_path);
 
-                                    if let Some(parent) = local_abs_path.parent() {
-                                        if let Err(e) = tokio::fs::create_dir_all(parent).await {
-                                            eprintln!("[Sync] Failed to create directory {}: {}", parent.display(), e);
-                                        }
-                                    }
-
-                                    if !local_abs_path.exists() {
-                                        if let Err(e) = client.download_file(&hash, &local_abs_path).await {
-                                            eprintln!("[Sync] Failed to download file to {}: {}", local_abs_path.display(), e);
-                                        }
-                                    }
-
-                                    if let Some(obj) = json.as_object_mut() {
-                                        obj.insert(
-                                            "absolute_path".to_string(),
-                                            serde_json::Value::String(
-                                                local_abs_path.to_string_lossy().into_owned(),
-                                            ),
+                                        current += 1;
+                                        let _ = app.emit(
+                                            "sync-progress",
+                                            serde_json::json!({
+                                                "phase": "download",
+                                                "current": current,
+                                                "total": total,
+                                                "path": local_abs_path.to_string_lossy()
+                                            }),
                                         );
-                                        change.data = Some(serde_json::to_string(&json).unwrap());
+
+                                        if let Some(parent) = local_abs_path.parent() {
+                                            if let Err(e) = tokio::fs::create_dir_all(parent).await {
+                                                eprintln!("[Sync] Failed to create directory {}: {}", parent.display(), e);
+                                            }
+                                        }
+
+                                        if !local_abs_path.exists() {
+                                            if let Err(e) = client.download_file(&hash, &local_abs_path).await {
+                                                eprintln!("[Sync] Failed to download file to {}: {}", local_abs_path.display(), e);
+                                            }
+                                        }
+
+                                        if let Some(obj) = json.as_object_mut() {
+                                            let path_key = if change.table == "ip_assets" {
+                                                "avatar_path"
+                                            } else {
+                                                "absolute_path"
+                                            };
+                                            obj.insert(
+                                                path_key.to_string(),
+                                                serde_json::Value::String(
+                                                    local_abs_path.to_string_lossy().into_owned(),
+                                                ),
+                                            );
+                                            change.data = Some(serde_json::to_string(&json).unwrap());
+                                        }
                                     }
                                 }
                             }
@@ -269,11 +306,13 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
 
                 // 写库应用变更
                 {
-                    let conn = Connection::open(Path::new(db_path))
+                    let mut conn = Connection::open(Path::new(db_path))
                         .map_err(|e| format!("打开数据库失败: {}", e))?;
 
+                    let tx = conn.transaction().map_err(|e| format!("启动事务失败: {}", e))?;
+
                     // 临时移除同步触发器，防止写库时产生循环 changelog
-                    let _ = conn.execute_batch(crate::sync::triggers::DROP_TRIGGERS);
+                    let _ = tx.execute_batch(crate::sync::triggers::DROP_TRIGGERS);
 
                     let mut applied = 0usize;
                     for change in &resp.changes {
@@ -315,10 +354,32 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                                             .get("updated_at")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or_default();
-                                        conn.execute(
+                                        let res = tx.execute(
                                             "INSERT OR REPLACE INTO ip_assets (id, name, path, avatar_path, inspiration, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                                             rusqlite::params![id, name, path, avatar_path, inspiration, description, created_at, updated_at],
-                                        ).ok()
+                                        );
+                                        if let Err(ref e) = res {
+                                            eprintln!("[Sync] Failed to insert ip_asset: {:?}", e);
+                                        }
+                                        if res.is_ok() {
+                                            let custom_path: Option<String> = tx.query_row(
+                                                "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+                                                [],
+                                                |row| row.get(0),
+                                            ).ok();
+                                            let library_path = if let Some(ref path_str) = custom_path {
+                                                if !path_str.trim().is_empty() {
+                                                    std::path::PathBuf::from(path_str)
+                                                } else {
+                                                    app_root.clone()
+                                                }
+                                            } else {
+                                                app_root.clone()
+                                            };
+                                            let target_dir = library_path.join("ip_archived").join(path);
+                                            let _ = std::fs::create_dir_all(&target_dir);
+                                        }
+                                        res.ok()
                                     } else {
                                         None
                                     }
@@ -326,12 +387,41 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                                     None
                                 }
                             }
-                            ("ip_assets", "DELETE") => conn
-                                .execute(
-                                    "DELETE FROM ip_assets WHERE id = ?",
-                                    rusqlite::params![change.record_id],
-                                )
-                                .ok(),
+                            ("ip_assets", "DELETE") => {
+                                        let asset_info: Option<(String, Option<String>)> = tx.query_row(
+                                            "SELECT path, avatar_path FROM ip_assets WHERE id = ?",
+                                            rusqlite::params![change.record_id],
+                                            |row| Ok((row.get(0)?, row.get(1)?)),
+                                        ).ok();
+                                        
+                                        if let Some((p, avatar_opt)) = asset_info {
+                                            if let Some(avatar_path) = avatar_opt {
+                                                let _ = std::fs::remove_file(&avatar_path);
+                                            }
+                                            let custom_path: Option<String> = tx.query_row(
+                                                "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+                                                [],
+                                                |row| row.get(0),
+                                            ).ok();
+                                            let library_path = if let Some(ref path_str) = custom_path {
+                                                if !path_str.trim().is_empty() {
+                                                    std::path::PathBuf::from(path_str)
+                                                } else {
+                                                    app_root.clone()
+                                                }
+                                            } else {
+                                                app_root.clone()
+                                            };
+                                            let target_dir = library_path.join("ip_archived").join(p);
+                                            // Only attempt to remove the directory if it's empty
+                                            let _ = std::fs::remove_dir(&target_dir);
+                                        }
+                                        tx.execute(
+                                            "DELETE FROM ip_assets WHERE id = ?",
+                                            rusqlite::params![change.record_id],
+                                        )
+                                        .ok()
+                                    }
                             ("ip_images", "INSERT") | ("ip_images", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
                                     if let Ok(json) =
@@ -411,10 +501,14 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                                             .get("archived_at")
                                             .and_then(|v| v.as_str())
                                             .map(String::from);
-                                        conn.execute(
+                                        let res = tx.execute(
                                             "INSERT OR REPLACE INTO ip_images (id, filename, original_filename, ip_id, relative_path, absolute_path, status, file_size, width, height, file_hash, format, has_watermark, watermark_platform, watermark_detected, watermark_removed, created_at, imported_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                             rusqlite::params![id, filename, original_filename, ip_id, relative_path, absolute_path, status, file_size, width, height, file_hash, format, has_watermark, watermark_platform, watermark_detected, watermark_removed, created_at, imported_at, archived_at],
-                                        ).ok()
+                                        );
+                                        if let Err(ref e) = res {
+                                            eprintln!("[Sync] Failed to insert ip_image: {:?}", e);
+                                        }
+                                        res.ok()
                                     } else {
                                         None
                                     }
@@ -422,12 +516,90 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                                     None
                                 }
                             }
-                            ("ip_images", "DELETE") => conn
-                                .execute(
-                                    "DELETE FROM ip_images WHERE id = ?",
+                            ("ip_images", "DELETE") => {
+                                        let path: Option<String> = tx.query_row(
+                                            "SELECT absolute_path FROM ip_images WHERE id = ?",
+                                            rusqlite::params![change.record_id],
+                                            |row| row.get(0),
+                                        ).ok();
+                                        if let Some(p) = path {
+                                            if p.contains("ip_archived") {
+                                                let _ = std::fs::remove_file(&p);
+                                            }
+                                        }
+                                        tx.execute(
+                                            "DELETE FROM ip_images WHERE id = ?",
+                                            rusqlite::params![change.record_id],
+                                        )
+                                        .ok()
+                                    }
+                            ("ip_image_relations", "INSERT") | ("ip_image_relations", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        let ip_image_id = json.get("ip_image_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let is_primary = json.get("is_primary").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        tx.execute(
+                                            "INSERT OR IGNORE INTO ip_image_relations (ip_image_id, ip_id, is_primary) VALUES (?, ?, ?)",
+                                            rusqlite::params![ip_image_id, ip_id, is_primary],
+                                        ).ok()
+                                    } else { None }
+                                } else { None }
+                            }
+                            ("ip_image_relations", "DELETE") => {
+                                let parts: Vec<&str> = change.record_id.split('_').collect();
+                                if parts.len() == 2 {
+                                    tx.execute(
+                                        "DELETE FROM ip_image_relations WHERE ip_image_id = ? AND ip_id = ?",
+                                        rusqlite::params![parts[0], parts[1]],
+                                    ).ok()
+                                } else { None }
+                            }
+                            ("ip_image_tag_relations", "INSERT") | ("ip_image_tag_relations", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        let ip_image_id = json.get("ip_image_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let tag_id = json.get("tag_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        tx.execute(
+                                            "INSERT OR IGNORE INTO ip_image_tag_relations (ip_image_id, tag_id) VALUES (?, ?)",
+                                            rusqlite::params![ip_image_id, tag_id],
+                                        ).ok()
+                                    } else { None }
+                                } else { None }
+                            }
+                            ("ip_image_tag_relations", "DELETE") => {
+                                let parts: Vec<&str> = change.record_id.split('_').collect();
+                                if parts.len() == 2 {
+                                    tx.execute(
+                                        "DELETE FROM ip_image_tag_relations WHERE ip_image_id = ? AND tag_id = ?",
+                                        rusqlite::params![parts[0], parts[1]],
+                                    ).ok()
+                                } else { None }
+                            }
+                            ("tags", "INSERT") | ("tags", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let name = json.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let name_en = json.get("name_en").and_then(|v| v.as_str()).map(String::from);
+                                        let color = json.get("color").and_then(|v| v.as_str()).map(String::from);
+                                        let parent_id = json.get("parent_id").and_then(|v| v.as_str()).map(String::from);
+                                        let use_count = json.get("use_count").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let is_builtin = json.get("is_builtin").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
+                                        tx.execute(
+                                            "INSERT OR REPLACE INTO tags (id, name, name_en, color, parent_id, use_count, is_builtin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                            rusqlite::params![id, name, name_en, color, parent_id, use_count, is_builtin, created_at],
+                                        ).ok()
+                                    } else { None }
+                                } else { None }
+                            }
+                            ("tags", "DELETE") => {
+                                tx.execute(
+                                    "DELETE FROM tags WHERE id = ?",
                                     rusqlite::params![change.record_id],
-                                )
-                                .ok(),
+                                ).ok()
+                            }
                             _ => None,
                         };
                         if result.is_some() {
@@ -436,9 +608,13 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                     }
 
                     // 重新创建同步触发器
-                    let _ = conn.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
+                    let _ = tx.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
 
-                    pulled_count = applied;
+                    if tx.commit().is_ok() {
+                        pulled_count = applied;
+                    } else {
+                        return Err("本地数据库应用拉取变更失败，事务已回滚".to_string());
+                    }
                 }
             }
             if resp.latest_version > current_version {

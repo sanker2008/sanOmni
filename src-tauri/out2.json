@@ -1,0 +1,649 @@
+{
+  "changes": [
+    {
+      "changed_at": "2026-06-09T11:18:52.797370635+00:00",
+      "data": "{\"id\":\"ipimg_f5a68ae6b58e\",\"filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"ip_id\":\"unknown\",\"relative_path\":\"inbox\\\\unknown\\\\c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780977009780_c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"status\":\"inbox\",\"file_size\":1280897,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.806955245+00:00",
+      "data": "{\"id\":\"ipimg_f5a68ae6b58e\",\"filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"ip_id\":\"unknown\",\"relative_path\":\"inbox\\\\unknown\\\\c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780977009780_c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"status\":\"inbox\",\"file_size\":131064,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"archived_at\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.815409671+00:00",
+      "data": "{\"id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"name\":\"Duby\",\"path\":\"duby\",\"avatar_path\":null,\"inspiration\":null,\"description\":null,\"created_at\":\"2026-06-09T03:50:41.108442600+00:00\",\"updated_at\":\"2026-06-09T03:50:41.108442600+00:00\"}",
+      "operation": "INSERT",
+      "record_id": "129166c3-6370-4896-ad7d-eb591b7c4bb4",
+      "table": "ip_assets"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.832892170+00:00",
+      "data": "{\"id\":\"ipimg_f5a68ae6b58e\",\"filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"ip_id\":\"unknown\",\"relative_path\":\"inbox\\\\unknown\\\\c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780977009780_c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"status\":\"tagged\",\"file_size\":131064,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"archived_at\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.845386007+00:00",
+      "data": "{\"id\":\"ipimg_f5a68ae6b58e\",\"filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\unknown\\\\c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780977009780_c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"status\":\"tagged\",\"file_size\":131064,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"archived_at\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.869414967+00:00",
+      "data": "{\"id\":\"ipimg_f5a68ae6b58e\",\"filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\unknown\\\\c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780977009780_c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"status\":\"tagged\",\"file_size\":131064,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"archived_at\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.895423467+00:00",
+      "data": "{\"id\":\"ipimg_f5a68ae6b58e\",\"filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\unknown\\\\c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780977009780_c89d32b9-d0e5-4133-8e4b-5e2e81db8074.webp\",\"status\":\"tagged\",\"file_size\":131064,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"archived_at\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.916952701+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-115057.webp\",\"archived_at\":\"2026-06-09T03:50:57.945544300+00:00\",\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"file_hash\":\"5dc5b94556b722a17a6b7d46e85f0248ba66219dc6180f7e1febd7c161f69768\",\"file_size\":131064,\"filename\":\"duby-2026-06-09-115057.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_f5a68ae6b58e\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-115057.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.937904039+00:00",
+      "data": "{\"id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"name\":\"Bobo\",\"path\":\"bobo\",\"avatar_path\":null,\"inspiration\":null,\"description\":null,\"created_at\":\"2026-06-09T03:52:02.607141800+00:00\",\"updated_at\":\"2026-06-09T03:52:02.607141800+00:00\"}",
+      "operation": "INSERT",
+      "record_id": "4630a5f1-7369-47e8-b787-9c4daf48cced",
+      "table": "ip_assets"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.956043764+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-115057.webp\",\"archived_at\":\"2026-06-09T03:50:57.945544300+00:00\",\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"file_hash\":\"5dc5b94556b722a17a6b7d46e85f0248ba66219dc6180f7e1febd7c161f69768\",\"file_size\":131064,\"filename\":\"duby-2026-06-09-115057.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_f5a68ae6b58e\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-115057.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.975196992+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-115057.webp\",\"archived_at\":\"2026-06-09T03:50:57.945544300+00:00\",\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"file_hash\":\"5dc5b94556b722a17a6b7d46e85f0248ba66219dc6180f7e1febd7c161f69768\",\"file_size\":131064,\"filename\":\"duby-2026-06-09-115057.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_f5a68ae6b58e\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-115057.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:52.993102086+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-115057.webp\",\"archived_at\":\"2026-06-09T03:50:57.945544300+00:00\",\"created_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"file_hash\":\"5dc5b94556b722a17a6b7d46e85f0248ba66219dc6180f7e1febd7c161f69768\",\"file_size\":131064,\"filename\":\"duby-2026-06-09-115057.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_f5a68ae6b58e\",\"imported_at\":\"2026-06-09T03:50:09.794056900+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"c89d32b9-d0e5-4133-8e4b-5e2e81db8074.png\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-115057.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_f5a68ae6b58e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.019645873+00:00",
+      "data": "{\"id\":\"ipimg_308a7777b235\",\"filename\":\"Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"original_filename\":\"Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\129166c3-6370-4896-ad7d-eb591b7c4bb4\\\\Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780996095106_Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"status\":\"inbox\",\"file_size\":4367825,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"imported_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_308a7777b235",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.045376782+00:00",
+      "data": "{\"id\":\"ipimg_308a7777b235\",\"filename\":\"duby-2026-06-09-170815.png\",\"original_filename\":\"Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170815.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170815.png\",\"status\":\"archived\",\"file_size\":4367825,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"imported_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"archived_at\":\"2026-06-09T09:08:15.137885100+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_308a7777b235",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.069566263+00:00",
+      "data": "{\"id\":\"ipimg_b777f8bfd150\",\"filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\129166c3-6370-4896-ad7d-eb591b7c4bb4\\\\Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780996095146_Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"status\":\"inbox\",\"file_size\":5315403,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.159489700+00:00\",\"imported_at\":\"2026-06-09T09:08:15.159489700+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_b777f8bfd150",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.085231869+00:00",
+      "data": "{\"id\":\"ipimg_b777f8bfd150\",\"filename\":\"duby-2026-06-09-170816.png\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170816.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170816.png\",\"status\":\"archived\",\"file_size\":5315403,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.159489700+00:00\",\"imported_at\":\"2026-06-09T09:08:15.159489700+00:00\",\"archived_at\":\"2026-06-09T09:08:15.173934100+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_b777f8bfd150",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.102679364+00:00",
+      "data": "{\"id\":\"ipimg_3753a31a45cb\",\"filename\":\"Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"original_filename\":\"Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\129166c3-6370-4896-ad7d-eb591b7c4bb4\\\\Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780996095182_Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"status\":\"inbox\",\"file_size\":5129890,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"imported_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_3753a31a45cb",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.127613255+00:00",
+      "data": "{\"id\":\"ipimg_3753a31a45cb\",\"filename\":\"duby-2026-06-09-170817.png\",\"original_filename\":\"Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170817.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170817.png\",\"status\":\"archived\",\"file_size\":5129890,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"imported_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"archived_at\":\"2026-06-09T09:08:15.210429400+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3753a31a45cb",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.151467948+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\129166c3-6370-4896-ad7d-eb591b7c4bb4\\\\Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780996095219_Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"status\":\"inbox\",\"file_size\":3143218,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.168664631+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.png\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.png\",\"status\":\"archived\",\"file_size\":3143218,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.190409681+00:00",
+      "data": "{\"id\":\"ipimg_a77d8f006c96\",\"filename\":\"Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"original_filename\":\"Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\129166c3-6370-4896-ad7d-eb591b7c4bb4\\\\Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780996095263_Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"status\":\"inbox\",\"file_size\":8732381,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"imported_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_a77d8f006c96",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.207993310+00:00",
+      "data": "{\"id\":\"ipimg_a77d8f006c96\",\"filename\":\"duby-2026-06-09-170819.png\",\"original_filename\":\"Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170819.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170819.png\",\"status\":\"archived\",\"file_size\":8732381,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"imported_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"archived_at\":\"2026-06-09T09:08:15.312150+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_a77d8f006c96",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.228469946+00:00",
+      "data": "{\"id\":\"ipimg_a77d8f006c96\",\"filename\":\"duby-2026-06-09-170819.webp\",\"original_filename\":\"Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170819.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170819.webp\",\"status\":\"archived\",\"file_size\":810932,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"imported_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"archived_at\":\"2026-06-09T09:08:15.312150+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_a77d8f006c96",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.244211865+00:00",
+      "data": "{\"id\":\"ipimg_3753a31a45cb\",\"filename\":\"duby-2026-06-09-170817.webp\",\"original_filename\":\"Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170817.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170817.webp\",\"status\":\"archived\",\"file_size\":91578,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"imported_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"archived_at\":\"2026-06-09T09:08:15.210429400+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3753a31a45cb",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.260591593+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.277280581+00:00",
+      "data": "{\"id\":\"ipimg_b777f8bfd150\",\"filename\":\"duby-2026-06-09-170816.webp\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170816.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170816.webp\",\"status\":\"archived\",\"file_size\":139138,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.159489700+00:00\",\"imported_at\":\"2026-06-09T09:08:15.159489700+00:00\",\"archived_at\":\"2026-06-09T09:08:15.173934100+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_b777f8bfd150",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.295263993+00:00",
+      "data": "{\"id\":\"ipimg_308a7777b235\",\"filename\":\"duby-2026-06-09-170815.webp\",\"original_filename\":\"Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170815.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170815.webp\",\"status\":\"archived\",\"file_size\":117776,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"imported_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"archived_at\":\"2026-06-09T09:08:15.137885100+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_308a7777b235",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.312115066+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.327178220+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.353305233+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":\"unknown\",\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.370526251+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":\"unknown\",\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.385823165+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":\"unknown\",\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.403202210+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":\"gemini\",\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.424521419+00:00",
+      "data": "{\"id\":\"ipimg_b777f8bfd150\"}",
+      "operation": "DELETE",
+      "record_id": "ipimg_b777f8bfd150",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.440994301+00:00",
+      "data": "{\"id\":\"ipimg_c993bb2328a1\",\"filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\129166c3-6370-4896-ad7d-eb591b7c4bb4\\\\Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780996410296_Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"status\":\"inbox\",\"file_size\":3842275,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"imported_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_c993bb2328a1",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.459104461+00:00",
+      "data": "{\"id\":\"ipimg_c993bb2328a1\",\"filename\":\"duby-2026-06-09-171330.png\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171330.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171330.png\",\"status\":\"archived\",\"file_size\":3842275,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"imported_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"archived_at\":\"2026-06-09T09:13:30.338811400+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_c993bb2328a1",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.479027386+00:00",
+      "data": "{\"id\":\"ipimg_c993bb2328a1\",\"filename\":\"duby-2026-06-09-171330.webp\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171330.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171330.webp\",\"status\":\"archived\",\"file_size\":139064,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"imported_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"archived_at\":\"2026-06-09T09:13:30.338811400+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_c993bb2328a1",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.498598270+00:00",
+      "data": "{\"id\":\"ipimg_3d283dfa0627\",\"filename\":\"Gemini_Generated_Image_v2137vv2137vv213.png\",\"original_filename\":\"Gemini_Generated_Image_v2137vv2137vv213.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\129166c3-6370-4896-ad7d-eb591b7c4bb4\\\\Gemini_Generated_Image_v2137vv2137vv213.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780996548188_Gemini_Generated_Image_v2137vv2137vv213.png\",\"status\":\"inbox\",\"file_size\":5609900,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"imported_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_3d283dfa0627",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.520416347+00:00",
+      "data": "{\"id\":\"ipimg_3d283dfa0627\",\"filename\":\"duby-2026-06-09-171548.png\",\"original_filename\":\"Gemini_Generated_Image_v2137vv2137vv213.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171548.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171548.png\",\"status\":\"archived\",\"file_size\":5609900,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"imported_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"archived_at\":\"2026-06-09T09:15:48.218610500+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3d283dfa0627",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.544597734+00:00",
+      "data": "{\"id\":\"ipimg_3d283dfa0627\",\"filename\":\"duby-2026-06-09-171548.webp\",\"original_filename\":\"Gemini_Generated_Image_v2137vv2137vv213.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171548.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171548.webp\",\"status\":\"archived\",\"file_size\":526194,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"imported_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"archived_at\":\"2026-06-09T09:15:48.218610500+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3d283dfa0627",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.569689983+00:00",
+      "data": "{\"id\":\"ipimg_9517111101bc\",\"filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"original_filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"inbox\\\\129166c3-6370-4896-ad7d-eb591b7c4bb4\\\\Gemini_Generated_Image_aofc2taofc2taofc.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780996625927_Gemini_Generated_Image_aofc2taofc2taofc.png\",\"status\":\"inbox\",\"file_size\":6517123,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"imported_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_9517111101bc",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.590798506+00:00",
+      "data": "{\"id\":\"ipimg_9517111101bc\",\"filename\":\"duby-2026-06-09-171705.png\",\"original_filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171705.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171705.png\",\"status\":\"archived\",\"file_size\":6517123,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"imported_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"archived_at\":\"2026-06-09T09:17:05.958234200+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_9517111101bc",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.620173271+00:00",
+      "data": "{\"id\":\"ipimg_9517111101bc\",\"filename\":\"duby-2026-06-09-171705.webp\",\"original_filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171705.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171705.webp\",\"status\":\"archived\",\"file_size\":262408,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"imported_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"archived_at\":\"2026-06-09T09:17:05.958234200+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_9517111101bc",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.658002934+00:00",
+      "data": "{\"id\":\"ipimg_9517111101bc\",\"filename\":\"duby-2026-06-09-171705.webp\",\"original_filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171705.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171705.webp\",\"status\":\"archived\",\"file_size\":262408,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"imported_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"archived_at\":\"2026-06-09T09:17:05.958234200+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_9517111101bc",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.687965673+00:00",
+      "data": "{\"id\":\"ipimg_9517111101bc\",\"filename\":\"duby-2026-06-09-171705.webp\",\"original_filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171705.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171705.webp\",\"status\":\"archived\",\"file_size\":262408,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"imported_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"archived_at\":\"2026-06-09T09:17:05.958234200+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_9517111101bc",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.722836456+00:00",
+      "data": "{\"id\":\"ipimg_9517111101bc\",\"filename\":\"duby-2026-06-09-171705.webp\",\"original_filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171705.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171705.webp\",\"status\":\"archived\",\"file_size\":262408,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"imported_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"archived_at\":\"2026-06-09T09:17:05.958234200+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_9517111101bc",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.749270626+00:00",
+      "data": "{\"id\":\"ipimg_3d283dfa0627\",\"filename\":\"duby-2026-06-09-171548.webp\",\"original_filename\":\"Gemini_Generated_Image_v2137vv2137vv213.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171548.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171548.webp\",\"status\":\"archived\",\"file_size\":526194,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"imported_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"archived_at\":\"2026-06-09T09:15:48.218610500+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3d283dfa0627",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.779362329+00:00",
+      "data": "{\"id\":\"ipimg_c993bb2328a1\",\"filename\":\"duby-2026-06-09-171330.webp\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-171330.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-171330.webp\",\"status\":\"archived\",\"file_size\":139064,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"imported_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"archived_at\":\"2026-06-09T09:13:30.338811400+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_c993bb2328a1",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.797094207+00:00",
+      "data": "{\"id\":\"ipimg_a77d8f006c96\",\"filename\":\"duby-2026-06-09-170819.webp\",\"original_filename\":\"Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170819.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170819.webp\",\"status\":\"archived\",\"file_size\":810932,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"imported_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"archived_at\":\"2026-06-09T09:08:15.312150+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_a77d8f006c96",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.818434847+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"duby-2026-06-09-170818.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170818.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":\"gemini\",\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.838817015+00:00",
+      "data": "{\"id\":\"ipimg_308a7777b235\",\"filename\":\"duby-2026-06-09-170815.webp\",\"original_filename\":\"Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170815.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170815.webp\",\"status\":\"archived\",\"file_size\":117776,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"imported_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"archived_at\":\"2026-06-09T09:08:15.137885100+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_308a7777b235",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.854960710+00:00",
+      "data": "{\"id\":\"ipimg_3753a31a45cb\",\"filename\":\"duby-2026-06-09-170817.webp\",\"original_filename\":\"Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\duby\\\\duby-2026-06-09-170817.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\duby\\\\duby-2026-06-09-170817.webp\",\"status\":\"archived\",\"file_size\":91578,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"imported_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"archived_at\":\"2026-06-09T09:08:15.210429400+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3753a31a45cb",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.879742295+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171916.webp\",\"archived_at\":\"2026-06-09T09:17:05.958234200+00:00\",\"created_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"file_hash\":\"1d78c513bfd213c544da22a1472ffed7fa7f6511d13f28f7b13aa136a92e73bf\",\"file_size\":262408,\"filename\":\"bobo-2026-06-09-171916.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_9517111101bc\",\"imported_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171916.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_9517111101bc",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.901837402+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171916.webp\",\"archived_at\":\"2026-06-09T09:17:05.958234200+00:00\",\"created_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"file_hash\":\"1d78c513bfd213c544da22a1472ffed7fa7f6511d13f28f7b13aa136a92e73bf\",\"file_size\":262408,\"filename\":\"bobo-2026-06-09-171916.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_9517111101bc\",\"imported_at\":\"2026-06-09T09:17:05.942635700+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_aofc2taofc2taofc.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171916.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_9517111101bc",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.926899563+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917.webp\",\"archived_at\":\"2026-06-09T09:15:48.218610500+00:00\",\"created_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"file_hash\":\"12cc7e8385489402dfbb6c932c829fdb019fc79d4de8621bac7dd0bab03bee3a\",\"file_size\":526194,\"filename\":\"bobo-2026-06-09-171917.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_3d283dfa0627\",\"imported_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"Gemini_Generated_Image_v2137vv2137vv213.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3d283dfa0627",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.952536155+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917.webp\",\"archived_at\":\"2026-06-09T09:15:48.218610500+00:00\",\"created_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"file_hash\":\"12cc7e8385489402dfbb6c932c829fdb019fc79d4de8621bac7dd0bab03bee3a\",\"file_size\":526194,\"filename\":\"bobo-2026-06-09-171917.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_3d283dfa0627\",\"imported_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_v2137vv2137vv213.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3d283dfa0627",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:53.977898872+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_1.webp\",\"archived_at\":\"2026-06-09T09:13:30.338811400+00:00\",\"created_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"file_hash\":\"9a9bbe4b30525ac9c272b4530966dff02fc6053514dac43625c212b021ec981c\",\"file_size\":139064,\"filename\":\"bobo-2026-06-09-171917_1.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_c993bb2328a1\",\"imported_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_1.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_c993bb2328a1",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.010186661+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_1.webp\",\"archived_at\":\"2026-06-09T09:13:30.338811400+00:00\",\"created_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"file_hash\":\"9a9bbe4b30525ac9c272b4530966dff02fc6053514dac43625c212b021ec981c\",\"file_size\":139064,\"filename\":\"bobo-2026-06-09-171917_1.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_c993bb2328a1\",\"imported_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_1.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_c993bb2328a1",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.039374094+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_2.webp\",\"archived_at\":\"2026-06-09T09:08:15.312150+00:00\",\"created_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"file_hash\":\"f16a130e433742559134c17d3b0aa61fd6d753e137e3f09d9659654c0168a3e3\",\"file_size\":810932,\"filename\":\"bobo-2026-06-09-171917_2.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_a77d8f006c96\",\"imported_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_2.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_a77d8f006c96",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.059979252+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_2.webp\",\"archived_at\":\"2026-06-09T09:08:15.312150+00:00\",\"created_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"file_hash\":\"f16a130e433742559134c17d3b0aa61fd6d753e137e3f09d9659654c0168a3e3\",\"file_size\":810932,\"filename\":\"bobo-2026-06-09-171917_2.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_a77d8f006c96\",\"imported_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_2.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_a77d8f006c96",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.077735606+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"bobo-2026-06-09-171917_3.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_3.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_3.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":\"gemini\",\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.093107570+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"bobo-2026-06-09-171917_3.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_3.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_3.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":\"gemini\",\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.109749011+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_4.webp\",\"archived_at\":\"2026-06-09T09:08:15.210429400+00:00\",\"created_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"file_hash\":\"b615fac0d011e9ef5638315373f9c4318dfdcad81f8c584fbdcd90cb55306213\",\"file_size\":91578,\"filename\":\"bobo-2026-06-09-171917_4.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_3753a31a45cb\",\"imported_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_4.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3753a31a45cb",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.127296130+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_4.webp\",\"archived_at\":\"2026-06-09T09:08:15.210429400+00:00\",\"created_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"file_hash\":\"b615fac0d011e9ef5638315373f9c4318dfdcad81f8c584fbdcd90cb55306213\",\"file_size\":91578,\"filename\":\"bobo-2026-06-09-171917_4.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_3753a31a45cb\",\"imported_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_4.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3753a31a45cb",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.144176149+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_5.webp\",\"archived_at\":\"2026-06-09T09:08:15.137885100+00:00\",\"created_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"file_hash\":\"5532313d993acd237d6a804d2d154da1d8b79756e458227885554ee37dd7c214\",\"file_size\":117776,\"filename\":\"bobo-2026-06-09-171917_5.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_308a7777b235\",\"imported_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"ip_id\":\"129166c3-6370-4896-ad7d-eb591b7c4bb4\",\"original_filename\":\"Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_5.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_308a7777b235",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.158646418+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_5.webp\",\"archived_at\":\"2026-06-09T09:08:15.137885100+00:00\",\"created_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"file_hash\":\"5532313d993acd237d6a804d2d154da1d8b79756e458227885554ee37dd7c214\",\"file_size\":117776,\"filename\":\"bobo-2026-06-09-171917_5.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_308a7777b235\",\"imported_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_5.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_308a7777b235",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.175385561+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917.webp\",\"archived_at\":\"2026-06-09T09:15:48.218610500+00:00\",\"created_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"file_hash\":\"12cc7e8385489402dfbb6c932c829fdb019fc79d4de8621bac7dd0bab03bee3a\",\"file_size\":526194,\"filename\":\"bobo-2026-06-09-171917.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_3d283dfa0627\",\"imported_at\":\"2026-06-09T09:15:48.203877900+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_v2137vv2137vv213.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3d283dfa0627",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.194202840+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_1.webp\",\"archived_at\":\"2026-06-09T09:13:30.338811400+00:00\",\"created_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"file_hash\":\"9a9bbe4b30525ac9c272b4530966dff02fc6053514dac43625c212b021ec981c\",\"file_size\":139064,\"filename\":\"bobo-2026-06-09-171917_1.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_c993bb2328a1\",\"imported_at\":\"2026-06-09T09:13:30.323241200+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_i0xqt5i0xqt5i0xq.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_1.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_c993bb2328a1",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.224479290+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_2.webp\",\"archived_at\":\"2026-06-09T09:08:15.312150+00:00\",\"created_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"file_hash\":\"f16a130e433742559134c17d3b0aa61fd6d753e137e3f09d9659654c0168a3e3\",\"file_size\":810932,\"filename\":\"bobo-2026-06-09-171917_2.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_a77d8f006c96\",\"imported_at\":\"2026-06-09T09:08:15.297715300+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_p7uctyp7uctyp7uc.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_2.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_a77d8f006c96",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.247825027+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\",\"filename\":\"bobo-2026-06-09-171917_3.webp\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_3.webp\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_3.webp\",\"status\":\"archived\",\"file_size\":254814,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"WEBP\",\"has_watermark\":1,\"watermark_platform\":\"gemini\",\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"imported_at\":\"2026-06-09T09:08:15.240152900+00:00\",\"archived_at\":\"2026-06-09T09:08:15.254696900+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.263247476+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_4.webp\",\"archived_at\":\"2026-06-09T09:08:15.210429400+00:00\",\"created_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"file_hash\":\"b615fac0d011e9ef5638315373f9c4318dfdcad81f8c584fbdcd90cb55306213\",\"file_size\":91578,\"filename\":\"bobo-2026-06-09-171917_4.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_3753a31a45cb\",\"imported_at\":\"2026-06-09T09:08:15.196429800+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_dhkkaudhkkaudhkk.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_4.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_3753a31a45cb",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.281845311+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_5.webp\",\"archived_at\":\"2026-06-09T09:08:15.137885100+00:00\",\"created_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"file_hash\":\"5532313d993acd237d6a804d2d154da1d8b79756e458227885554ee37dd7c214\",\"file_size\":117776,\"filename\":\"bobo-2026-06-09-171917_5.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_308a7777b235\",\"imported_at\":\"2026-06-09T09:08:15.121894500+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_pdqdxgpdqdxgpdqd.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-171917_5.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_308a7777b235",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.304441359+00:00",
+      "data": "{\"id\":\"ipimg_cc7aa90f7504\"}",
+      "operation": "DELETE",
+      "record_id": "ipimg_cc7aa90f7504",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.324126388+00:00",
+      "data": "{\"id\":\"ipimg_6f3c280a008a\",\"filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"relative_path\":\"inbox\\\\4630a5f1-7369-47e8-b787-9c4daf48cced\\\\Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_inbox\\\\1780999930779_Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"status\":\"inbox\",\"file_size\":2562856,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"imported_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_6f3c280a008a",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.337276397+00:00",
+      "data": "{\"id\":\"ipimg_6f3c280a008a\",\"filename\":\"bobo-2026-06-09-181211.png\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.png\",\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.png\",\"status\":\"archived\",\"file_size\":2562856,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"imported_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"archived_at\":\"2026-06-09T10:12:11.270558300+00:00\"}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_6f3c280a008a",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.353500893+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.webp\",\"archived_at\":\"2026-06-09T10:12:11.270558300+00:00\",\"created_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"file_hash\":\"aaf0b59237c2f0d4070b51dcd22cfc2ad5679d450c25ba6e7066c26b0b941b25\",\"file_size\":254500,\"filename\":\"bobo-2026-06-09-181211.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_6f3c280a008a\",\"imported_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_6f3c280a008a",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.370649285+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.webp\",\"archived_at\":\"2026-06-09T10:12:11.270558300+00:00\",\"created_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"file_hash\":\"aaf0b59237c2f0d4070b51dcd22cfc2ad5679d450c25ba6e7066c26b0b941b25\",\"file_size\":254500,\"filename\":\"bobo-2026-06-09-181211.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_6f3c280a008a\",\"imported_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_6f3c280a008a",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.389908323+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.webp\",\"archived_at\":\"2026-06-09T10:12:11.270558300+00:00\",\"created_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"file_hash\":\"aaf0b59237c2f0d4070b51dcd22cfc2ad5679d450c25ba6e7066c26b0b941b25\",\"file_size\":254500,\"filename\":\"bobo-2026-06-09-181211.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_6f3c280a008a\",\"imported_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_6f3c280a008a",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T11:18:54.409748753+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\sanomnidata\\\\ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.webp\",\"archived_at\":\"2026-06-09T10:12:11.270558300+00:00\",\"created_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"file_hash\":\"aaf0b59237c2f0d4070b51dcd22cfc2ad5679d450c25ba6e7066c26b0b941b25\",\"file_size\":254500,\"filename\":\"bobo-2026-06-09-181211.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_6f3c280a008a\",\"imported_at\":\"2026-06-09T10:12:10.793570500+00:00\",\"ip_id\":\"4630a5f1-7369-47e8-b787-9c4daf48cced\",\"original_filename\":\"Gemini_Generated_Image_md6gfmd6gfmd6gfm.png\",\"relative_path\":\"ip_archived\\\\bobo\\\\bobo-2026-06-09-181211.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_6f3c280a008a",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T14:06:40.172306923+00:00",
+      "data": "{\"id\":\"ipimg_dfe674bd31ba\",\"filename\":\"Gemini_Generated_Image_yp25s2yp25s2yp25.png\",\"original_filename\":\"Gemini_Generated_Image_yp25s2yp25s2yp25.png\",\"ip_id\":\"unknown\",\"relative_path\":\"inbox\\\\unknown\\\\Gemini_Generated_Image_yp25s2yp25s2yp25.png\",\"absolute_path\":\"D:\\\\san\\\\sanomni\\\\ip_inbox\\\\1780938840871_Gemini_Generated_Image_yp25s2yp25s2yp25.png\",\"status\":\"inbox\",\"file_size\":8140200,\"width\":null,\"height\":null,\"file_hash\":null,\"format\":\"PNG\",\"has_watermark\":0,\"watermark_platform\":null,\"watermark_detected\":0,\"watermark_removed\":0,\"created_at\":\"2026-06-08T17:14:00.889735800+00:00\",\"imported_at\":\"2026-06-08T17:14:00.889735800+00:00\",\"archived_at\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_dfe674bd31ba",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T14:06:40.186768596+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\san\\\\sanomni\\\\ip_archived\\\\unknown\\\\unknown-2026-06-08-011437.png\",\"archived_at\":\"2026-06-08T17:14:37.522880800+00:00\",\"created_at\":\"2026-06-08T17:14:00.889735800+00:00\",\"file_hash\":\"4f0c847336b84257126e54f7d3989d78d587f4409ae0dbd7eab137287a12f269\",\"file_size\":8140200,\"filename\":\"unknown-2026-06-08-011437.png\",\"format\":\"PNG\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_dfe674bd31ba\",\"imported_at\":\"2026-06-08T17:14:00.889735800+00:00\",\"ip_id\":\"unknown\",\"original_filename\":\"Gemini_Generated_Image_yp25s2yp25s2yp25.png\",\"relative_path\":\"ip_archived\\\\unknown\\\\unknown-2026-06-08-011437.png\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_dfe674bd31ba",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T14:12:55.128367109+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\san\\\\sanomni\\\\ip_archived\\\\unknown\\\\unknown-2026-06-08-011437.webp\",\"archived_at\":\"2026-06-08T17:14:37.522880800+00:00\",\"created_at\":\"2026-06-08T17:14:00.889735800+00:00\",\"file_hash\":\"3b642cadd7e86d34cdcc01bff14e6889dfa741c3b4f02b09d012d5d4051c3aab\",\"file_size\":658790,\"filename\":\"unknown-2026-06-08-011437.webp\",\"format\":\"WEBP\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_dfe674bd31ba\",\"imported_at\":\"2026-06-08T17:14:00.889735800+00:00\",\"ip_id\":\"unknown\",\"original_filename\":\"Gemini_Generated_Image_yp25s2yp25s2yp25.png\",\"relative_path\":\"ip_archived\\\\unknown\\\\unknown-2026-06-08-011437.webp\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "UPDATE",
+      "record_id": "ipimg_dfe674bd31ba",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T14:46:25.693103467+00:00",
+      "data": "{\"id\":\"unknown\",\"name\":\"Unknown\",\"path\":\"unknown\",\"avatar_path\":null,\"inspiration\":null,\"description\":\"Default unknown IP character\",\"created_at\":\"2026-06-02T14:26:59.917671200+00:00\",\"updated_at\":\"2026-06-02T14:26:59.917671200+00:00\"}",
+      "operation": "INSERT",
+      "record_id": "unknown",
+      "table": "ip_assets"
+    },
+    {
+      "changed_at": "2026-06-09T14:46:25.713344168+00:00",
+      "data": "{\"id\":\"eeddee2b-6c18-4d5f-a7ef-d633a4881461\",\"name\":\"糯糯\",\"path\":\"nuonuo\",\"avatar_path\":null,\"inspiration\":null,\"description\":null,\"created_at\":\"2026-06-02T14:27:09.970457800+00:00\",\"updated_at\":\"2026-06-02T14:31:32.395339900+00:00\"}",
+      "operation": "INSERT",
+      "record_id": "eeddee2b-6c18-4d5f-a7ef-d633a4881461",
+      "table": "ip_assets"
+    },
+    {
+      "changed_at": "2026-06-09T14:46:25.731335694+00:00",
+      "data": "{\"id\":\"6e20d638-7838-4740-91a8-3959abbe76c3\",\"name\":\"小生\",\"path\":\"xiaosheng\",\"avatar_path\":null,\"inspiration\":null,\"description\":null,\"created_at\":\"2026-06-02T14:31:03.125061+00:00\",\"updated_at\":\"2026-06-09T14:45:31.113383400+00:00\"}",
+      "operation": "INSERT",
+      "record_id": "6e20d638-7838-4740-91a8-3959abbe76c3",
+      "table": "ip_assets"
+    },
+    {
+      "changed_at": "2026-06-09T14:46:25.749442628+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\san\\\\sanomni\\\\ip_archived\\\\xiaosheng\\\\xiaosheng-2026-06-08-002351.png\",\"archived_at\":\"2026-06-08T16:23:51.803686200+00:00\",\"created_at\":\"2026-06-08T16:23:51.784682800+00:00\",\"file_hash\":\"3182957e96c95d33bf690699c0b206d0fc836ed1f1dec57c925d8699b3225244\",\"file_size\":362953,\"filename\":\"xiaosheng-2026-06-08-002351.png\",\"format\":\"PNG\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_be00a8a9e731\",\"imported_at\":\"2026-06-08T16:23:51.784682800+00:00\",\"ip_id\":\"6e20d638-7838-4740-91a8-3959abbe76c3\",\"original_filename\":\"Gemini_Generated_Image_2jgk9o2jgk9o2jgk.png\",\"relative_path\":\"ip_archived\\\\xiaosheng\\\\xiaosheng-2026-06-08-002351.png\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_be00a8a9e731",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T14:46:25.764862141+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\san\\\\sanomni\\\\ip_archived\\\\xiaosheng\\\\xiaosheng-2026-06-08-002726.jpg\",\"archived_at\":\"2026-06-08T16:27:26.788001600+00:00\",\"created_at\":\"2026-06-08T16:27:26.765838300+00:00\",\"file_hash\":\"09756fee779a650d6a14d6c4a9b304fca60ac1ddb1000c2d22e043a5af2e4059\",\"file_size\":283394,\"filename\":\"xiaosheng-2026-06-08-002726.jpg\",\"format\":\"JPG\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_7dce6affae8e\",\"imported_at\":\"2026-06-08T16:27:26.765838300+00:00\",\"ip_id\":\"6e20d638-7838-4740-91a8-3959abbe76c3\",\"original_filename\":\"hbfm.jpg\",\"relative_path\":\"ip_archived\\\\xiaosheng\\\\xiaosheng-2026-06-08-002726.jpg\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_7dce6affae8e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T14:46:25.783852814+00:00",
+      "data": "{\"absolute_path\":\"D:\\\\san\\\\sanomni\\\\ip_archived\\\\xiaosheng\\\\emojis\\\\xiaosheng-2026-06-08-002814.png\",\"archived_at\":\"2026-06-08T16:27:26.827443700+00:00\",\"created_at\":\"2026-06-08T16:27:26.805961800+00:00\",\"file_hash\":\"37519f2dcf86ebad1c1c966c40717978414a1c6224eb979a8bc4c75d1b66c0fd\",\"file_size\":62343,\"filename\":\"xiaosheng-2026-06-08-002814.png\",\"format\":\"PNG\",\"has_watermark\":0,\"height\":null,\"id\":\"ipimg_8582b7196add\",\"imported_at\":\"2026-06-08T16:27:26.805961800+00:00\",\"ip_id\":\"6e20d638-7838-4740-91a8-3959abbe76c3\",\"original_filename\":\"hblogo.png\",\"relative_path\":\"ip_archived\\\\xiaosheng\\\\emojis\\\\xiaosheng-2026-06-08-002814.png\",\"status\":\"archived\",\"watermark_detected\":0,\"watermark_platform\":null,\"watermark_removed\":0,\"width\":null}",
+      "operation": "INSERT",
+      "record_id": "ipimg_8582b7196add",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T15:52:52.319266582+00:00",
+      "data": "{\"id\":\"ipimg_be00a8a9e731\"}",
+      "operation": "DELETE",
+      "record_id": "ipimg_be00a8a9e731",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T15:52:52.343536403+00:00",
+      "data": "{\"id\":\"ipimg_7dce6affae8e\"}",
+      "operation": "DELETE",
+      "record_id": "ipimg_7dce6affae8e",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T15:52:52.363464667+00:00",
+      "data": "{\"id\":\"ipimg_8582b7196add\"}",
+      "operation": "DELETE",
+      "record_id": "ipimg_8582b7196add",
+      "table": "ip_images"
+    },
+    {
+      "changed_at": "2026-06-09T15:52:52.383403120+00:00",
+      "data": "{\"id\":\"6e20d638-7838-4740-91a8-3959abbe76c3\"}",
+      "operation": "DELETE",
+      "record_id": "6e20d638-7838-4740-91a8-3959abbe76c3",
+      "table": "ip_assets"
+    }
+  ],
+  "latest_version": 92
+}

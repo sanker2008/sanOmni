@@ -250,6 +250,14 @@ export default function ArchivedView() {
 
   useEffect(() => {
     loadArchivedImages();
+
+    const handleSyncComplete = () => {
+      loadArchivedImages();
+    };
+    window.addEventListener("sync-completed", handleSyncComplete);
+    return () => {
+      window.removeEventListener("sync-completed", handleSyncComplete);
+    };
   }, []);
 
   // Clear selection when vendor/model tab changes

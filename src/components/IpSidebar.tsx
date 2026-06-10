@@ -137,6 +137,14 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
 
   useEffect(() => {
     loadIps();
+
+    const handleSyncComplete = () => {
+      loadIps();
+    };
+    window.addEventListener("sync-completed", handleSyncComplete);
+    return () => {
+      window.removeEventListener("sync-completed", handleSyncComplete);
+    };
   }, []);
 
   const loadIps = async () => {

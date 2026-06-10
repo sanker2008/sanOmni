@@ -95,4 +95,4 @@
 ## 相关文档
 
 - [WEB_BROWSER.md](./WEB_BROWSER.md) - 原始浏览器功能文档
-- [USAGE.md](./USAGE.md) - 应用使用指南
+- [USAGE.md](../guides/USAGE.md) - 应用使用指南

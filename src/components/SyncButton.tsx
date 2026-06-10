@@ -70,6 +70,7 @@ export default function SyncButton() {
         variant: "success" 
       });
       checkStatus();
+      window.dispatchEvent(new CustomEvent("sync-completed", { detail: data }));
     } catch (e: any) {
       toast({ title: "同步失败", description: e.toString(), variant: "destructive" });
     } finally {

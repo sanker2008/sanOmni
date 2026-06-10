@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../sanomni-sync-server"
+		},
+		{
+			"path": "../sanPrompt"
 		}
 	],
 	"settings": {}

@@ -1,0 +1,31 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.5] - 2026-06-10
+### Added
+- Cloud two-way sync engine using CAS content-addressable storage.
+- Support for syncing image relations, tags, and avatar files.
+
+### Changed
+- Moved sync server architecture documentation to its respective private repository `sanomni-sync-server`.
+- Optimized the deletion logic to prevent removing un-synced local files.
+
+### Fixed
+- Fixed missing relation tracking in sync triggers.
+- Fixed server-side push handling without transaction protection.
+
+## [1.1.0] - 2026-06-09
+### Changed
+- Implemented Path Immutability (数据底层防断链) for robust asset tracking. See [Release Notes](./docs/release-notes/2026-06-09_PATH_IMMUTABILITY.md).
+
+## [1.0.5] - 2026-06-02
+### Fixed
+- Fixed directory migration issues. See [Release Notes](./docs/release-notes/2026-06-02_DIRECTORY_MIGRATION_REPAIR.md).
+
+## [1.0.4] - 2026-06-01
+### Added
+- Unified root directory feature. See [Release Notes](./docs/release-notes/2026-06-01_UNIFIED_ROOT.md).

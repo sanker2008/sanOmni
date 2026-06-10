@@ -694,6 +694,17 @@ export default function IpArchivedView() {
   useEffect(() => {
     loadArchivedImages();
     loadIps();
+
+    const handleSyncComplete = (e: any) => {
+      if (e.detail && e.detail.pulled > 0) {
+        loadArchivedImages();
+        loadIps();
+      }
+    };
+    window.addEventListener("sync-completed", handleSyncComplete);
+    return () => {
+      window.removeEventListener("sync-completed", handleSyncComplete);
+    };
   }, []);
 
   // Clear selection when IP tab or activeTab changes
