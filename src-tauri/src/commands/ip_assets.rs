@@ -317,7 +317,7 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
 
     // 4. 获取表情包分组套件
     let mut stmt_packs = match conn.prepare(
-        "SELECT id, ip_id, name, path, description, created_at, updated_at
+        "SELECT id, ip_id, name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, created_at, updated_at
          FROM ip_sticker_packs
          WHERE ip_id = ?
          ORDER BY created_at DESC",
@@ -334,8 +334,13 @@ pub fn get_ip_asset_detail(db_path: String, ip_id: String) -> CommandResult<IpAs
                 .get(3)
                 .unwrap_or_else(|_| row.get::<_, String>(0).unwrap_or_default()),
             description: row.get(4)?,
-            created_at: row.get(5)?,
-            updated_at: row.get(6)?,
+            cover_path: row.get(5)?,
+            banner_path: row.get(6)?,
+            icon_path: row.get(7)?,
+            reward_guide_path: row.get(8)?,
+            reward_thanks_path: row.get(9)?,
+            created_at: row.get(10)?,
+            updated_at: row.get(11)?,
         })
     });
     let sticker_packs: Vec<IpStickerPack> = match packs_mapped {
@@ -1176,6 +1181,11 @@ pub fn create_ip_sticker_pack(
     name: String,
     path: String,
     description: Option<String>,
+    cover_path: Option<String>,
+    banner_path: Option<String>,
+    icon_path: Option<String>,
+    reward_guide_path: Option<String>,
+    reward_thanks_path: Option<String>,
 ) -> CommandResult<IpStickerPack> {
     let conn = match Connection::open(Path::new(&db_path)) {
         Ok(c) => c,
@@ -1213,9 +1223,9 @@ pub fn create_ip_sticker_pack(
     let now = Utc::now().to_rfc3339();
 
     match conn.execute(
-        "INSERT INTO ip_sticker_packs (id, ip_id, name, path, description, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
-        params![id, ip_id, name, path, description, now, now],
+        "INSERT INTO ip_sticker_packs (id, ip_id, name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        params![id, ip_id, name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, now, now],
     ) {
         Ok(_) => {
             // Create target pack directory under the IP archived folder:
@@ -1257,6 +1267,11 @@ pub fn create_ip_sticker_pack(
                 name,
                 path,
                 description,
+                cover_path,
+                banner_path,
+                icon_path,
+                reward_guide_path,
+                reward_thanks_path,
                 created_at: now.clone(),
                 updated_at: now,
             })
@@ -1272,6 +1287,11 @@ pub fn update_ip_sticker_pack(
     name: String,
     path: String,
     description: Option<String>,
+    cover_path: Option<String>,
+    banner_path: Option<String>,
+    icon_path: Option<String>,
+    reward_guide_path: Option<String>,
+    reward_thanks_path: Option<String>,
 ) -> CommandResult<bool> {
     let conn = match Connection::open(Path::new(&db_path)) {
         Ok(c) => c,
@@ -1317,8 +1337,8 @@ pub fn update_ip_sticker_pack(
     let now = Utc::now().to_rfc3339();
 
     match conn.execute(
-        "UPDATE ip_sticker_packs SET name = ?, path = ?, description = ?, updated_at = ? WHERE id = ?",
-        params![name, path, description, now, pack_id],
+        "UPDATE ip_sticker_packs SET name = ?, path = ?, description = ?, cover_path = ?, banner_path = ?, icon_path = ?, reward_guide_path = ?, reward_thanks_path = ?, updated_at = ? WHERE id = ?",
+        params![name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, now, pack_id],
     ) {
         Ok(_) => {
             // Rename or Create the directories under the IP archived folder:

@@ -40,6 +40,8 @@ import {
   Minimize,
   ChevronDown,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -169,6 +171,7 @@ export default function IpArchivedView() {
 
   const { searchQuery, setSearchQuery, viewMode, setViewMode, isQuickEditOpen, selectedIpId, setSelectedIpId } = useUIStore();
   const [ipDetail, setIpDetail] = useState<IpAssetDetail | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [isQuickUploading, setIsQuickUploading] = useState(false);
   const [unarchiveResult, setUnarchiveResult] = useState<string | null>(null);
@@ -323,6 +326,25 @@ export default function IpArchivedView() {
   const [packName, setPackName] = useState("");
   const [packPath, setPackPath] = useState("");
   const [packDescription, setPackDescription] = useState("");
+  const [packCoverPath, setPackCoverPath] = useState("");
+  const [packBannerPath, setPackBannerPath] = useState("");
+  const [packIconPath, setPackIconPath] = useState("");
+  const [packRewardGuidePath, setPackRewardGuidePath] = useState("");
+  const [packRewardThanksPath, setPackRewardThanksPath] = useState("");
+  const [assetPickerField, setAssetPickerField] = useState<"cover" | "banner" | "icon" | "rewardGuide" | "rewardThanks" | null>(null);
+
+  // 平台信息状态
+  const [isPlatformModalOpen, setIsPlatformModalOpen] = useState(false);
+  const [editingPlatform, setEditingPlatform] = useState<any>(null);
+  const [platformForm, setPlatformForm] = useState({
+    platformName: "",
+    packNameOnPlatform: "",
+    emojiSizeSpec: "",
+    status: "准备中",
+    publishUrl: "",
+    downloadsCount: 0
+  });
+  const [isSavingPlatform, setIsSavingPlatform] = useState(false);
 
   // 关系链状态
   const [ips, setIps] = useState<any[]>([]);
@@ -413,10 +435,10 @@ export default function IpArchivedView() {
     try {
       const finalPath = packPath.trim() || packName.trim().toLowerCase().replace(/\s+/g, "-");
       if (editingPack) {
-        await ipApi.updateStickerPack(editingPack.id, packName, finalPath, packDescription || undefined);
+        await ipApi.updateStickerPack(editingPack.id, packName, finalPath, packDescription || undefined, packCoverPath || undefined, packBannerPath || undefined, packIconPath || undefined, packRewardGuidePath || undefined, packRewardThanksPath || undefined);
         toast({ title: "更新成功", description: "表情包套件信息已更新" });
       } else {
-        const created = await ipApi.createStickerPack(selectedIpId, packName, finalPath, packDescription || undefined);
+        const created = await ipApi.createStickerPack(selectedIpId, packName, finalPath, packDescription || undefined, packCoverPath || undefined, packBannerPath || undefined, packIconPath || undefined, packRewardGuidePath || undefined, packRewardThanksPath || undefined);
         toast({ title: "新建成功", description: "表情包套件已创建" });
         setSelectedPackId(created.id);
       }
@@ -436,6 +458,56 @@ export default function IpArchivedView() {
       loadArchivedImages();
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleSavePlatform = async () => {
+    if (!selectedPackId || selectedPackId === "__ALL__" || selectedPackId === "__UNGROUPED__") return;
+    if (!platformForm.platformName.trim()) {
+      toast({ title: "请输入平台名称", variant: "destructive" });
+      return;
+    }
+    setIsSavingPlatform(true);
+    try {
+      if (editingPlatform) {
+        await ipApi.updateStickerPackPlatform(
+          editingPlatform.id,
+          platformForm.platformName,
+          platformForm.packNameOnPlatform || undefined,
+          platformForm.emojiSizeSpec || undefined,
+          platformForm.status,
+          platformForm.publishUrl || undefined,
+          platformForm.downloadsCount || 0
+        );
+        toast({ title: "已更新平台信息" });
+      } else {
+        await ipApi.addStickerPackPlatform(
+          selectedPackId,
+          platformForm.platformName,
+          platformForm.packNameOnPlatform || undefined,
+          platformForm.emojiSizeSpec || undefined,
+          platformForm.status,
+          platformForm.publishUrl || undefined
+        );
+        toast({ title: "已添加平台关联" });
+      }
+      setIsPlatformModalOpen(false);
+      loadArchivedImages();
+    } catch (e: any) {
+      toast({ title: "操作失败", description: e.message, variant: "destructive" });
+    } finally {
+      setIsSavingPlatform(false);
+    }
+  };
+
+  const handleDeletePlatform = async (platformId: string) => {
+    if (!confirm("确定要删除这条平台关联记录吗？")) return;
+    try {
+      await ipApi.deleteStickerPackPlatform(platformId);
+      toast({ title: "已删除平台信息" });
+      loadArchivedImages();
+    } catch (e: any) {
+      toast({ title: "删除失败", description: e.message, variant: "destructive" });
     }
   };
 
@@ -1127,14 +1199,52 @@ export default function IpArchivedView() {
     }
   };
 
+  const renderAssetField = (label: string, field: "cover" | "banner" | "icon" | "rewardGuide" | "rewardThanks", path: string) => (
+    <div className="flex flex-col gap-1.5 flex-1 min-w-[100px] max-w-[120px]">
+      <label className="text-xs text-muted-foreground">{label}</label>
+      <div 
+        className={`border rounded-lg aspect-square flex flex-col items-center justify-center cursor-pointer transition-colors relative overflow-hidden group ${path ? "bg-muted/50" : "bg-muted/20 border-dashed hover:bg-muted/40"}`}
+        onClick={() => setAssetPickerField(field)}
+      >
+        {path ? (
+          <>
+            <img src={convertFileSrc(path)} alt={label} className="w-full h-full object-contain" />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <span className="text-white text-xs font-medium">更换</span>
+            </div>
+            <Button 
+              size="icon" 
+              variant="destructive" 
+              className="absolute top-0.5 right-0.5 w-5 h-5 opacity-0 group-hover:opacity-100 rounded-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (field === "cover") setPackCoverPath("");
+                else if (field === "banner") setPackBannerPath("");
+                else if (field === "icon") setPackIconPath("");
+                else if (field === "rewardGuide") setPackRewardGuidePath("");
+                else if (field === "rewardThanks") setPackRewardThanksPath("");
+              }}
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground flex flex-col items-center gap-1"><Plus className="w-4 h-4" />选择</span>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex h-full relative">
       {/* Sidebar - IP Tree */}
       <div className={cn(
-        "absolute inset-y-0 left-0 z-50 transform transition-transform duration-300 md:relative md:transform-none",
-        isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        "absolute inset-y-0 left-0 z-50 transform transition-all duration-300 md:relative md:transform-none overflow-hidden",
+        isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
+        isSidebarCollapsed ? "md:w-0 md:opacity-0" : "md:w-80 md:opacity-100"
       )}>
-        <IpSidebar
+        <div className="w-80 h-full">
+          <IpSidebar
           key={sidebarKey}
           onIpSelect={setSelectedIpId}
           selectedIpId={selectedIpId}
@@ -1143,6 +1253,7 @@ export default function IpArchivedView() {
           onRefreshImages={loadArchivedImages}
           onClose={() => setIsMobileSidebarOpen(false)}
         />
+        </div>
       </div>
 
       {/* Mobile overlay */}
@@ -1161,6 +1272,9 @@ export default function IpArchivedView() {
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
                 <Menu className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="hidden md:flex shrink-0 -ml-2 text-muted-foreground hover:text-foreground" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} title={isSidebarCollapsed ? "展开左侧栏" : "收起左侧栏"}>
+                {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
               </Button>
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted border shadow-sm">
                 {ipDetail.ip.avatar_path ? (
@@ -1260,6 +1374,9 @@ export default function IpArchivedView() {
                       <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
                         <Menu className="w-5 h-5" />
                       </Button>
+                      <Button variant="ghost" size="icon" className="hidden md:flex shrink-0 -ml-2 text-muted-foreground hover:text-foreground" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} title={isSidebarCollapsed ? "展开左侧栏" : "收起左侧栏"}>
+                        {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+                      </Button>
                       <h2 className="text-lg font-semibold flex items-center gap-2 whitespace-nowrap shrink-0">
                         <Archive className="w-5 h-5 shrink-0" />
                         全部资产
@@ -1268,9 +1385,6 @@ export default function IpArchivedView() {
                     </>
                   ) : (
                     <>
-                      <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
-                        <Menu className="w-5 h-5" />
-                      </Button>
                       <Badge variant="secondary">{filteredImages.length} 张图片</Badge>
                     </>
                   )}
@@ -1642,6 +1756,11 @@ export default function IpArchivedView() {
                       setPackName("");
                       setPackPath("");
                       setPackDescription("");
+                      setPackCoverPath("");
+                      setPackBannerPath("");
+                      setPackIconPath("");
+                      setPackRewardGuidePath("");
+                      setPackRewardThanksPath("");
                       setIsPackModalOpen(true);
                     }}
                     className="h-7 w-7"
@@ -1698,6 +1817,11 @@ export default function IpArchivedView() {
                                     setPackName(pack.name);
                                     setPackPath(pack.path || "");
                                     setPackDescription(pack.description || "");
+                                    setPackCoverPath(pack.cover_path || "");
+                                    setPackBannerPath(pack.banner_path || "");
+                                    setPackIconPath(pack.icon_path || "");
+                                    setPackRewardGuidePath(pack.reward_guide_path || "");
+                                    setPackRewardThanksPath(pack.reward_thanks_path || "");
                                     setIsPackModalOpen(true);
                                   }}
                                   className="h-5 w-5 hover:bg-primary/20"
@@ -1845,6 +1969,87 @@ export default function IpArchivedView() {
                   </ScrollArea>
                 </div>
               </div>
+
+              {/* 平台信息 (右侧栏) - 只有选定了具体套件才显示 */}
+              {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && (
+                <div className="w-64 border bg-muted/10 rounded-lg flex flex-col flex-shrink-0 overflow-hidden">
+                  <div className="flex items-center justify-between p-4 border-b bg-card">
+                    <h3 className="font-semibold text-sm">平台信息</h3>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="w-6 h-6"
+                      onClick={() => {
+                        setEditingPlatform(null);
+                        setPlatformForm({
+                          platformName: "", packNameOnPlatform: "", emojiSizeSpec: "",
+                          status: "准备中", publishUrl: "", downloadsCount: 0
+                        });
+                        setIsPlatformModalOpen(true);
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <ScrollArea className="flex-1 p-4">
+                    {(() => {
+                      const packPlatforms = ipDetail.platforms?.filter(p => p.pack_id === selectedPackId) || [];
+                      if (packPlatforms.length === 0) {
+                        return (
+                          <div className="text-center text-xs text-muted-foreground mt-10">
+                            暂无发布平台关联信息
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="flex flex-col gap-3">
+                          {packPlatforms.map((plat) => (
+                            <div key={plat.id} className="border rounded-md p-3 bg-background shadow-sm flex flex-col gap-2 group/plat">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-xs truncate" title={plat.platform_name}>{plat.platform_name}</span>
+                                <div className="flex items-center gap-1">
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-normal border-primary/20 bg-primary/5 text-primary">
+                                    {plat.status}
+                                  </Badge>
+                                  <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover/plat:opacity-100" onClick={() => {
+                                    setEditingPlatform(plat);
+                                    setPlatformForm({
+                                      platformName: plat.platform_name,
+                                      packNameOnPlatform: plat.pack_name_on_platform || "",
+                                      emojiSizeSpec: plat.emoji_size_spec || "",
+                                      status: plat.status,
+                                      publishUrl: plat.publish_url || "",
+                                      downloadsCount: plat.downloads_count || 0
+                                    });
+                                    setIsPlatformModalOpen(true);
+                                  }}>
+                                    <Edit2 className="w-3 h-3 text-muted-foreground hover:text-primary" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover/plat:opacity-100" onClick={() => handleDeletePlatform(plat.id)}>
+                                    <Trash2 className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                                  </Button>
+                                </div>
+                              </div>
+                              {plat.pack_name_on_platform && (
+                                <div className="text-[10px] text-muted-foreground flex items-center justify-between mt-1">
+                                  <span>上架名称:</span>
+                                  <span className="truncate max-w-[90px]" title={plat.pack_name_on_platform}>{plat.pack_name_on_platform}</span>
+                                </div>
+                              )}
+                              {plat.emoji_size_spec && (
+                                <div className="text-[10px] text-muted-foreground flex items-center justify-between">
+                                  <span>尺寸规范:</span>
+                                  <span>{plat.emoji_size_spec}</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </ScrollArea>
+                </div>
+              )}
             </div>
           )}
 
@@ -2138,8 +2343,19 @@ export default function IpArchivedView() {
                 placeholder="简述该表情包的主题设定..."
                 value={packDescription}
                 onChange={(e) => setPackDescription(e.target.value)}
-                className="min-h-20 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="min-h-16 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5 mt-2">
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1"><ImageIcon className="w-3 h-3" /> 配套资产 (平台发布所需)</label>
+              <div className="flex flex-wrap gap-4 mt-1">
+                {renderAssetField("图标", "icon", packIconPath)}
+                {renderAssetField("封面", "cover", packCoverPath)}
+                {renderAssetField("横幅", "banner", packBannerPath)}
+                {renderAssetField("赞赏引导", "rewardGuide", packRewardGuidePath)}
+                {renderAssetField("赞赏致谢", "rewardThanks", packRewardThanksPath)}
+              </div>
             </div>
           </div>
 
@@ -2564,6 +2780,117 @@ export default function IpArchivedView() {
           }
         }}
       />
+
+      <IPImagePickerModal
+        isOpen={assetPickerField !== null}
+        onClose={() => setAssetPickerField(null)}
+        title="选择配套资产图片"
+        description="从该 IP 的图库中选择一张图片作为此项资产。"
+        multiSelect={false}
+        images={ipDetail?.ip_images?.map(item => item.ip_image) || []}
+        onConfirm={(ids) => {
+          if (ids.length > 0 && ipDetail) {
+            const selectedImg = ipDetail.ip_images.find(item => item.ip_image.id === ids[0]);
+            if (selectedImg) {
+              const path = selectedImg.ip_image.absolute_path;
+              if (assetPickerField === "cover") setPackCoverPath(path);
+              else if (assetPickerField === "banner") setPackBannerPath(path);
+              else if (assetPickerField === "icon") setPackIconPath(path);
+              else if (assetPickerField === "rewardGuide") setPackRewardGuidePath(path);
+              else if (assetPickerField === "rewardThanks") setPackRewardThanksPath(path);
+            }
+          }
+          setAssetPickerField(null);
+        }}
+      />
+
+      {/* === 平台信息弹窗 === */}
+      <Dialog open={isPlatformModalOpen} onOpenChange={setIsPlatformModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{editingPlatform ? "编辑平台信息" : "添加发布平台"}</DialogTitle>
+            <DialogDescription>
+              配置表情包套件在各个渠道的发布状态。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium leading-none">平台名称 (必填)</label>
+              <Input
+                list="common-platforms"
+                value={platformForm.platformName}
+                onChange={(e) => setPlatformForm({ ...platformForm, platformName: e.target.value })}
+                placeholder="选择或输入平台...例如: 微信表情开放平台"
+              />
+              <datalist id="common-platforms">
+                <option value="微信表情开放平台" />
+                <option value="QQ 个性装扮" />
+                <option value="Telegram" />
+                <option value="Line 贴图" />
+                <option value="iMessage" />
+                <option value="抖音 / TikTok" />
+                <option value="搜狗输入法" />
+              </datalist>
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium leading-none">平台上架名称</label>
+              <Input
+                value={platformForm.packNameOnPlatform}
+                onChange={(e) => setPlatformForm({ ...platformForm, packNameOnPlatform: e.target.value })}
+                placeholder="例如: 生蜀黍的日常"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium leading-none">状态</label>
+                <select
+                  value={platformForm.status}
+                  onChange={(e) => setPlatformForm({ ...platformForm, status: e.target.value })}
+                  className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="准备中">准备中</option>
+                  <option value="审核中">审核中</option>
+                  <option value="已上架">已上架</option>
+                  <option value="已下架">已下架</option>
+                  <option value="被驳回">被驳回</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium leading-none">尺寸规范</label>
+                <Input
+                  value={platformForm.emojiSizeSpec}
+                  onChange={(e) => setPlatformForm({ ...platformForm, emojiSizeSpec: e.target.value })}
+                  placeholder="例如: 240x240"
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium leading-none">发布链接</label>
+              <Input
+                value={platformForm.publishUrl}
+                onChange={(e) => setPlatformForm({ ...platformForm, publishUrl: e.target.value })}
+                placeholder="平台审核通过后的访问链接"
+              />
+            </div>
+            {editingPlatform && (
+              <div className="grid gap-2">
+                <label className="text-sm font-medium leading-none">下载量 / 发送量</label>
+                <Input
+                  type="number"
+                  value={platformForm.downloadsCount}
+                  onChange={(e) => setPlatformForm({ ...platformForm, downloadsCount: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPlatformModalOpen(false)}>取消</Button>
+            <Button onClick={handleSavePlatform} disabled={isSavingPlatform || !platformForm.platformName.trim()}>
+              {isSavingPlatform ? "保存中..." : "保存"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -847,7 +847,17 @@ export const ipApi = {
     return result.data || false;
   },
 
-  async createStickerPack(ipId: string, name: string, path: string, description?: string): Promise<IpStickerPack> {
+  async createStickerPack(
+    ipId: string,
+    name: string,
+    path: string,
+    description?: string,
+    coverPath?: string,
+    bannerPath?: string,
+    iconPath?: string,
+    rewardGuidePath?: string,
+    rewardThanksPath?: string
+  ): Promise<IpStickerPack> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<IpStickerPack>>("create_ip_sticker_pack", {
       dbPath,
@@ -855,6 +865,11 @@ export const ipApi = {
       name,
       path,
       description,
+      coverPath,
+      bannerPath,
+      iconPath,
+      rewardGuidePath,
+      rewardThanksPath,
     });
     if (!result.success || !result.data) {
       throw new Error(result.error || "创建表情包套件失败");
@@ -862,7 +877,17 @@ export const ipApi = {
     return result.data;
   },
 
-  async updateStickerPack(packId: string, name: string, path: string, description?: string): Promise<boolean> {
+  async updateStickerPack(
+    packId: string,
+    name: string,
+    path: string,
+    description?: string,
+    coverPath?: string,
+    bannerPath?: string,
+    iconPath?: string,
+    rewardGuidePath?: string,
+    rewardThanksPath?: string
+  ): Promise<boolean> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<boolean>>("update_ip_sticker_pack", {
       dbPath,
@@ -870,6 +895,11 @@ export const ipApi = {
       name,
       path,
       description,
+      coverPath,
+      bannerPath,
+      iconPath,
+      rewardGuidePath,
+      rewardThanksPath,
     });
     if (!result.success) {
       throw new Error(result.error || "修改表情包套件失败");

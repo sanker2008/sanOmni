@@ -44,6 +44,11 @@ pub struct IpStickerPack {
     pub name: String,
     pub path: String,
     pub description: Option<String>,
+    pub cover_path: Option<String>,
+    pub banner_path: Option<String>,
+    pub icon_path: Option<String>,
+    pub reward_guide_path: Option<String>,
+    pub reward_thanks_path: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

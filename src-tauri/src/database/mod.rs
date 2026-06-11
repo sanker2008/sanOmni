@@ -121,8 +121,19 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         set_db_version(conn, 1)?;
     }
 
+    if current_version < 2 {
+        // v1 -> v2: Add pack-level asset columns to ip_sticker_packs
+        let _ = conn.execute("ALTER TABLE ip_sticker_packs ADD COLUMN cover_path TEXT", []);
+        let _ = conn.execute("ALTER TABLE ip_sticker_packs ADD COLUMN banner_path TEXT", []);
+        let _ = conn.execute("ALTER TABLE ip_sticker_packs ADD COLUMN icon_path TEXT", []);
+        let _ = conn.execute("ALTER TABLE ip_sticker_packs ADD COLUMN reward_guide_path TEXT", []);
+        let _ = conn.execute("ALTER TABLE ip_sticker_packs ADD COLUMN reward_thanks_path TEXT", []);
+
+        set_db_version(conn, 2)?;
+    }
+
     // Future migrations go here:
-    // if current_version < 2 { ... set_db_version(conn, 2)?; }
+    // if current_version < 3 { ... set_db_version(conn, 3)?; }
 
     Ok(())
 }
@@ -351,6 +362,11 @@ CREATE TABLE IF NOT EXISTS ip_sticker_packs (
     name                TEXT NOT NULL,
     path                TEXT NOT NULL,
     description         TEXT,
+    cover_path          TEXT,
+    banner_path         TEXT,
+    icon_path           TEXT,
+    reward_guide_path   TEXT,
+    reward_thanks_path  TEXT,
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL,
     FOREIGN KEY (ip_id) REFERENCES ip_assets(id) ON DELETE CASCADE

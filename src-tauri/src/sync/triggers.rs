@@ -66,6 +66,39 @@ END;
 CREATE TRIGGER IF NOT EXISTS sync_tags_delete AFTER DELETE ON tags BEGIN
     INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('tags', OLD.id, 'DELETE', json_object('id', OLD.id));
 END;
+
+-- ip_sticker_packs
+CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_packs_insert AFTER INSERT ON ip_sticker_packs BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_packs', NEW.id, 'INSERT', json_object('id', NEW.id, 'ip_id', NEW.ip_id, 'name', NEW.name, 'path', NEW.path, 'description', NEW.description, 'cover_path', NEW.cover_path, 'banner_path', NEW.banner_path, 'icon_path', NEW.icon_path, 'reward_guide_path', NEW.reward_guide_path, 'reward_thanks_path', NEW.reward_thanks_path, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_packs_update AFTER UPDATE ON ip_sticker_packs BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_packs', NEW.id, 'UPDATE', json_object('id', NEW.id, 'ip_id', NEW.ip_id, 'name', NEW.name, 'path', NEW.path, 'description', NEW.description, 'cover_path', NEW.cover_path, 'banner_path', NEW.banner_path, 'icon_path', NEW.icon_path, 'reward_guide_path', NEW.reward_guide_path, 'reward_thanks_path', NEW.reward_thanks_path, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_packs_delete AFTER DELETE ON ip_sticker_packs BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_packs', OLD.id, 'DELETE', json_object('id', OLD.id));
+END;
+
+-- ip_sticker_pack_platforms
+CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_pack_platforms_insert AFTER INSERT ON ip_sticker_pack_platforms BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_pack_platforms', NEW.id, 'INSERT', json_object('id', NEW.id, 'pack_id', NEW.pack_id, 'platform_name', NEW.platform_name, 'pack_name_on_platform', NEW.pack_name_on_platform, 'emoji_size_spec', NEW.emoji_size_spec, 'status', NEW.status, 'publish_url', NEW.publish_url, 'downloads_count', NEW.downloads_count, 'updated_at', NEW.updated_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_pack_platforms_update AFTER UPDATE ON ip_sticker_pack_platforms BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_pack_platforms', NEW.id, 'UPDATE', json_object('id', NEW.id, 'pack_id', NEW.pack_id, 'platform_name', NEW.platform_name, 'pack_name_on_platform', NEW.pack_name_on_platform, 'emoji_size_spec', NEW.emoji_size_spec, 'status', NEW.status, 'publish_url', NEW.publish_url, 'downloads_count', NEW.downloads_count, 'updated_at', NEW.updated_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_pack_platforms_delete AFTER DELETE ON ip_sticker_pack_platforms BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_pack_platforms', OLD.id, 'DELETE', json_object('id', OLD.id));
+END;
+
+-- ip_emojis
+CREATE TRIGGER IF NOT EXISTS sync_ip_emojis_insert AFTER INSERT ON ip_emojis BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_emojis', NEW.id, 'INSERT', json_object('id', NEW.id, 'ip_id', NEW.ip_id, 'pack_id', NEW.pack_id, 'image_path', NEW.image_path, 'trigger_word', NEW.trigger_word, 'sort_order', NEW.sort_order, 'created_at', NEW.created_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_emojis_update AFTER UPDATE ON ip_emojis BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_emojis', NEW.id, 'UPDATE', json_object('id', NEW.id, 'ip_id', NEW.ip_id, 'pack_id', NEW.pack_id, 'image_path', NEW.image_path, 'trigger_word', NEW.trigger_word, 'sort_order', NEW.sort_order, 'created_at', NEW.created_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_emojis_delete AFTER DELETE ON ip_emojis BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_emojis', OLD.id, 'DELETE', json_object('id', OLD.id));
+END;
 "#;
 
 pub const DROP_TRIGGERS: &str = r#"
@@ -83,4 +116,13 @@ DROP TRIGGER IF EXISTS sync_ip_image_tag_relations_delete;
 DROP TRIGGER IF EXISTS sync_tags_insert;
 DROP TRIGGER IF EXISTS sync_tags_update;
 DROP TRIGGER IF EXISTS sync_tags_delete;
+DROP TRIGGER IF EXISTS sync_ip_sticker_packs_insert;
+DROP TRIGGER IF EXISTS sync_ip_sticker_packs_update;
+DROP TRIGGER IF EXISTS sync_ip_sticker_packs_delete;
+DROP TRIGGER IF EXISTS sync_ip_sticker_pack_platforms_insert;
+DROP TRIGGER IF EXISTS sync_ip_sticker_pack_platforms_update;
+DROP TRIGGER IF EXISTS sync_ip_sticker_pack_platforms_delete;
+DROP TRIGGER IF EXISTS sync_ip_emojis_insert;
+DROP TRIGGER IF EXISTS sync_ip_emojis_update;
+DROP TRIGGER IF EXISTS sync_ip_emojis_delete;
 "#;

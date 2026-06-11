@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2026-06-12
+### Added
+- Complete cloud two-way synchronization for Sticker Packs, including pack metadata, platform distribution configurations, and individual emoji image assets.
+- Automated local directory creation and asset recovery during sync pull.
+
 ## [1.1.5] - 2026-06-10
 ### Added
 - Cloud two-way sync engine using CAS content-addressable storage.

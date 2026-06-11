@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { settingsApi } from "@/services/tauri";
 import { useUIStore } from "@/stores";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import PromptDomainView from "@/components/PromptDomainView";
@@ -29,6 +31,11 @@ const THEME_LABELS: Record<Theme, string> = {
 function App() {
   const { activeTab, setActiveTab, openSettings, theme, setTheme } = useUIStore();
   const appMode = import.meta.env.VITE_APP_MODE || "all";
+
+  // Ensure DB is initialized on startup for custom paths
+  useEffect(() => {
+    settingsApi.getAll().catch(e => console.error("Failed to initialize db on startup:", e));
+  }, []);
 
   // Register keyboard shortcuts
   useKeyboardShortcuts();

@@ -85,6 +85,11 @@ export interface IpStickerPack {
   name: string;
   path: string;
   description?: string;
+  cover_path?: string;
+  banner_path?: string;
+  icon_path?: string;
+  reward_guide_path?: string;
+  reward_thanks_path?: string;
   created_at: string;
   updated_at: string;
 }

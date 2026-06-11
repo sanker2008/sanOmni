@@ -89,36 +89,52 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
     let mut files_to_upload = Vec::new(); // (hash, absolute_path, i)
 
     for (i, change) in changes.iter_mut().enumerate() {
-        if (change.table == "ip_assets" || change.table == "ip_images") && change.operation != "DELETE" {
+        if (change.table == "ip_assets" || change.table == "ip_images" || change.table == "ip_sticker_packs" || change.table == "ip_emojis") && change.operation != "DELETE" {
             if let Some(data_str) = &change.data {
                 if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(data_str) {
-                    let path_key = if change.table == "ip_assets" {
-                        "avatar_path"
+                    let path_hash_keys = if change.table == "ip_assets" {
+                        vec![("avatar_path", "file_hash")]
+                    } else if change.table == "ip_images" {
+                        vec![("absolute_path", "file_hash")]
+                    } else if change.table == "ip_emojis" {
+                        vec![("image_path", "file_hash")]
+                    } else if change.table == "ip_sticker_packs" {
+                        vec![
+                            ("cover_path", "cover_hash"),
+                            ("banner_path", "banner_hash"),
+                            ("icon_path", "icon_hash"),
+                            ("reward_guide_path", "reward_guide_hash"),
+                            ("reward_thanks_path", "reward_thanks_hash"),
+                        ]
                     } else {
-                        "absolute_path"
+                        vec![]
                     };
-                    if let Some(abs_path) = json
-                        .get(path_key)
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                    {
-                        if let Ok(data) = tokio::fs::read(&abs_path).await {
-                            let mut hasher = Sha256::new();
-                            hasher.update(&data);
-                            let hash = format!("{:x}", hasher.finalize());
 
-                            file_hashes_to_check.push(hash.clone());
-                            files_to_upload.push((hash.clone(), abs_path, i));
+                    let mut updated = false;
+                    for (path_key, hash_key) in path_hash_keys {
+                        if let Some(abs_path) = json.get(path_key).and_then(|v| v.as_str()).map(String::from) {
+                            if !abs_path.is_empty() {
+                                if let Ok(data) = tokio::fs::read(&abs_path).await {
+                                    let mut hasher = Sha256::new();
+                                    hasher.update(&data);
+                                    let hash = format!("{:x}", hasher.finalize());
 
-                            // 更新 json 里的 file_hash，确保推送给服务端的是有哈希的数据
-                            if let Some(obj) = json.as_object_mut() {
-                                obj.insert(
-                                    "file_hash".to_string(),
-                                    serde_json::Value::String(hash.clone()),
-                                );
-                                change.data = Some(serde_json::to_string(&json).unwrap());
+                                    file_hashes_to_check.push(hash.clone());
+                                    files_to_upload.push((hash.clone(), abs_path, i));
+
+                                    if let Some(obj) = json.as_object_mut() {
+                                        obj.insert(
+                                            hash_key.to_string(),
+                                            serde_json::Value::String(hash.clone()),
+                                        );
+                                        updated = true;
+                                    }
+                                }
                             }
                         }
+                    }
+                    if updated {
+                        change.data = Some(serde_json::to_string(&json).unwrap());
                     }
                 }
             }
@@ -231,73 +247,119 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                 let mut current = 0;
 
                 // 下载文件并修正 absolute_path
+                let db_conn = Connection::open(Path::new(db_path)).unwrap();
                 for change in &mut resp.changes {
                     if (change.table == "ip_assets"
-                        || change.table == "ip_images")
+                        || change.table == "ip_images"
+                        || change.table == "ip_sticker_packs"
+                        || change.table == "ip_emojis")
                         && change.operation != "DELETE"
                     {
                         if let Some(data_str) = &change.data {
                             if let Ok(mut json) =
                                 serde_json::from_str::<serde_json::Value>(data_str)
                             {
-                                if let Some(hash) = json.get("file_hash").and_then(|v| v.as_str()).map(String::from) {
-                                    let rel_path_normalized = if change.table == "ip_images" {
-                                        json.get("relative_path")
-                                            .and_then(|v| v.as_str())
-                                            .map(|s| s.replace("\\", "/"))
-                                    } else if change.table == "ip_assets" {
-                                        // For ip_assets, we construct relative path from `path` and `avatar_path`'s filename
-                                        let ip_path = json.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
-                                        let filename = json.get("avatar_path")
-                                            .and_then(|v| v.as_str())
-                                            .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().into_owned());
-                                        
-                                        filename.map(|f| format!("ip_archived/{}/{}", ip_path, f))
-                                    } else {
-                                        None
-                                    };
+                                let file_tasks = if change.table == "ip_assets" {
+                                    vec![("avatar_path", "file_hash")]
+                                } else if change.table == "ip_images" {
+                                    vec![("absolute_path", "file_hash")]
+                                } else if change.table == "ip_sticker_packs" {
+                                    vec![
+                                        ("cover_path", "cover_hash"),
+                                        ("banner_path", "banner_hash"),
+                                        ("icon_path", "icon_hash"),
+                                        ("reward_guide_path", "reward_guide_hash"),
+                                        ("reward_thanks_path", "reward_thanks_hash"),
+                                    ]
+                                } else if change.table == "ip_emojis" {
+                                    vec![("image_path", "file_hash")]
+                                } else {
+                                    vec![]
+                                };
 
-                                    if let Some(rel_path) = rel_path_normalized {
-                                        let local_abs_path = app_root.join(&rel_path);
+                                let mut updated = false;
+                                for (path_key, hash_key) in file_tasks {
+                                    if let Some(hash) = json.get(hash_key).and_then(|v| v.as_str()).map(String::from) {
+                                        let rel_path_normalized = if change.table == "ip_images" {
+                                            json.get("relative_path")
+                                                .and_then(|v| v.as_str())
+                                                .map(|s| s.replace("\\", "/"))
+                                        } else if change.table == "ip_assets" {
+                                            let ip_path = json.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                            let filename = json.get(path_key)
+                                                .and_then(|v| v.as_str())
+                                                .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().into_owned());
+                                            filename.map(|f| format!("ip_archived/{}/{}", ip_path, f))
+                                        } else if change.table == "ip_sticker_packs" {
+                                            let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                            let ip_path: String = db_conn.query_row("SELECT path FROM ip_assets WHERE id = ?", rusqlite::params![ip_id], |row| row.get(0)).unwrap_or_else(|_| ip_id.to_string());
+                                            let pack_path = json.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                            let filename = json.get(path_key)
+                                                .and_then(|v| v.as_str())
+                                                .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().into_owned());
+                                            filename.map(|f| format!("ip_archived/{}/packs/{}/{}", ip_path, pack_path, f))
+                                        } else if change.table == "ip_emojis" {
+                                            let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                            let ip_path: String = db_conn.query_row("SELECT path FROM ip_assets WHERE id = ?", rusqlite::params![ip_id], |row| row.get(0)).unwrap_or_else(|_| ip_id.to_string());
+                                            let pack_id_opt = json.get("pack_id").and_then(|v| v.as_str());
+                                            let pack_path_opt: Option<String> = if let Some(pid) = pack_id_opt {
+                                                db_conn.query_row("SELECT path FROM ip_sticker_packs WHERE id = ?", rusqlite::params![pid], |row| row.get(0)).ok()
+                                            } else { None };
+                                            let filename = json.get(path_key)
+                                                .and_then(|v| v.as_str())
+                                                .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().into_owned());
+                                            
+                                            filename.map(|f| {
+                                                if let Some(pp) = pack_path_opt {
+                                                    format!("ip_archived/{}/emojis/{}/{}", ip_path, pp, f)
+                                                } else {
+                                                    format!("ip_archived/{}/emojis/{}", ip_path, f)
+                                                }
+                                            })
+                                        } else {
+                                            None
+                                        };
 
-                                        current += 1;
-                                        let _ = app.emit(
-                                            "sync-progress",
-                                            serde_json::json!({
-                                                "phase": "download",
-                                                "current": current,
-                                                "total": total,
-                                                "path": local_abs_path.to_string_lossy()
-                                            }),
-                                        );
+                                        if let Some(rel_path) = rel_path_normalized {
+                                            let local_abs_path = app_root.join(&rel_path);
 
-                                        if let Some(parent) = local_abs_path.parent() {
-                                            if let Err(e) = tokio::fs::create_dir_all(parent).await {
-                                                eprintln!("[Sync] Failed to create directory {}: {}", parent.display(), e);
-                                            }
-                                        }
-
-                                        if !local_abs_path.exists() {
-                                            if let Err(e) = client.download_file(&hash, &local_abs_path).await {
-                                                eprintln!("[Sync] Failed to download file to {}: {}", local_abs_path.display(), e);
-                                            }
-                                        }
-
-                                        if let Some(obj) = json.as_object_mut() {
-                                            let path_key = if change.table == "ip_assets" {
-                                                "avatar_path"
-                                            } else {
-                                                "absolute_path"
-                                            };
-                                            obj.insert(
-                                                path_key.to_string(),
-                                                serde_json::Value::String(
-                                                    local_abs_path.to_string_lossy().into_owned(),
-                                                ),
+                                            current += 1;
+                                            let _ = app.emit(
+                                                "sync-progress",
+                                                serde_json::json!({
+                                                    "phase": "download",
+                                                    "current": current,
+                                                    "total": total,
+                                                    "path": local_abs_path.to_string_lossy()
+                                                }),
                                             );
-                                            change.data = Some(serde_json::to_string(&json).unwrap());
+
+                                            if let Some(parent) = local_abs_path.parent() {
+                                                if let Err(e) = tokio::fs::create_dir_all(parent).await {
+                                                    eprintln!("[Sync] Failed to create directory {}: {}", parent.display(), e);
+                                                }
+                                            }
+
+                                            if !local_abs_path.exists() {
+                                                if let Err(e) = client.download_file(&hash, &local_abs_path).await {
+                                                    eprintln!("[Sync] Failed to download file to {}: {}", local_abs_path.display(), e);
+                                                }
+                                            }
+
+                                            if let Some(obj) = json.as_object_mut() {
+                                                obj.insert(
+                                                    path_key.to_string(),
+                                                    serde_json::Value::String(
+                                                        local_abs_path.to_string_lossy().into_owned(),
+                                                    ),
+                                                );
+                                                updated = true;
+                                            }
                                         }
                                     }
+                                }
+                                if updated {
+                                    change.data = Some(serde_json::to_string(&json).unwrap());
                                 }
                             }
                         }
@@ -533,6 +595,79 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
                                         )
                                         .ok()
                                     }
+                            ("ip_sticker_packs", "INSERT") | ("ip_sticker_packs", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let name = json.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let path = json.get("path").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let description = json.get("description").and_then(|v| v.as_str()).map(String::from);
+                                        let cover_path = json.get("cover_path").and_then(|v| v.as_str()).map(String::from);
+                                        let banner_path = json.get("banner_path").and_then(|v| v.as_str()).map(String::from);
+                                        let icon_path = json.get("icon_path").and_then(|v| v.as_str()).map(String::from);
+                                        let reward_guide_path = json.get("reward_guide_path").and_then(|v| v.as_str()).map(String::from);
+                                        let reward_thanks_path = json.get("reward_thanks_path").and_then(|v| v.as_str()).map(String::from);
+                                        let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let updated_at = json.get("updated_at").and_then(|v| v.as_str()).unwrap_or_default();
+                                        tx.execute(
+                                            "INSERT OR REPLACE INTO ip_sticker_packs (id, ip_id, name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                            rusqlite::params![id, ip_id, name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, created_at, updated_at],
+                                        ).ok()
+                                    } else { None }
+                                } else { None }
+                            }
+                            ("ip_sticker_packs", "DELETE") => {
+                                tx.execute("DELETE FROM ip_sticker_packs WHERE id = ?", rusqlite::params![change.record_id]).ok()
+                            }
+                            ("ip_sticker_pack_platforms", "INSERT") | ("ip_sticker_pack_platforms", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let pack_id = json.get("pack_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let platform_name = json.get("platform_name").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let pack_name_on_platform = json.get("pack_name_on_platform").and_then(|v| v.as_str()).map(String::from);
+                                        let emoji_size_spec = json.get("emoji_size_spec").and_then(|v| v.as_str()).map(String::from);
+                                        let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("draft");
+                                        let publish_url = json.get("publish_url").and_then(|v| v.as_str()).map(String::from);
+                                        let downloads_count = json.get("downloads_count").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let updated_at = json.get("updated_at").and_then(|v| v.as_str()).unwrap_or_default();
+                                        tx.execute(
+                                            "INSERT OR REPLACE INTO ip_sticker_pack_platforms (id, pack_id, platform_name, pack_name_on_platform, emoji_size_spec, status, publish_url, downloads_count, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                            rusqlite::params![id, pack_id, platform_name, pack_name_on_platform, emoji_size_spec, status, publish_url, downloads_count, updated_at],
+                                        ).ok()
+                                    } else { None }
+                                } else { None }
+                            }
+                            ("ip_sticker_pack_platforms", "DELETE") => {
+                                tx.execute("DELETE FROM ip_sticker_pack_platforms WHERE id = ?", rusqlite::params![change.record_id]).ok()
+                            }
+                            ("ip_emojis", "INSERT") | ("ip_emojis", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let pack_id = json.get("pack_id").and_then(|v| v.as_str()).map(String::from);
+                                        let image_path = json.get("image_path").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let trigger_word = json.get("trigger_word").and_then(|v| v.as_str()).map(String::from);
+                                        let sort_order = json.get("sort_order").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
+                                        tx.execute(
+                                            "INSERT OR REPLACE INTO ip_emojis (id, ip_id, pack_id, image_path, trigger_word, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                            rusqlite::params![id, ip_id, pack_id, image_path, trigger_word, sort_order, created_at],
+                                        ).ok()
+                                    } else { None }
+                                } else { None }
+                            }
+                            ("ip_emojis", "DELETE") => {
+                                let path: Option<String> = tx.query_row("SELECT image_path FROM ip_emojis WHERE id = ?", rusqlite::params![change.record_id], |row| row.get(0)).ok();
+                                if let Some(p) = path {
+                                    if p.contains("ip_archived") {
+                                        let _ = std::fs::remove_file(&p);
+                                    }
+                                }
+                                tx.execute("DELETE FROM ip_emojis WHERE id = ?", rusqlite::params![change.record_id]).ok()
+                            }
                             ("ip_image_relations", "INSERT") | ("ip_image_relations", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
                                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
