@@ -1,6 +1,6 @@
 [package]
 name = "sanomni"
-version = "1.1.5"
+version = "1.1.6"
 description = "sanOmni - Manage AI-generated images"
 authors = ["you"]
 edition = "2021"
@@ -14,10 +14,12 @@ path = "src/main.rs"
 [[bin]]
 name = "test_pull"
 path = "src/bin/test_pull.rs"
+required-features = ["test-scripts"]
 
 [[bin]]
 name = "test_insert"
 path = "src/bin/test_insert.rs"
+required-features = ["test-scripts"]
 
 [lib]
 name = "sanomni_lib"
@@ -60,3 +62,6 @@ debug = 0
 [profile.dev.package."*"]
 opt-level = 0
 debug = 0
+
+[features]
+test-scripts = []
