@@ -4,7 +4,7 @@ import { getDbPath, ipApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/useToast";
-import { CheckCircle, XCircle, History, ChevronLeft, ChevronRight, FileImage, Tag, Box, ArrowRight } from "lucide-react";
+import { CheckCircle, XCircle, History, ChevronLeft, ChevronRight, FileImage, Tag, Box } from "lucide-react";
 
 export default function SyncTab() {
   const [serverUrl, setServerUrl] = useState("");

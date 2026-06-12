@@ -48,7 +48,6 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import ImageCard from "./ImageCard";
-import SyncButton from "@/components/SyncButton";
 import IPImagePickerModal from "./IPImagePickerModal";
 import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";

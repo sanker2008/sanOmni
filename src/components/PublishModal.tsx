@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PromptGroup } from '../models/prompt';
+import { type PromptGroup } from '@/stores';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Label } from './ui/label';

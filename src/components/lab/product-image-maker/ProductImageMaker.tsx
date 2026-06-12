@@ -150,8 +150,8 @@ export default function ProductImageMaker() {
           const layer = layers.find((l) => l.id === selectedLayerId);
           if (layer) {
             e.preventDefault();
-            if (layer.type === 'text' && layer.text) {
-              navigator.clipboard.writeText(layer.text).then(() => {
+            if (layer.type === 'text' && layer.content) {
+              navigator.clipboard.writeText(layer.content).then(() => {
                 toast({ title: "已复制文字", description: "图层文字已复制到剪贴板" });
               }).catch((err) => {
                 console.error(err);
