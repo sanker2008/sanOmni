@@ -5,7 +5,7 @@ use std::path::Path;
 use tauri::Emitter;
 use uuid::Uuid;
 
-pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     // 1. 读库，收集待推送的变更（放入独立的代码块中，确保 Connection 及时被释放）
     let (server_url, api_key, device_id, last_sync_version, pending_ids, mut changes) = {
         let conn =
@@ -84,9 +84,14 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
     let mut pushed_count = 0;
     let mut new_server_version = last_sync_version;
 
+    let should_push = direction.unwrap_or("both") != "pull";
+    let should_pull = direction.unwrap_or("both") != "push";
+
     // 1.5 提取需要上传的文件
     let mut file_hashes_to_check = Vec::new();
     let mut files_to_upload = Vec::new(); // (hash, absolute_path, i)
+
+    if should_push {
 
     for (i, change) in changes.iter_mut().enumerate() {
         if (change.table == "ip_assets" || change.table == "ip_images" || change.table == "ip_sticker_packs" || change.table == "ip_emojis") && change.operation != "DELETE" {
@@ -191,10 +196,12 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
             Err(e) => return Err(format!("推送失败: {}", e)),
         }
     }
+    } // End of should_push
 
     // 3. Pull 服务器变更
     let mut pulled_count = 0;
 
+    if should_pull {
     // 每次重新查一次最新版本号，以防刚才 Push 修改了它
     let current_version = {
         let conn = Connection::open(Path::new(db_path)).unwrap();
@@ -759,6 +766,7 @@ pub async fn run_sync(db_path: &str, app: &tauri::AppHandle) -> Result<serde_jso
         }
         Err(e) => return Err(format!("拉取失败: {}", e)),
     }
+    } // End of should_pull
 
     let mut pushed_inserts = 0;
     let mut pushed_updates = 0;

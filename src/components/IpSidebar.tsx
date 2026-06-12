@@ -13,6 +13,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "@/hooks/useToast";
 import { ipImageApi } from "@/services/tauri";
 import { useUIStore } from "@/stores";
+import SyncButton from "@/components/SyncButton";
 
 interface IpSidebarProps {
   onIpSelect: (ipId: string | null) => void;
@@ -243,10 +244,13 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
     <div className={cn("w-80 border-r flex flex-col bg-background md:bg-muted/40 h-full overflow-hidden shrink-0", className)}>
       <div className="p-4 border-b flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
-            sanIP
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              sanIP
+            </h2>
+            <SyncButton />
+          </div>
           <div className="flex items-center gap-1">
             <Button size="icon" variant="ghost" onClick={handleOpenCreateIp} className="h-8 w-8">
               <Plus className="w-4 h-4" />

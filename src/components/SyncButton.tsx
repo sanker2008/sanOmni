@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getDbPath } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 
@@ -10,6 +11,9 @@ export default function SyncButton() {
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<any>(null);
   const [enabled, setEnabled] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [direction, setDirection] = useState<"both" | "push" | "pull">("both");
 
   const checkStatus = async () => {
     try {
@@ -42,13 +46,14 @@ export default function SyncButton() {
     };
   }, []);
 
-  const handleSync = async () => {
+  const executeSync = async () => {
     if (syncing) return;
+    setConfirmOpen(false);
     setSyncing(true);
     setProgress(null);
     try {
       const dbPath = await getDbPath();
-      const res = await invoke<any>("sync_now", { dbPath });
+      const res = await invoke<any>("sync_now", { dbPath, direction });
       if (res && res.success === false) {
         throw new Error(res.error || "未知错误");
       }
@@ -91,7 +96,7 @@ export default function SyncButton() {
       <Button 
         variant="outline" 
         size="sm" 
-        onClick={handleSync} 
+        onClick={() => setConfirmOpen(true)} 
         disabled={syncing}
         className="gap-2 bg-card"
         title="立即同步"
@@ -101,6 +106,44 @@ export default function SyncButton() {
           {syncing ? "同步中..." : "同步"}
         </span>
       </Button>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认同步</DialogTitle>
+            <DialogDescription>
+              请选择同步模式。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <label className="flex items-start gap-3 cursor-pointer p-2 rounded-lg hover:bg-muted/50 border border-transparent has-[:checked]:border-primary/50 has-[:checked]:bg-primary/5 transition-colors">
+              <input type="radio" name="sync_direction" checked={direction === "both"} onChange={() => setDirection("both")} className="w-4 h-4 mt-1" />
+              <div>
+                <div className="font-medium">双向同步（默认）</div>
+                <div className="text-xs text-muted-foreground">推送本地变更，并拉取云端新数据。</div>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer p-2 rounded-lg hover:bg-muted/50 border border-transparent has-[:checked]:border-primary/50 has-[:checked]:bg-primary/5 transition-colors">
+              <input type="radio" name="sync_direction" checked={direction === "push"} onChange={() => setDirection("push")} className="w-4 h-4 mt-1" />
+              <div>
+                <div className="font-medium">仅推送到云端</div>
+                <div className="text-xs text-muted-foreground">只上传本地的修改，不拉取其他设备的新数据。</div>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer p-2 rounded-lg hover:bg-muted/50 border border-transparent has-[:checked]:border-primary/50 has-[:checked]:bg-primary/5 transition-colors">
+              <input type="radio" name="sync_direction" checked={direction === "pull"} onChange={() => setDirection("pull")} className="w-4 h-4 mt-1" />
+              <div>
+                <div className="font-medium">仅从云端拉取</div>
+                <div className="text-xs text-muted-foreground">不上传本地的修改，只把云端最新的数据拉下来。</div>
+              </div>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>取消</Button>
+            <Button onClick={executeSync}>确认同步</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

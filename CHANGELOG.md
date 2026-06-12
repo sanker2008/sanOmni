@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.7] - 2026-06-12
+### Added
+- Fine-grained Sync Control: Support single direction sync operations (Push-only and Pull-only).
+- Aggregated Sync Timeline: Visually group sync history logs by time and actions for a human-readable summary.
+- sanLabs: Added an Instructions Help Dialog accessible from the Lab tools sidebar.
+- Product Image Maker: Added Ctrl+C keyboard shortcut to copy image and text layers to clipboard.
+
+### Fixed
+- Sync UI now correctly falls back to local database mappings to display IP names instead of raw IDs.
+
 ## [1.1.6] - 2026-06-12
 ### Added
 - Complete cloud two-way synchronization for Sticker Packs, including pack metadata, platform distribution configurations, and individual emoji image assets.

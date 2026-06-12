@@ -133,6 +133,59 @@ export default function ProductImageMaker() {
             updateLayer(selectedLayerId, { x, y });
           }
         }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        const state = useProductImageStore.getState();
+        const { selectedLayerId, layers, removeLayer } = state;
+        if (selectedLayerId) {
+          const layer = layers.find((l) => l.id === selectedLayerId);
+          if (layer && !layer.locked) {
+            e.preventDefault();
+            removeLayer(selectedLayerId);
+          }
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        const state = useProductImageStore.getState();
+        const { selectedLayerId, layers } = state;
+        if (selectedLayerId) {
+          const layer = layers.find((l) => l.id === selectedLayerId);
+          if (layer) {
+            e.preventDefault();
+            if (layer.type === 'text' && layer.text) {
+              navigator.clipboard.writeText(layer.text).then(() => {
+                toast({ title: "已复制文字", description: "图层文字已复制到剪贴板" });
+              }).catch((err) => {
+                console.error(err);
+                toast({ title: "复制失败", description: "无法写入剪贴板", variant: "destructive" });
+              });
+            } else if (layer.type === 'image' && layer.src) {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.src = layer.src;
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.drawImage(img, 0, 0);
+                  canvas.toBlob((blob) => {
+                    if (blob) {
+                      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                        .then(() => toast({ title: "已复制图片", description: "图层图片已复制到剪贴板" }))
+                        .catch((err) => {
+                          console.error(err);
+                          toast({ title: "复制失败", description: "无法写入剪贴板", variant: "destructive" });
+                        });
+                    }
+                  }, 'image/png');
+                }
+              };
+              img.onerror = () => {
+                toast({ title: "复制失败", description: "读取图片失败", variant: "destructive" });
+              };
+            }
+          }
+        }
       }
     };
     window.addEventListener('keydown', handler);

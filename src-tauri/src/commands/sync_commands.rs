@@ -98,8 +98,8 @@ pub fn sync_configure(db_path: String, server_url: String, api_key: String) -> C
 }
 
 #[tauri::command]
-pub async fn sync_now(db_path: String, app: tauri::AppHandle) -> CommandResult<serde_json::Value> {
-    match sync::engine::run_sync(&db_path, &app).await {
+pub async fn sync_now(db_path: String, direction: Option<String>, app: tauri::AppHandle) -> CommandResult<serde_json::Value> {
+    match sync::engine::run_sync(&db_path, direction.as_deref(), &app).await {
         Ok(res) => CommandResult::ok(res),
         Err(e) => CommandResult::err(e),
     }

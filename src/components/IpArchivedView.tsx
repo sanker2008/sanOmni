@@ -1392,9 +1392,6 @@ export default function IpArchivedView() {
                     <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
                     刷新
                   </Button>
-                  <div className="pl-2 border-l border-border h-6 flex items-center">
-                    <SyncButton />
-                  </div>
                   {selectedIpId && (
                     <Button variant="ghost" size="sm" onClick={() => setSelectedIpId(null)}>
                       清除筛选
