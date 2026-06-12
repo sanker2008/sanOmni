@@ -13,7 +13,8 @@ import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X,
 import { toast } from "@/hooks/useToast";
 import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { SmartPromptRenderer } from "./SmartPromptRenderer";
-import { publishPromptToWeb } from "@/services/publish";
+import { getPublishStatus, type PublishConfig } from "@/services/publish";
+import { PublishModal } from "./PublishModal";
 
 interface PromptGroupWithImages {
   group: PromptGroup;
@@ -71,18 +72,20 @@ export function PromptGroupsView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
-  const [publishingId, setPublishingId] = useState<string | null>(null);
 
-  const handlePublish = async (groupId: string) => {
-    try {
-      setPublishingId(groupId);
-      await publishPromptToWeb(groupId);
-      toast({ title: "✓ 已成功上架", description: "该模板已发布到 sanPrompt 商城", variant: "default" });
-    } catch (e: any) {
-      toast({ title: "✗ 发布失败", description: e.toString(), variant: "destructive" });
-    } finally {
-      setPublishingId(null);
-    }
+  // Publish Status State
+  const [publishStatuses, setPublishStatuses] = useState<Map<string, PublishConfig>>(new Map());
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [publishingGroup, setPublishingGroup] = useState<PromptGroup | null>(null);
+
+  const openPublishModal = (group: PromptGroup) => {
+    setPublishingGroup(group);
+    setIsPublishModalOpen(true);
+  };
+
+  const handlePublishSuccess = () => {
+    // Refresh statuses after publish
+    fetchPublishStatuses();
   };
 
   useEffect(() => {
@@ -123,6 +126,21 @@ export function PromptGroupsView() {
       setCurrentPage(maxPage);
     }
   }, [filteredGroups.length, currentPage, pageSize]);
+
+  const fetchPublishStatuses = async () => {
+    if (paginatedGroups.length === 0) return;
+    const ids = paginatedGroups.map(g => g.id);
+    const statuses = await getPublishStatus(ids);
+    setPublishStatuses(current => {
+      const next = new Map(current);
+      statuses.forEach(s => next.set(s.id, { price: s.price, category: s.category, is_published: s.is_published }));
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    fetchPublishStatuses();
+  }, [paginatedGroups]);
 
   useEffect(() => {
     void loadGroups();
@@ -734,7 +752,14 @@ export function PromptGroupsView() {
                         <CardDescription className="mt-1 text-xs">{group.description}</CardDescription>
                       )}
                     </div>
-                    <Badge variant="outline" className={viewMode === "grid" ? "self-start" : ""}>{group.image_count} 张</Badge>
+                    <div className="flex flex-col gap-2 items-end">
+                      <Badge variant="outline">{group.image_count} 张</Badge>
+                      {publishStatuses.get(group.id)?.is_published && (
+                        <Badge variant="default" className="bg-green-600 hover:bg-green-700 whitespace-nowrap">
+                          售卖中: ${publishStatuses.get(group.id)?.price}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
 
@@ -783,19 +808,14 @@ export function PromptGroupsView() {
                         {viewMode === "list" && (copiedGroupId === group.id ? "已复制" : "完整复制")}
                       </Button>
                       <Button 
-                        variant="default" 
+                        variant={publishStatuses.get(group.id)?.is_published ? "outline" : "default"} 
                         size="sm" 
-                        onClick={() => void handlePublish(group.id)} 
-                        disabled={publishingId === group.id}
-                        title="上架售卖"
-                        className="bg-amber-600 hover:bg-amber-700 text-white"
+                        onClick={() => openPublishModal(group)} 
+                        title="商城管理"
+                        className={!publishStatuses.get(group.id)?.is_published ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-green-600 text-green-600 hover:bg-green-50"}
                       >
-                        {publishingId === group.id ? (
-                          <RefreshCw className={`h-3 w-3 animate-spin ${viewMode === "list" ? "mr-1" : ""}`} />
-                        ) : (
-                          <Sparkles className={`h-3 w-3 ${viewMode === "list" ? "mr-1" : ""}`} />
-                        )}
-                        {viewMode === "list" && (publishingId === group.id ? "发布中" : "一键上架")}
+                        <Sparkles className={`h-3 w-3 ${viewMode === "list" ? "mr-1" : ""}`} />
+                        {viewMode === "list" && (publishStatuses.get(group.id)?.is_published ? "管理商城" : "一键上架")}
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => void viewGroupDetails(group.id)} title="查看">
                         <Eye className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
@@ -1109,6 +1129,15 @@ export function PromptGroupsView() {
           </div>
         </DialogContent>
       </Dialog>
+      {publishingGroup && (
+        <PublishModal
+          group={publishingGroup}
+          initialStatus={publishStatuses.get(publishingGroup.id)}
+          isOpen={isPublishModalOpen}
+          onClose={() => setIsPublishModalOpen(false)}
+          onSuccess={handlePublishSuccess}
+        />
+      )}
     </div>
   );
 }

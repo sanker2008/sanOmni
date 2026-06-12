@@ -11,7 +11,6 @@ export default function SyncButton() {
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<any>(null);
   const [enabled, setEnabled] = useState(false);
-  const [enabled, setEnabled] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [direction, setDirection] = useState<"both" | "push" | "pull">("both");
 

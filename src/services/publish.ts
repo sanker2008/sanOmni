@@ -3,7 +3,13 @@ import { promptApi } from "./tauri";
 const SANPROMPT_API_URL = "http://localhost:3000/api/sync";
 const SYNC_SECRET = "sanprompt_default_secret_2026"; // Hardcoded for MVP, should be in env
 
-export async function publishPromptToWeb(groupId: string) {
+export interface PublishConfig {
+  price: number;
+  category: string;
+  is_published: boolean;
+}
+
+export async function publishPromptToWeb(groupId: string, config: PublishConfig) {
   try {
     // 1. 获取本地完整的 Prompt 详情
     const detail = await promptApi.getOne(groupId);
@@ -22,12 +28,22 @@ export async function publishPromptToWeb(groupId: string) {
     // 假设拿第一张关联图片的 filename 作为封面（实际生产环境需要先上传图床）
     const cover_image_url = images.length > 0 ? `/images/placeholders/${images[0].filename}` : "";
 
+    const name = group.name || "Untitled Template";
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+
     const payload = {
       id: group.id,
-      name: group.name || "Untitled Template",
+      name: name,
+      slug: slug,
       description: group.description || "",
-      category: "AI Art", // Default category
-      price: 4.99, // Default MVP price
+      prompt: group.prompt || "",
+      negative_prompt: group.negative_prompt || "",
+      category: config.category || "AI Art",
+      price: config.price ?? 4.99,
+      is_published: config.is_published,
       template_schema,
       cover_image_url
     };
@@ -55,5 +71,31 @@ export async function publishPromptToWeb(groupId: string) {
   } catch (error: any) {
     console.error("Publish error:", error);
     throw error;
+  }
+}
+
+export async function getPublishStatus(ids: string[]) {
+  try {
+    const response = await fetch(SANPROMPT_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SYNC_SECRET}`
+      },
+      body: JSON.stringify({
+        action: "get_status",
+        payload: { ids }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch status");
+    }
+
+    const result = await response.json();
+    return result.data as { id: string; price: number; category: string; is_published: boolean }[];
+  } catch (error) {
+    console.error("Get status error:", error);
+    return [];
   }
 }
