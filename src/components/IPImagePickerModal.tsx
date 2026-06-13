@@ -104,7 +104,7 @@ export default function IPImagePickerModal({
         </div>
 
         {/* 图片选择区域 */}
-        <ScrollArea className="flex-1 border rounded-md p-4 bg-muted/20">
+        <ScrollArea className="h-[60vh] border rounded-md p-4 bg-muted/20">
           {filteredImages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
               <span className="text-sm">未找到匹配的图片</span>

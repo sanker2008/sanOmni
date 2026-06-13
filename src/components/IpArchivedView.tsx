@@ -42,8 +42,12 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Eye,
+  FolderOpen
 } from "lucide-react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -198,6 +202,8 @@ export default function IpArchivedView() {
   const [ipAvatarPath, setIpAvatarPath] = useState<string | null>(null);
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isAvatarFromAsset, setIsAvatarFromAsset] = useState(false);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [showPlatformInfo, setShowPlatformInfo] = useState(false);
 
   const [deleteIpId, setDeleteIpId] = useState<string | null>(null);
   const [deleteIpName, setDeleteIpName] = useState<string>("");
@@ -322,6 +328,10 @@ export default function IpArchivedView() {
   const [selectedPackId, setSelectedPackId] = useState<string>("__ALL__");
   const [isPackModalOpen, setIsPackModalOpen] = useState(false);
   const [editingPack, setEditingPack] = useState<IpStickerPack | null>(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 60;
   const [packName, setPackName] = useState("");
   const [packPath, setPackPath] = useState("");
   const [packDescription, setPackDescription] = useState("");
@@ -402,6 +412,27 @@ export default function IpArchivedView() {
     } catch (e) {
       console.error("导入表情图失败:", e);
       toast({ title: "导入失败", variant: "destructive" });
+    }
+  };
+
+  const handleImportEmojisFromAssets = async (imageIds: string[]) => {
+    if (!selectedIpId) return;
+    const targetPackId = (selectedPackId === "__ALL__" || selectedPackId === "__UNGROUPED__") ? null : selectedPackId;
+    
+    // 从 archivedImages 中查找对应的绝对路径
+    const paths = imageIds.map(id => archivedImages.find(img => img.id === id)?.absolute_path).filter(Boolean) as string[];
+    if (paths.length === 0) return;
+
+    try {
+      const words = paths.map(() => null);
+      await ipApi.addEmojis(selectedIpId, targetPackId, paths, words);
+      toast({ title: "导入成功", description: "已从资产库添加为表情" });
+      loadArchivedImages();
+    } catch (e) {
+      console.error("从资产库导入表情图失败:", e);
+      toast({ title: "导入失败", variant: "destructive" });
+    } finally {
+      setIsEmojiPickerOpen(false);
     }
   };
 
@@ -940,6 +971,18 @@ export default function IpArchivedView() {
     return result;
   }, [filteredImages, sortBy, sortOrder]);
 
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredImages.length, selectedIpId, searchQuery, sortBy, sortOrder, filterTagId, filterEmojiPack, filterHasWatermark]);
+
+  // Calculate paginated images
+  const totalPages = Math.ceil(sortedImages.length / pageSize) || 1;
+  const paginatedImages = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return sortedImages.slice(startIndex, startIndex + pageSize);
+  }, [sortedImages, currentPage, pageSize]);
+
   const allAvailableTags = useMemo(() => {
     const tagsMap = new Map<string, any>();
     archivedImages.forEach(img => {
@@ -962,8 +1005,8 @@ export default function IpArchivedView() {
     return counts;
   }, [archivedImages]);
 
-  const isAllSelected = sortedImages.length > 0 &&
-    sortedImages.every((img) => selectedImages.includes(img.id));
+  const isAllSelected = paginatedImages.length > 0 &&
+    paginatedImages.every((img) => selectedImages.includes(img.id));
 
   const handleQuickUpload = async () => {
     if (!selectedIpId || !ipDetail) return;
@@ -1265,72 +1308,13 @@ export default function IpArchivedView() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* IP 详情 Header */}
-        {selectedIpId && ipDetail && (
-          <div className="p-6 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/45 flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
-                <Menu className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="hidden md:flex shrink-0 -ml-2 text-muted-foreground hover:text-foreground" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} title={isSidebarCollapsed ? "展开左侧栏" : "收起左侧栏"}>
-                {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
-              </Button>
-              <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted border shadow-sm">
-                {ipDetail.ip.avatar_path ? (
-                  <img
-                    src={convertFileSrc(ipDetail.ip.avatar_path)}
-                    alt={ipDetail.ip.name}
-                    className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                    <Users className="w-8 h-8 opacity-40" />
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h1 className="text-2xl font-bold flex items-center gap-3">
-                  {ipDetail.ip.name}
-                  <Badge variant="secondary">IP 形象</Badge>
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  创建于 {new Date(ipDetail.ip.created_at).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {ipDetail.ip.id !== "unknown" && (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => handleOpenEditIp(ipDetail.ip)} className="gap-1">
-                    <Pencil className="w-4 h-4" />
-                    编辑资料
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => handleDeleteIp(ipDetail.ip.id)} className="gap-1">
-                    <Trash2 className="w-4 h-4" />
-                    删除 IP
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {selectedIpId && !ipDetail && (
-          <div className="p-6 border-b bg-card/80 backdrop-blur flex items-center gap-4 shadow-sm">
-            <Skeleton className="w-16 h-16 rounded-lg animate-pulse" />
-            <div className="space-y-2">
-              <Skeleton className="h-6 w-32 animate-pulse" />
-              <Skeleton className="h-4 w-48 animate-pulse" />
-            </div>
-          </div>
-        )}
-
         {/* Tab Headers (Only shown if selectedIpId is not null) */}
         {selectedIpId && ipDetail && (
-          <div className="border-b px-6 bg-card/40 z-10 flex-shrink-0">
-            <div className="flex gap-4">
+          <div className="border-b px-6 bg-card/40 z-10 flex-shrink-0 flex items-center gap-4">
+            <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
+              <Menu className="w-5 h-5" />
+            </Button>
+            <div className="flex gap-4 overflow-x-auto no-scrollbar">
               {[
                 { id: "creations", label: "归档资产", icon: Sparkles },
                 { id: "emojis", label: "表情包管理", icon: Smile },
@@ -1562,7 +1546,7 @@ export default function IpArchivedView() {
                   <div className="flex items-center gap-4">
                     <button
                       onClick={() =>
-                        isAllSelected ? clearSelection() : selectAll(sortedImages.map((img) => img.id))
+                        isAllSelected ? clearSelection() : selectAll(paginatedImages.map((img) => img.id))
                       }
                       className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
                     >
@@ -1694,38 +1678,74 @@ export default function IpArchivedView() {
                     </div>
                   </div>
                 ) : (
-                  <ScrollArea className="h-full">
-                    {viewMode === "grid" ? (
-                      <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                        {sortedImages.map((image) => (
-                          <ImageCard 
-                            key={image.id} 
-                            image={image}
-                            onDelete={handleDeleteImage}
-                            onArchive={handleUnarchiveSingle}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-4 space-y-2">
-                        {sortedImages.map((image) => (
-                          <ImageCard
-                            key={image.id}
-                            image={image}
-                            onDelete={handleDeleteImage}
-                            onArchive={handleUnarchiveSingle}
-                            listMode
-                          />
-                        ))}
+                  <div className="flex flex-col h-full">
+                    <ScrollArea className="flex-1">
+                      {viewMode === "grid" ? (
+                        <div className="p-4 pb-28 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                          {paginatedImages.map((image) => (
+                            <ImageCard 
+                              key={image.id} 
+                              image={image}
+                              onDelete={handleDeleteImage}
+                              onArchive={handleUnarchiveSingle}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 pb-28 space-y-2">
+                          {paginatedImages.map((image) => (
+                            <ImageCard
+                              key={image.id}
+                              image={image}
+                              onDelete={handleDeleteImage}
+                              onArchive={handleUnarchiveSingle}
+                              listMode
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                    
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between px-6 py-3 border-t bg-card shrink-0">
+                        <div className="text-sm text-muted-foreground">
+                          共 {sortedImages.length} 项记录，当前显示 {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedImages.length)} 项
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          >
+                            <ChevronLeft className="w-4 h-4 mr-1" />
+                            上一页
+                          </Button>
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm px-2">
+                              {currentPage} / {totalPages}
+                            </span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={currentPage === totalPages}
+                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          >
+                            下一页
+                            <ChevronRight className="w-4 h-4 ml-1" />
+                          </Button>
+                        </div>
                       </div>
                     )}
-                  </ScrollArea>
+                  </div>
                 )}
               </div>
 
               {selectedIpId && (
                 <Button
-                  className="absolute bottom-8 right-8 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all"
+                  className="absolute bottom-8 right-8 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all z-[40]"
                   size="icon"
                   onClick={handleQuickUpload}
                   disabled={isQuickUploading}
@@ -1804,26 +1824,7 @@ export default function IpArchivedView() {
                             >
                               <span className="truncate text-xs">{pack.name} ({packEmojis.length})</span>
                               <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingPack(pack);
-                                    setPackName(pack.name);
-                                    setPackPath(pack.path || "");
-                                    setPackDescription(pack.description || "");
-                                    setPackCoverPath(pack.cover_path || "");
-                                    setPackBannerPath(pack.banner_path || "");
-                                    setPackIconPath(pack.icon_path || "");
-                                    setPackRewardGuidePath(pack.reward_guide_path || "");
-                                    setPackRewardThanksPath(pack.reward_thanks_path || "");
-                                    setIsPackModalOpen(true);
-                                  }}
-                                  className="h-5 w-5 hover:bg-primary/20"
-                                >
-                                  <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
-                                </Button>
+
                                 <Button
                                   size="icon"
                                   variant="ghost"
@@ -1865,24 +1866,50 @@ export default function IpArchivedView() {
                           : ipDetail.sticker_packs.find((p) => p.id === selectedPackId)?.description || "无套件描述"}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={handleImportEmojis}
-                      className="gap-1.5"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      导入本地表情
-                    </Button>
+                    {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const pack = ipDetail.sticker_packs.find(p => p.id === selectedPackId);
+                            if (pack) {
+                              setEditingPack(pack);
+                              setPackName(pack.name);
+                              setPackPath(pack.path || "");
+                              setPackDescription(pack.description || "");
+                              setPackCoverPath(pack.cover_path || "");
+                              setPackBannerPath(pack.banner_path || "");
+                              setPackIconPath(pack.icon_path || "");
+                              setPackRewardGuidePath(pack.reward_guide_path || "");
+                              setPackRewardThanksPath(pack.reward_thanks_path || "");
+                              setIsPackModalOpen(true);
+                            }
+                          }}
+                        >
+                          编辑
+                        </Button>
+                        <Button
+                          variant={showPlatformInfo ? "secondary" : "outline"}
+                          size="sm"
+                          onClick={() => setShowPlatformInfo(!showPlatformInfo)}
+                          className="gap-1.5 transition-all"
+                        >
+                          {showPlatformInfo ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+                          {showPlatformInfo ? "收起平台信息" : "平台信息"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   <ScrollArea className="flex-1 border rounded-md py-3 px-0 bg-background/40">
                     {currentEmojis.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
                         <Smile className="w-10 h-10 opacity-30" />
-                        <span className="text-xs">此分组下暂无表情图片，请点击右上角“导入本地表情”</span>
+                        <span className="text-xs">此分组下暂无表情图片，请点击右下角“+”按钮导入</span>
                       </div>
                     ) : (
-                      <div className="p-4 grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      <div className="p-4 pb-28 grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                         {currentEmojis.map((emoji, index) => {
                           return (
                             <div
@@ -1906,23 +1933,38 @@ export default function IpArchivedView() {
                                     size="icon"
                                     variant="ghost"
                                     className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
-                                    onClick={() => handleCopyEmoji(emoji.image_path)}
-                                    title="复制到剪贴板"
+                                    onClick={() => {
+                                      const paths = currentEmojis.map(e => e.image_path);
+                                      setPreviewImages(paths);
+                                      setPreviewIndex(index);
+                                    }}
+                                    title="查看大图"
                                   >
-                                    <Copy className="w-3.5 h-3.5" />
+                                    <Eye className="w-3.5 h-3.5" />
                                   </Button>
                                   <Button
                                     size="icon"
                                     variant="ghost"
                                     className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
                                     onClick={() => {
-                                      setActiveWatermarkPath(emoji.image_path);
-                                      setIsWatermarkModalOpen(true);
+                                      invoke('show_in_folder', { path: emoji.image_path }).catch(err => {
+                                        console.error("Failed to open folder:", err);
+                                      });
                                     }}
-                                    title="去水印"
+                                    title="在文件夹中显示"
                                   >
-                                    <Sparkles className="w-3.5 h-3.5" />
+                                    <FolderOpen className="w-3.5 h-3.5" />
                                   </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
+                                    onClick={() => handleCopyEmoji(emoji.image_path)}
+                                    title="复制到剪贴板"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </Button>
+
                                   <Button
                                     size="icon"
                                     variant="ghost"
@@ -1944,18 +1986,7 @@ export default function IpArchivedView() {
                                   onBlur={(e) => handleUpdateEmojiWord(emoji.id, e.target.value)}
                                   className="w-full text-[10px] bg-transparent border-none outline-none focus:ring-0 text-foreground/85 placeholder:text-muted-foreground/40 truncate text-center font-mono"
                                 />
-                                
-                                {/* Move dropdown */}
-                                <select
-                                  value={emoji.pack_id || ""}
-                                  onChange={(e) => handleMoveEmoji(emoji.id, e.target.value || null)}
-                                  className="w-full text-[9px] bg-transparent border-none text-muted-foreground focus:ring-0 cursor-pointer text-center"
-                                >
-                                  <option value="">未分组</option>
-                                  {ipDetail.sticker_packs.map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                  ))}
-                                </select>
+
                               </div>
                             </div>
                           );
@@ -1966,8 +1997,8 @@ export default function IpArchivedView() {
                 </div>
               </div>
 
-              {/* 平台信息 (右侧栏) - 只有选定了具体套件才显示 */}
-              {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && (
+              {/* 平台信息 (右侧栏) - 只有选定了具体套件并且点击了平台信息才显示 */}
+              {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && showPlatformInfo && (
                 <div className="w-64 border bg-muted/10 rounded-lg flex flex-col flex-shrink-0 overflow-hidden">
                   <div className="flex items-center justify-between p-4 border-b bg-card">
                     <h3 className="font-semibold text-sm">平台信息</h3>
@@ -2140,6 +2171,52 @@ export default function IpArchivedView() {
           {selectedIpId && ipDetail && activeTab === "profile" && (
             <ScrollArea className="h-full p-6">
               <div className="flex flex-col gap-6 max-w-4xl">
+                {/* IP 基本信息 (由顶部移入) */}
+                <Card>
+                  <CardContent className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted border shadow-sm">
+                        {ipDetail.ip.avatar_path ? (
+                          <img
+                            src={convertFileSrc(ipDetail.ip.avatar_path)}
+                            alt={ipDetail.ip.name}
+                            className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                            <Users className="w-10 h-10 opacity-40" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <h1 className="text-2xl font-bold flex items-center gap-3">
+                          {ipDetail.ip.name}
+                          <Badge variant="secondary">IP 形象</Badge>
+                        </h1>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          创建于 {new Date(ipDetail.ip.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-4 md:mt-0">
+                      {ipDetail.ip.id !== "unknown" && (
+                        <>
+                          <Button variant="outline" onClick={() => handleOpenEditIp(ipDetail.ip)} className="gap-1">
+                            <Pencil className="w-4 h-4" />
+                            编辑资料
+                          </Button>
+                          <Button variant="destructive" onClick={() => handleDeleteIp(ipDetail.ip.id)} className="gap-1">
+                            <Trash2 className="w-4 h-4" />
+                            删除 IP
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {/* 灵感故事 Quote */}
                 {ipDetail.ip.inspiration && (
                   <div className="relative overflow-hidden rounded-xl border bg-gradient-to-r from-primary/5 via-primary/10 to-transparent p-6 shadow-sm">
@@ -2887,6 +2964,48 @@ export default function IpArchivedView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 侧边栏折叠/展开按钮（固定左下角） */}
+      <div className={cn(
+        "absolute bottom-6 z-[60] hidden md:flex transition-all duration-300",
+        isSidebarCollapsed ? "left-6" : "left-6"
+      )}>
+        <Button variant="secondary" size="icon" className="rounded-full shadow-lg border hover:shadow-xl transition-all" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} title={isSidebarCollapsed ? "展开左侧栏" : "收起左侧栏"}>
+          {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5 text-muted-foreground" /> : <PanelLeftClose className="w-5 h-5 text-muted-foreground" />}
+        </Button>
+      </div>
+
+      {/* FAB - 导入表情 (只有在表情包管理Tab下显示) */}
+      {selectedIpId && ipDetail && activeTab === "emojis" && (
+        <div className="absolute bottom-8 right-8 z-[60]">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" className="w-14 h-14 rounded-full shadow-xl hover:shadow-2xl transition-shadow bg-primary text-primary-foreground hover:scale-105">
+                <Plus className="w-7 h-7" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 mb-2">
+              <DropdownMenuItem className="cursor-pointer py-3" onClick={handleImportEmojis}>
+                从本地上传
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer py-3" onClick={() => setIsEmojiPickerOpen(true)}>
+                从当前资产库导入
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      {/* 资产库表情选择弹窗 */}
+      <IPImagePickerModal
+        isOpen={isEmojiPickerOpen}
+        onClose={() => setIsEmojiPickerOpen(false)}
+        title="从资产库导入表情"
+        description="选择当前 IP 的归档图片添加为表情"
+        multiSelect={true}
+        images={archivedImages.filter((img) => img.ip_id === selectedIpId)}
+        onConfirm={handleImportEmojisFromAssets}
+      />
     </div>
   );
 }
