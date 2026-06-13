@@ -448,17 +448,6 @@ export default function IpArchivedView() {
     }
   };
 
-  const handleMoveEmoji = async (emojiId: string, packId: string | null) => {
-    if (!selectedIpId) return;
-    try {
-      await ipApi.moveEmojisToPack([emojiId], packId);
-      toast({ title: "移动成功", description: "已成功更新该表情的分组" });
-      loadArchivedImages();
-    } catch (e) {
-      console.error("移动表情失败:", e);
-      toast({ title: "移动失败", variant: "destructive" });
-    }
-  };
 
   const handleSavePack = async () => {
     if (!packName.trim() || !selectedIpId) return;
