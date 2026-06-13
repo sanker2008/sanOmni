@@ -11,7 +11,7 @@ dist-ssr/
 # Tauri build outputs
 src-tauri/target/
 src-tauri/gen/
-src-tauri/Cargo.lock
+# src-tauri/Cargo.lock
 
 # Logs
 logs/
