@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Fixed
+- Hardened cloud sync recovery for incomplete pulls: trim configured server URLs, tolerate legacy sync JSON with unescaped Windows paths, prevent advancing the sync cursor when remote changes are not fully applied, and repair local file path rewriting for IP sticker pack emojis.
+- Updated force repush to include sticker packs, sticker pack platform records, and emoji records instead of only IP assets/images/tags.
+
+### Notes
+- Force repush is not a safe merge operation. Back up the server database and confirm the local database is the most complete source before using it.
+- Current incremental pull depends on `sync_log`; a future full snapshot/reconciliation endpoint is still required to recover from server business-table and sync-log divergence.
+
 ## [1.1.8] - 2026-06-14
 ### Added
 - Implemented pagination for Archived Assets (creations tab) to optimize rendering performance for large image collections.

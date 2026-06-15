@@ -5,6 +5,45 @@ use std::path::Path;
 use tauri::Emitter;
 use uuid::Uuid;
 
+fn escape_legacy_backslashes(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.peek() {
+                Some('"') | Some('\\') | Some('/') | Some('b') | Some('f') | Some('n') | Some('r') | Some('t') => {
+                    output.push(ch);
+                    if let Some(next) = chars.next() {
+                        output.push(next);
+                    }
+                }
+                Some('u') => {
+                    output.push(ch);
+                    if let Some(next) = chars.next() {
+                        output.push(next);
+                    }
+                    for _ in 0..4 {
+                        if let Some(next) = chars.next() {
+                            output.push(next);
+                        }
+                    }
+                }
+                _ => output.push_str("\\\\"),
+            }
+        } else {
+            output.push(ch);
+        }
+    }
+
+    output
+}
+
+fn parse_sync_json(data_str: &str) -> Result<serde_json::Value, serde_json::Error> {
+    serde_json::from_str::<serde_json::Value>(data_str)
+        .or_else(|_| serde_json::from_str::<serde_json::Value>(&escape_legacy_backslashes(data_str)))
+}
+
 pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     // 1. 读库，收集待推送的变更（放入独立的代码块中，确保 Connection 及时被释放）
     let (server_url, api_key, device_id, last_sync_version, pending_ids, mut changes) = {
@@ -96,7 +135,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
     for (i, change) in changes.iter_mut().enumerate() {
         if (change.table == "ip_assets" || change.table == "ip_images" || change.table == "ip_sticker_packs" || change.table == "ip_emojis") && change.operation != "DELETE" {
             if let Some(data_str) = &change.data {
-                if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                if let Ok(mut json) = parse_sync_json(data_str) {
                     let path_hash_keys = if change.table == "ip_assets" {
                         vec![("avatar_path", "file_hash")]
                     } else if change.table == "ip_images" {
@@ -250,10 +289,44 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                     }
                 });
 
+                let mut pulled_ip_paths = std::collections::HashMap::<String, String>::new();
+                let mut pulled_pack_paths = std::collections::HashMap::<String, String>::new();
+                for change in &resp.changes {
+                    if change.operation == "DELETE" {
+                        continue;
+                    }
+                    let Some(data_str) = &change.data else {
+                        continue;
+                    };
+                    let Ok(json) = parse_sync_json(data_str) else {
+                        continue;
+                    };
+
+                    match change.table.as_str() {
+                        "ip_assets" => {
+                            if let (Some(id), Some(path)) = (
+                                json.get("id").and_then(|v| v.as_str()),
+                                json.get("path").and_then(|v| v.as_str()),
+                            ) {
+                                pulled_ip_paths.insert(id.to_string(), path.to_string());
+                            }
+                        }
+                        "ip_sticker_packs" => {
+                            if let (Some(id), Some(path)) = (
+                                json.get("id").and_then(|v| v.as_str()),
+                                json.get("path").and_then(|v| v.as_str()),
+                            ) {
+                                pulled_pack_paths.insert(id.to_string(), path.to_string());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 let total = resp.changes.len();
                 let mut current = 0;
 
-                // 下载文件并修正 absolute_path
+                // 下载文件并修正本地文件路径
                 let db_conn = Connection::open(Path::new(db_path)).unwrap();
                 for change in &mut resp.changes {
                     if (change.table == "ip_assets"
@@ -264,7 +337,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                     {
                         if let Some(data_str) = &change.data {
                             if let Ok(mut json) =
-                                serde_json::from_str::<serde_json::Value>(data_str)
+                                parse_sync_json(data_str)
                             {
                                 let file_tasks = if change.table == "ip_assets" {
                                     vec![("avatar_path", "file_hash")]
@@ -299,7 +372,13 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             filename.map(|f| format!("ip_archived/{}/{}", ip_path, f))
                                         } else if change.table == "ip_sticker_packs" {
                                             let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
-                                            let ip_path: String = db_conn.query_row("SELECT path FROM ip_assets WHERE id = ?", rusqlite::params![ip_id], |row| row.get(0)).unwrap_or_else(|_| ip_id.to_string());
+                                            let ip_path = pulled_ip_paths
+                                                .get(ip_id)
+                                                .cloned()
+                                                .or_else(|| {
+                                                    db_conn.query_row("SELECT path FROM ip_assets WHERE id = ?", rusqlite::params![ip_id], |row| row.get(0)).ok()
+                                                })
+                                                .unwrap_or_else(|| ip_id.to_string());
                                             let pack_path = json.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
                                             let filename = json.get(path_key)
                                                 .and_then(|v| v.as_str())
@@ -307,10 +386,21 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             filename.map(|f| format!("ip_archived/{}/packs/{}/{}", ip_path, pack_path, f))
                                         } else if change.table == "ip_emojis" {
                                             let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
-                                            let ip_path: String = db_conn.query_row("SELECT path FROM ip_assets WHERE id = ?", rusqlite::params![ip_id], |row| row.get(0)).unwrap_or_else(|_| ip_id.to_string());
+                                            let ip_path = pulled_ip_paths
+                                                .get(ip_id)
+                                                .cloned()
+                                                .or_else(|| {
+                                                    db_conn.query_row("SELECT path FROM ip_assets WHERE id = ?", rusqlite::params![ip_id], |row| row.get(0)).ok()
+                                                })
+                                                .unwrap_or_else(|| ip_id.to_string());
                                             let pack_id_opt = json.get("pack_id").and_then(|v| v.as_str());
                                             let pack_path_opt: Option<String> = if let Some(pid) = pack_id_opt {
-                                                db_conn.query_row("SELECT path FROM ip_sticker_packs WHERE id = ?", rusqlite::params![pid], |row| row.get(0)).ok()
+                                                pulled_pack_paths
+                                                    .get(pid)
+                                                    .cloned()
+                                                    .or_else(|| {
+                                                        db_conn.query_row("SELECT path FROM ip_sticker_packs WHERE id = ?", rusqlite::params![pid], |row| row.get(0)).ok()
+                                                    })
                                             } else { None };
                                             let filename = json.get(path_key)
                                                 .and_then(|v| v.as_str())
@@ -389,7 +479,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                             ("ip_assets", "INSERT") | ("ip_assets", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
                                     if let Ok(json) =
-                                        serde_json::from_str::<serde_json::Value>(data_str)
+                                        parse_sync_json(data_str)
                                     {
                                         let id = json
                                             .get("id")
@@ -494,7 +584,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                             ("ip_images", "INSERT") | ("ip_images", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
                                     if let Ok(json) =
-                                        serde_json::from_str::<serde_json::Value>(data_str)
+                                        parse_sync_json(data_str)
                                     {
                                         let id = json
                                             .get("id")
@@ -550,14 +640,14 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             .get("watermark_platform")
                                             .and_then(|v| v.as_str())
                                             .map(String::from);
-                                        let watermark_detected: Option<String> = json
+                                        let watermark_detected: i64 = json
                                             .get("watermark_detected")
-                                            .and_then(|v| v.as_str())
-                                            .map(String::from);
-                                        let watermark_removed: Option<String> = json
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or(0);
+                                        let watermark_removed: i64 = json
                                             .get("watermark_removed")
-                                            .and_then(|v| v.as_str())
-                                            .map(String::from);
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or(0);
                                         let created_at = json
                                             .get("created_at")
                                             .and_then(|v| v.as_str())
@@ -604,7 +694,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                     }
                             ("ip_sticker_packs", "INSERT") | ("ip_sticker_packs", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
-                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                    if let Ok(json) = parse_sync_json(data_str) {
                                         let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let name = json.get("name").and_then(|v| v.as_str()).unwrap_or_default();
@@ -629,7 +719,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                             }
                             ("ip_sticker_pack_platforms", "INSERT") | ("ip_sticker_pack_platforms", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
-                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                    if let Ok(json) = parse_sync_json(data_str) {
                                         let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let pack_id = json.get("pack_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let platform_name = json.get("platform_name").and_then(|v| v.as_str()).unwrap_or_default();
@@ -651,7 +741,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                             }
                             ("ip_emojis", "INSERT") | ("ip_emojis", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
-                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                    if let Ok(json) = parse_sync_json(data_str) {
                                         let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let pack_id = json.get("pack_id").and_then(|v| v.as_str()).map(String::from);
@@ -677,7 +767,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                             }
                             ("ip_image_relations", "INSERT") | ("ip_image_relations", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
-                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                    if let Ok(json) = parse_sync_json(data_str) {
                                         let ip_image_id = json.get("ip_image_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let is_primary = json.get("is_primary").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -699,7 +789,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                             }
                             ("ip_image_tag_relations", "INSERT") | ("ip_image_tag_relations", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
-                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                    if let Ok(json) = parse_sync_json(data_str) {
                                         let ip_image_id = json.get("ip_image_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let tag_id = json.get("tag_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         tx.execute(
@@ -720,7 +810,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                             }
                             ("tags", "INSERT") | ("tags", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
-                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                    if let Ok(json) = parse_sync_json(data_str) {
                                         let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let name = json.get("name").and_then(|v| v.as_str()).unwrap_or_default();
                                         let name_en = json.get("name_en").and_then(|v| v.as_str()).map(String::from);
@@ -749,8 +839,16 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                         }
                     }
 
-                    // 重新创建同步触发器
+                    // Recreate sync triggers after applying remote changes.
                     let _ = tx.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
+
+                    if applied != resp.changes.len() {
+                        return Err(format!(
+                            "Pull apply incomplete: applied {} of {} changes. Rolled back without advancing sync cursor.",
+                            applied,
+                            resp.changes.len()
+                        ));
+                    }
 
                     if tx.commit().is_ok() {
                         pulled_count = applied;

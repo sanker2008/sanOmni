@@ -78,8 +78,9 @@ pub fn sync_configure(db_path: String, server_url: String, api_key: String) -> C
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
+    let server_url = server_url.trim().trim_end_matches('/').to_string();
 
-    // 确保同步表存在，否则还没开启引擎时直接保存配置会报错
+    // Ensure sync tables exist before saving config.
     let _ = conn.execute_batch(crate::sync::triggers::SYNC_SCHEMA);
 
     if let Err(e) = conn.execute(
@@ -181,6 +182,15 @@ pub fn sync_force_repush(db_path: String) -> CommandResult<bool> {
 
         INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
         SELECT 'tags', id, 'INSERT', json_object('id', id, 'name', name, 'name_en', name_en, 'color', color, 'parent_id', parent_id, 'use_count', use_count, 'is_builtin', is_builtin, 'created_at', created_at) FROM tags;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_sticker_packs', id, 'INSERT', json_object('id', id, 'ip_id', ip_id, 'name', name, 'path', path, 'description', description, 'cover_path', cover_path, 'banner_path', banner_path, 'icon_path', icon_path, 'reward_guide_path', reward_guide_path, 'reward_thanks_path', reward_thanks_path, 'created_at', created_at, 'updated_at', updated_at) FROM ip_sticker_packs;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_sticker_pack_platforms', id, 'INSERT', json_object('id', id, 'pack_id', pack_id, 'platform_name', platform_name, 'pack_name_on_platform', pack_name_on_platform, 'emoji_size_spec', emoji_size_spec, 'status', status, 'publish_url', publish_url, 'downloads_count', downloads_count, 'updated_at', updated_at) FROM ip_sticker_pack_platforms;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_emojis', id, 'INSERT', json_object('id', id, 'ip_id', ip_id, 'pack_id', pack_id, 'image_path', image_path, 'trigger_word', trigger_word, 'sort_order', sort_order, 'created_at', created_at) FROM ip_emojis;
         
         COMMIT;
     "#;

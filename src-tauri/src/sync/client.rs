@@ -35,6 +35,7 @@ pub struct SyncClient {
 
 impl SyncClient {
     pub fn new(server_url: String, api_key: String) -> Self {
+        let server_url = server_url.trim().trim_end_matches('/').to_string();
         let client = reqwest::Client::builder()
             .no_proxy()
             .timeout(std::time::Duration::from_secs(120))
