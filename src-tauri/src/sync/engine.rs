@@ -186,24 +186,33 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
     }
 
     if !file_hashes_to_check.is_empty() {
-        if let Ok(missing_hashes) = client.check_files(file_hashes_to_check).await {
-            let total = files_to_upload.len();
-            let mut current = 0;
-            for (hash, abs_path, _) in files_to_upload {
-                if missing_hashes.contains(&hash) {
-                    current += 1;
-                    let _ = app.emit(
-                        "sync-progress",
-                        serde_json::json!({
-                            "phase": "upload",
-                            "current": current,
-                            "total": total,
-                            "path": abs_path
-                        }),
-                    );
-                    if let Err(e) = client.upload_file(&abs_path).await {
-                        eprintln!("[Sync] Failed to upload file {}: {}", abs_path, e);
-                    }
+        let missing_hashes = client
+            .check_files(file_hashes_to_check)
+            .await
+            .map_err(|e| format!("Check remote files failed: {}", e))?;
+        let total = files_to_upload.len();
+        let mut current = 0;
+        for (hash, abs_path, _) in files_to_upload {
+            if missing_hashes.contains(&hash) {
+                current += 1;
+                let _ = app.emit(
+                    "sync-progress",
+                    serde_json::json!({
+                        "phase": "upload",
+                        "current": current,
+                        "total": total,
+                        "path": abs_path
+                    }),
+                );
+                let uploaded_hash = client
+                    .upload_file(&abs_path)
+                    .await
+                    .map_err(|e| format!("Upload file failed {}: {}", abs_path, e))?;
+                if uploaded_hash != hash {
+                    return Err(format!(
+                        "Uploaded file hash mismatch: {} expected {} got {}",
+                        abs_path, hash, uploaded_hash
+                    ));
                 }
             }
         }
@@ -432,15 +441,55 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             );
 
                                             if let Some(parent) = local_abs_path.parent() {
-                                                if let Err(e) = tokio::fs::create_dir_all(parent).await {
-                                                    eprintln!("[Sync] Failed to create directory {}: {}", parent.display(), e);
+                                                tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                                                    format!(
+                                                        "Create directory failed {}: {}",
+                                                        parent.display(),
+                                                        e
+                                                    )
+                                                })?;
+                                            }
+
+                                            let mut needs_download = true;
+                                            if local_abs_path.exists() {
+                                                if let Ok(existing) = tokio::fs::read(&local_abs_path).await {
+                                                    let mut hasher = Sha256::new();
+                                                    hasher.update(&existing);
+                                                    let existing_hash = format!("{:x}", hasher.finalize());
+                                                    needs_download = existing_hash != hash;
                                                 }
                                             }
 
-                                            if !local_abs_path.exists() {
-                                                if let Err(e) = client.download_file(&hash, &local_abs_path).await {
-                                                    eprintln!("[Sync] Failed to download file to {}: {}", local_abs_path.display(), e);
-                                                }
+                                            if needs_download {
+                                                client
+                                                    .download_file(&hash, &local_abs_path)
+                                                    .await
+                                                    .map_err(|e| {
+                                                        format!(
+                                                            "Download file failed {}: {}",
+                                                            local_abs_path.display(),
+                                                            e
+                                                        )
+                                                    })?;
+                                            }
+
+                                            let downloaded = tokio::fs::read(&local_abs_path).await.map_err(|e| {
+                                                format!(
+                                                    "Read downloaded file failed {}: {}",
+                                                    local_abs_path.display(),
+                                                    e
+                                                )
+                                            })?;
+                                            let mut hasher = Sha256::new();
+                                            hasher.update(&downloaded);
+                                            let downloaded_hash = format!("{:x}", hasher.finalize());
+                                            if downloaded_hash != hash {
+                                                return Err(format!(
+                                                    "Downloaded file hash mismatch: {} expected {} got {}",
+                                                    local_abs_path.display(),
+                                                    hash,
+                                                    downloaded_hash
+                                                ));
                                             }
 
                                             if let Some(obj) = json.as_object_mut() {

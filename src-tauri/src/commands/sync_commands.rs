@@ -1,6 +1,7 @@
 use crate::commands::CommandResult;
 use crate::sync;
 use rusqlite::Connection;
+use std::collections::HashSet;
 use std::path::Path;
 
 #[tauri::command]
@@ -99,7 +100,11 @@ pub fn sync_configure(db_path: String, server_url: String, api_key: String) -> C
 }
 
 #[tauri::command]
-pub async fn sync_now(db_path: String, direction: Option<String>, app: tauri::AppHandle) -> CommandResult<serde_json::Value> {
+pub async fn sync_now(
+    db_path: String,
+    direction: Option<String>,
+    app: tauri::AppHandle,
+) -> CommandResult<serde_json::Value> {
     match sync::engine::run_sync(&db_path, direction.as_deref(), &app).await {
         Ok(res) => CommandResult::ok(res),
         Err(e) => CommandResult::err(e),
@@ -152,6 +157,202 @@ pub async fn sync_get_history(
     match client.fetch_sync_history(limit, offset).await {
         Ok(data) => CommandResult::ok(data),
         Err(e) => CommandResult::err(format!("获取同步历史失败: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn sync_get_snapshot(
+    server_url: String,
+    api_key: String,
+) -> CommandResult<serde_json::Value> {
+    let client = crate::sync::client::SyncClient::new(server_url, api_key);
+    match client.fetch_snapshot().await {
+        Ok(data) => CommandResult::ok(data),
+        Err(e) => CommandResult::err(format!("Fetch sync snapshot failed: {}", e)),
+    }
+}
+
+fn snapshot_str_field<'a>(
+    table: &str,
+    value: &'a serde_json::Value,
+    field: &str,
+) -> Result<&'a str, String> {
+    value.get(field).and_then(|v| v.as_str()).ok_or_else(|| {
+        format!(
+            "Snapshot row for table {} is missing string field {}",
+            table, field
+        )
+    })
+}
+
+fn snapshot_record_key(table: &str, value: &serde_json::Value) -> Result<String, String> {
+    match table {
+        "ip_image_relations" => Ok(format!(
+            "{}|{}",
+            snapshot_str_field(table, value, "ip_image_id")?,
+            snapshot_str_field(table, value, "ip_id")?
+        )),
+        "ip_image_tag_relations" => Ok(format!(
+            "{}|{}",
+            snapshot_str_field(table, value, "ip_image_id")?,
+            snapshot_str_field(table, value, "tag_id")?
+        )),
+        "ip_creations" => Ok(format!(
+            "{}|{}",
+            snapshot_str_field(table, value, "ip_id")?,
+            snapshot_str_field(table, value, "image_path")?
+        )),
+        "ip_relations" => Ok(format!(
+            "{}|{}|{}",
+            snapshot_str_field(table, value, "ip_a_id")?,
+            snapshot_str_field(table, value, "ip_b_id")?,
+            snapshot_str_field(table, value, "relation_type")?
+        )),
+        _ => snapshot_str_field(table, value, "id").map(String::from),
+    }
+}
+
+fn remote_snapshot_keys(table: &str, rows: &serde_json::Value) -> Result<HashSet<String>, String> {
+    let rows = rows
+        .as_array()
+        .ok_or_else(|| format!("Snapshot table {} is not an array", table))?;
+    let mut keys = HashSet::new();
+    for value in rows {
+        keys.insert(snapshot_record_key(table, value)?);
+    }
+    Ok(keys)
+}
+
+fn local_record_keys(conn: &Connection, table: &str) -> Result<HashSet<String>, String> {
+    let sql = match table {
+        "ip_image_relations" => "SELECT ip_image_id || '|' || ip_id FROM ip_image_relations",
+        "ip_image_tag_relations" => {
+            "SELECT ip_image_id || '|' || tag_id FROM ip_image_tag_relations"
+        }
+        "ip_creations" => "SELECT ip_id || '|' || image_path FROM ip_creations",
+        "ip_relations" => {
+            "SELECT ip_a_id || '|' || ip_b_id || '|' || relation_type FROM ip_relations"
+        }
+        "ip_character_sheets" => "SELECT id FROM ip_character_sheets",
+        "ip_assets" => "SELECT id FROM ip_assets",
+        "ip_images" => "SELECT id FROM ip_images",
+        "ip_sticker_packs" => "SELECT id FROM ip_sticker_packs",
+        "ip_sticker_pack_platforms" => "SELECT id FROM ip_sticker_pack_platforms",
+        "ip_emojis" => "SELECT id FROM ip_emojis",
+        "tags" => "SELECT id FROM tags",
+        _ => return Ok(HashSet::new()),
+    };
+
+    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    let mut keys = HashSet::new();
+    for row in rows {
+        keys.insert(row.map_err(|e| e.to_string())?);
+    }
+    Ok(keys)
+}
+
+#[tauri::command]
+pub async fn sync_reconcile_snapshot(db_path: String) -> CommandResult<serde_json::Value> {
+    let conn = match Connection::open(Path::new(&db_path)) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("Open database failed: {}", e)),
+    };
+
+    let server_url: String = match conn.query_row(
+        "SELECT value FROM sync_config WHERE key = 'server_url'",
+        [],
+        |row| row.get(0),
+    ) {
+        Ok(v) => v,
+        Err(_) => return CommandResult::err("Sync server URL is not configured".to_string()),
+    };
+
+    let api_key = match keyring::Entry::new("sanomni-sync", "api_key")
+        .and_then(|entry| entry.get_password())
+    {
+        Ok(v) => v,
+        Err(_) => return CommandResult::err("Sync API key is not configured".to_string()),
+    };
+
+    let client = crate::sync::client::SyncClient::new(server_url, api_key);
+    let snapshot = match client.fetch_snapshot().await {
+        Ok(v) => v,
+        Err(e) => return CommandResult::err(format!("Fetch sync snapshot failed: {}", e)),
+    };
+
+    let tables = match snapshot.get("tables").and_then(|v| v.as_object()) {
+        Some(tables) => tables,
+        None => return CommandResult::err("Snapshot response has no tables object".to_string()),
+    };
+
+    let mut table_reports = serde_json::Map::new();
+    for (table, rows) in tables {
+        let remote_keys = match remote_snapshot_keys(table, rows) {
+            Ok(keys) => keys,
+            Err(e) => return CommandResult::err(e),
+        };
+        let local_keys = match local_record_keys(&conn, table) {
+            Ok(keys) => keys,
+            Err(e) => return CommandResult::err(format!("Read local {} failed: {}", table, e)),
+        };
+        let missing_local = remote_keys.difference(&local_keys).count();
+        let extra_local = local_keys.difference(&remote_keys).count();
+
+        table_reports.insert(
+            table.clone(),
+            serde_json::json!({
+                "remote_count": remote_keys.len(),
+                "local_count": local_keys.len(),
+                "missing_local": missing_local,
+                "extra_local": extra_local,
+            }),
+        );
+    }
+
+    CommandResult::ok(serde_json::json!({
+        "latest_version": snapshot.get("latest_version").cloned().unwrap_or(serde_json::Value::Null),
+        "generated_at": snapshot.get("generated_at").cloned().unwrap_or(serde_json::Value::Null),
+        "tables": table_reports,
+        "remote_object_count": snapshot.get("objects").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn snapshot_record_key_uses_client_composite_key_for_ip_creations() {
+        let row = json!({
+            "id": "server-only-id",
+            "ip_id": "ip-1",
+            "image_path": "archive/ip-1/front.png"
+        });
+
+        assert_eq!(
+            snapshot_record_key("ip_creations", &row).unwrap(),
+            "ip-1|archive/ip-1/front.png"
+        );
+    }
+
+    #[test]
+    fn remote_snapshot_keys_rejects_missing_required_field() {
+        let rows = json!([{ "id": "relation-1", "ip_image_id": "image-1" }]);
+
+        let err = remote_snapshot_keys("ip_image_relations", &rows).unwrap_err();
+        assert!(err.contains("ip_id"));
+    }
+
+    #[test]
+    fn remote_snapshot_keys_rejects_non_array_table_payload() {
+        let rows = json!({ "id": "ip-1" });
+
+        let err = remote_snapshot_keys("ip_assets", &rows).unwrap_err();
+        assert!(err.contains("not an array"));
     }
 }
 

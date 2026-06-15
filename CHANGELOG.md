@@ -6,13 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.1.9] - 2026-06-15
+### Added
+- Added a Tauri `sync_get_snapshot` command and client support for the sync server snapshot endpoint, enabling full server-state diagnostics for reconciliation workflows.
+- Added `sync_reconcile_snapshot` to compare server snapshot keys against the local SQLite key set without mutating local data.
+
 ### Fixed
 - Hardened cloud sync recovery for incomplete pulls: trim configured server URLs, tolerate legacy sync JSON with unescaped Windows paths, prevent advancing the sync cursor when remote changes are not fully applied, and repair local file path rewriting for IP sticker pack emojis.
 - Updated force repush to include sticker packs, sticker pack platform records, and emoji records instead of only IP assets/images/tags.
+- Made file sync fail closed: upload/check/download errors now stop sync, uploaded hashes are verified, existing local files are hash-checked, and downloaded files are rehashed before local records are applied.
+- Snapshot reconciliation now rejects malformed snapshot table payloads instead of silently ignoring rows with missing key fields.
 
 ### Notes
 - Force repush is not a safe merge operation. Back up the server database and confirm the local database is the most complete source before using it.
-- Current incremental pull depends on `sync_log`; a future full snapshot/reconciliation endpoint is still required to recover from server business-table and sync-log divergence.
+- Incremental pull still depends on `sync_log` for normal sync. The snapshot endpoint is now reachable from the client for diagnostics/reconciliation, but automatic destructive restore should still require an explicit backup and review step.
 
 ## [1.1.8] - 2026-06-14
 ### Added

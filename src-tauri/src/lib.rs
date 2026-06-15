@@ -141,6 +141,8 @@ pub fn run() {
             commands::sync_commands::sync_now,
             commands::sync_commands::sync_get_status,
             commands::sync_commands::sync_get_history,
+            commands::sync_commands::sync_get_snapshot,
+            commands::sync_commands::sync_reconcile_snapshot,
             commands::sync_commands::sync_force_repush,
         ])
         .run(tauri::generate_context!())

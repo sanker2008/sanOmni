@@ -66,7 +66,9 @@ impl SyncClient {
             let data = resp.json::<PushResponse>().await?;
             Ok(data)
         } else {
-            Err(format!("Push failed with status: {}", resp.status()).into())
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("Push failed with status: {} {}", status, body).into())
         }
     }
 
@@ -89,7 +91,9 @@ impl SyncClient {
             let data = resp.json::<PullResponse>().await?;
             Ok(data)
         } else {
-            Err(format!("Pull failed with status: {}", resp.status()).into())
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("Pull failed with status: {} {}", status, body).into())
         }
     }
 
@@ -119,7 +123,9 @@ impl SyncClient {
                 .unwrap_or_default();
             Ok(missing)
         } else {
-            Err(format!("Check files failed: {}", resp.status()).into())
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("Check files failed: {} {}", status, body).into())
         }
     }
 
@@ -154,7 +160,9 @@ impl SyncClient {
                 .to_string();
             Ok(hash)
         } else {
-            Err(format!("Upload failed: {}", resp.status()).into())
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("Upload failed: {} {}", status, body).into())
         }
     }
 
@@ -174,12 +182,15 @@ impl SyncClient {
         if resp.status().is_success() {
             let bytes = resp.bytes().await?;
             let target = target_path.as_ref();
-            let temp_path = target.with_extension(format!("{}.tmp", uuid::Uuid::new_v4().to_string()));
+            let temp_path =
+                target.with_extension(format!("{}.tmp", uuid::Uuid::new_v4().to_string()));
             tokio::fs::write(&temp_path, &bytes).await?;
             tokio::fs::rename(&temp_path, target).await?;
             Ok(())
         } else {
-            Err(format!("Download failed: {}", resp.status()).into())
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("Download failed: {} {}", status, body).into())
         }
     }
 
@@ -203,7 +214,30 @@ impl SyncClient {
             let data: serde_json::Value = resp.json().await?;
             Ok(data)
         } else {
-            Err(format!("Fetch history failed: {}", resp.status()).into())
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("Fetch history failed: {} {}", status, body).into())
+        }
+    }
+
+    pub async fn fetch_snapshot(
+        &self,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!("{}/api/sync/snapshot", self.server_url);
+        let resp = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .send()
+            .await?;
+
+        if resp.status().is_success() {
+            let data: serde_json::Value = resp.json().await?;
+            Ok(data)
+        } else {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("Fetch snapshot failed: {} {}", status, body).into())
         }
     }
 }
