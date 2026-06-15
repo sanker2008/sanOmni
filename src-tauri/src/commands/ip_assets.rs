@@ -1763,6 +1763,30 @@ pub fn delete_ip_emojis(db_path: String, emoji_ids: Vec<String>) -> CommandResul
 }
 
 #[tauri::command]
+pub fn remove_ip_emojis_keep_image(db_path: String, emoji_ids: Vec<String>) -> CommandResult<bool> {
+    let mut conn = match Connection::open(Path::new(&db_path)) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+
+    let tx = match conn.transaction() {
+        Ok(t) => t,
+        Err(e) => return CommandResult::err(format!("开启事务失败: {}", e)),
+    };
+
+    for id in emoji_ids {
+        if let Err(e) = tx.execute("DELETE FROM ip_emojis WHERE id = ?", params![id]) {
+            return CommandResult::err(format!("删除表情记录失败: {}", e));
+        }
+    }
+
+    match tx.commit() {
+        Ok(_) => CommandResult::ok(true),
+        Err(e) => CommandResult::err(format!("提交事务失败: {}", e)),
+    }
+}
+
+#[tauri::command]
 pub fn move_ip_emojis_to_pack(
     db_path: String,
     emoji_ids: Vec<String>,

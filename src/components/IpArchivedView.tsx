@@ -45,7 +45,8 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Eye,
-  FolderOpen
+  FolderOpen,
+  FolderInput
 } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -329,6 +330,13 @@ export default function IpArchivedView() {
   const [isPackModalOpen, setIsPackModalOpen] = useState(false);
   const [editingPack, setEditingPack] = useState<IpStickerPack | null>(null);
 
+  // 表情操作状态
+  const [selectedEmojis, setSelectedEmojis] = useState<string[]>([]);
+  const [deleteEmojiId, setDeleteEmojiId] = useState<string | null>(null);
+  const [batchDeleteEmojiStep, setBatchDeleteEmojiStep] = useState(0);
+  const [removeEmojiKeepImageId, setRemoveEmojiKeepImageId] = useState<string | null>(null);
+  const [batchRemoveEmojiKeepImageStep, setBatchRemoveEmojiKeepImageStep] = useState(0);
+
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 60;
@@ -436,15 +444,47 @@ export default function IpArchivedView() {
     }
   };
 
-  const executeDeleteEmoji = async (emojiId: string) => {
-    if (!selectedIpId) return;
+  const executeDeleteEmojis = async (emojiIds: string[]) => {
+    if (!selectedIpId || emojiIds.length === 0) return;
     try {
-      await ipApi.deleteEmojis([emojiId]);
-      toast({ title: "已删除表情", description: "已彻底从表情库中删除该表情" });
+      await ipApi.deleteEmojis(emojiIds);
+      toast({ title: "已删除表情", description: `已彻底删除 ${emojiIds.length} 个表情` });
+      setSelectedEmojis(prev => prev.filter(id => !emojiIds.includes(id)));
       loadArchivedImages();
     } catch (e) {
       console.error("删除表情失败:", e);
       toast({ title: "删除失败", variant: "destructive" });
+    } finally {
+      setDeleteEmojiId(null);
+      setBatchDeleteEmojiStep(0);
+    }
+  };
+
+  const executeMoveEmojisToPack = async (emojiIds: string[], packId: string | null) => {
+    if (!selectedIpId || emojiIds.length === 0) return;
+    try {
+      await ipApi.moveEmojisToPack(emojiIds, packId);
+      toast({ title: "更换分组成功" });
+      loadArchivedImages();
+    } catch (e) {
+      console.error("更换表情分组失败:", e);
+      toast({ title: "更换分组失败", variant: "destructive" });
+    }
+  };
+
+  const executeRemoveEmojisKeepImage = async (emojiIds: string[]) => {
+    if (!selectedIpId || emojiIds.length === 0) return;
+    try {
+      await ipApi.removeEmojisKeepImage(emojiIds);
+      toast({ title: "已退回", description: `已将 ${emojiIds.length} 个表情退回为普通图片` });
+      setSelectedEmojis(prev => prev.filter(id => !emojiIds.includes(id)));
+      loadArchivedImages();
+    } catch (e) {
+      console.error("退回普通图片失败:", e);
+      toast({ title: "操作失败", variant: "destructive" });
+    } finally {
+      setRemoveEmojiKeepImageId(null);
+      setBatchRemoveEmojiKeepImageStep(0);
     }
   };
 
@@ -1891,6 +1931,72 @@ export default function IpArchivedView() {
                     )}
                   </div>
 
+                  {/* Emoji Batch Toolbar */}
+                  {selectedEmojis.length > 0 && (
+                    <div className="border-b px-4 py-2 bg-muted/30 min-h-[44px] flex items-center flex-shrink-0 gap-4">
+                      <button
+                        onClick={() => {
+                          const allIds = currentEmojis.map(e => e.id);
+                          const isAllSelected = allIds.length > 0 && allIds.every(id => selectedEmojis.includes(id));
+                          if (isAllSelected) {
+                            setSelectedEmojis(prev => prev.filter(id => !allIds.includes(id)));
+                          } else {
+                            const newSelected = new Set([...selectedEmojis, ...allIds]);
+                            setSelectedEmojis(Array.from(newSelected));
+                          }
+                        }}
+                        className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
+                      >
+                        {currentEmojis.length > 0 && currentEmojis.every(e => selectedEmojis.includes(e.id)) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                        {currentEmojis.length > 0 && currentEmojis.every(e => selectedEmojis.includes(e.id)) ? "取消全选" : "全选当前项"}
+                      </button>
+                      <span className="text-sm text-muted-foreground flex items-center gap-1 border-r pr-3 mr-1">
+                        已选择 {selectedEmojis.length} 个
+                        <button onClick={() => setSelectedEmojis([])} className="text-muted-foreground hover:text-foreground p-0.5 rounded-md hover:bg-muted transition-colors" title="清空选中">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="gap-1 h-7">
+                            <FolderInput className="w-3 h-3" />
+                            批量更换分组
+                            <ChevronDown className="w-3 h-3 opacity-50" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-40 z-50">
+                          <DropdownMenuItem
+                            onClick={() => executeMoveEmojisToPack(selectedEmojis, null)}
+                            className="cursor-pointer text-xs"
+                          >
+                            <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+                            移至「未分组」
+                          </DropdownMenuItem>
+                          {ipDetail.sticker_packs.map(pack => (
+                            <DropdownMenuItem
+                              key={pack.id}
+                              onClick={() => executeMoveEmojisToPack(selectedEmojis, pack.id)}
+                              className="cursor-pointer text-xs"
+                            >
+                              <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+                              {pack.name}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 h-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
+                        onClick={() => setBatchDeleteEmojiStep(1)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        批量彻底删除
+                      </Button>
+                    </div>
+                  )}
+
                   <ScrollArea className="flex-1 border rounded-md py-3 px-0 bg-background/40">
                     {currentEmojis.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
@@ -1906,6 +2012,24 @@ export default function IpArchivedView() {
                               className="group relative rounded-md border bg-card p-1 flex flex-col gap-1.5 hover:shadow-md transition-all duration-300"
                             >
                               <div className="aspect-square rounded overflow-hidden bg-muted relative cursor-pointer">
+                                {/* Emoji Selection Checkbox */}
+                                <div
+                                  className={`absolute top-1 left-1 z-10 p-1 rounded transition-opacity cursor-pointer ${
+                                    selectedEmojis.includes(emoji.id) ? "opacity-100" : "opacity-0 group-hover:opacity-100 bg-black/20 hover:bg-black/40"
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedEmojis(prev => 
+                                      prev.includes(emoji.id) ? prev.filter(id => id !== emoji.id) : [...prev, emoji.id]
+                                    );
+                                  }}
+                                >
+                                  {selectedEmojis.includes(emoji.id) ? (
+                                    <CheckSquare className="w-4 h-4 text-primary bg-white rounded-sm" />
+                                  ) : (
+                                    <Square className="w-4 h-4 text-white" />
+                                  )}
+                                </div>
                                 <img
                                   src={`${convertFileSrc(emoji.image_path)}?t=${imageTimestamp}`}
                                   alt="表情"
@@ -1953,13 +2077,66 @@ export default function IpArchivedView() {
                                   >
                                     <Copy className="w-3.5 h-3.5" />
                                   </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
+                                        title="更换分组"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <FolderInput className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="center" className="w-40 z-50">
+                                      <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); executeMoveEmojisToPack([emoji.id], null); }}
+                                        className="cursor-pointer text-xs"
+                                        disabled={!emoji.pack_id}
+                                      >
+                                        <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+                                        移至「未分组」
+                                      </DropdownMenuItem>
+                                      {ipDetail.sticker_packs.map(pack => (
+                                        <DropdownMenuItem
+                                          key={pack.id}
+                                          onClick={(e) => { e.stopPropagation(); executeMoveEmojisToPack([emoji.id], pack.id); }}
+                                          className="cursor-pointer text-xs"
+                                          disabled={emoji.pack_id === pack.id}
+                                        >
+                                          <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+                                          {pack.name}
+                                        </DropdownMenuItem>
+                                      ))}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
+                                    onClick={() => handleCopyEmoji(emoji.image_path)}
+                                    title="复制到剪贴板"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </Button>
+
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-white hover:bg-orange-500/80 rounded-full"
+                                    onClick={() => setRemoveEmojiKeepImageId(emoji.id)}
+                                    title="退回普通图片"
+                                  >
+                                    <Undo2 className="w-3.5 h-3.5" />
+                                  </Button>
 
                                   <Button
                                     size="icon"
                                     variant="ghost"
                                     className="h-7 w-7 text-white hover:bg-destructive/80 rounded-full"
-                                    onClick={() => executeDeleteEmoji(emoji.id)}
-                                    title="删除"
+                                    onClick={() => setDeleteEmojiId(emoji.id)}
+                                    title="彻底删除"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </Button>
@@ -2984,6 +3161,76 @@ export default function IpArchivedView() {
           </DropdownMenu>
         </div>
       )}
+
+      {/* Single Emoji Delete Confirmation */}
+      <ConfirmDialog
+        open={deleteEmojiId !== null}
+        title="确认删除表情"
+        description="确定要彻底删除该表情吗？此操作将永久删除系统记录和物理磁盘上的图片原文件，无法撤销！"
+        confirmText="确认彻底删除"
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteEmojiId) executeDeleteEmojis([deleteEmojiId]);
+        }}
+        onCancel={() => setDeleteEmojiId(null)}
+      />
+
+      {/* Batch Emoji Delete Confirmation - Step 1 */}
+      <ConfirmDialog
+        open={batchDeleteEmojiStep === 1}
+        title="确认批量删除表情"
+        description={`确定要删除选中的 ${selectedEmojis.length} 个表情吗？此操作不可恢复。`}
+        confirmText={selectedEmojis.length > 10 ? "继续" : "确认彻底删除"}
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={() => {
+          if (selectedEmojis.length > 10) {
+            setBatchDeleteEmojiStep(2);
+          } else {
+            void executeDeleteEmojis(selectedEmojis);
+          }
+        }}
+        onCancel={() => setBatchDeleteEmojiStep(0)}
+      />
+
+      {/* Batch Emoji Delete Confirmation - Step 2 */}
+      <ConfirmDialog
+        open={batchDeleteEmojiStep === 2}
+        title="⚠️ 最终确认"
+        description={`【警告】您正在批量删除 ${selectedEmojis.length} 个表情！此操作将永久删除这些图片记录及源文件，无法撤销！`}
+        confirmText="确认彻底删除"
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={() => executeDeleteEmojis(selectedEmojis)}
+        onCancel={() => setBatchDeleteEmojiStep(0)}
+      />
+
+      {/* Single Emoji Remove Keep Image Confirmation */}
+      <ConfirmDialog
+        open={removeEmojiKeepImageId !== null}
+        title="退回普通图片"
+        description="确定要取消该图片的表情身份吗？它将从表情库中移除，但依然会作为普通图片保留在归档资产中。"
+        confirmText="确认退回"
+        cancelText="取消"
+        variant="default"
+        onConfirm={() => {
+          if (removeEmojiKeepImageId) executeRemoveEmojisKeepImage([removeEmojiKeepImageId]);
+        }}
+        onCancel={() => setRemoveEmojiKeepImageId(null)}
+      />
+
+      {/* Batch Emoji Remove Keep Image Confirmation */}
+      <ConfirmDialog
+        open={batchRemoveEmojiKeepImageStep === 1}
+        title="批量退回普通图片"
+        description={`确定要将选中的 ${selectedEmojis.length} 个表情退回为普通图片吗？它们将从表情库中移除，但依然会保留在归档资产中。`}
+        confirmText="确认退回"
+        cancelText="取消"
+        variant="default"
+        onConfirm={() => executeRemoveEmojisKeepImage(selectedEmojis)}
+        onCancel={() => setBatchRemoveEmojiKeepImageStep(0)}
+      />
 
       {/* 资产库表情选择弹窗 */}
       <IPImagePickerModal

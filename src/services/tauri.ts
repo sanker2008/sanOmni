@@ -1015,6 +1015,18 @@ export const ipApi = {
     return result.data || false;
   },
 
+  async removeEmojisKeepImage(emojiIds: string[]): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("remove_ip_emojis_keep_image", {
+      dbPath,
+      emojiIds,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "取消表情身份失败");
+    }
+    return result.data || false;
+  },
+
   async moveEmojisToPack(emojiIds: string[], packId: string | null): Promise<boolean> {
     const dbPath = await getDbPath();
     const result = await invoke<CommandResult<boolean>>("move_ip_emojis_to_pack", {
