@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Emoji Management: Added batch operations (select all, batch change group, batch delete) for emojis.
+- Emoji Management: Added a "Revert to image" (退回普通图片) action for emojis to safely remove their emoji status without deleting the original asset from the archive.
+- Emoji Management: Added secondary confirmation dialogs for both single and batch emoji deletions to prevent accidental data loss.
+- Emoji Management: Improved wording for grouping logic, changing "移除分组" to "移至「未分组」".
 
 ## [1.2.1] - 2026-06-16
 ### Fixed
