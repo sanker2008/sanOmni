@@ -961,14 +961,15 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
 
                     if tx.commit().is_ok() {
                         pulled_count = applied;
+                        // Only advance cursor after successful commit
+                        if resp.latest_version > current_version {
+                            let cursor_conn = Connection::open(Path::new(db_path)).unwrap();
+                            let _ = cursor_conn.execute("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('last_sync_version', ?)", rusqlite::params![resp.latest_version.to_string()]);
+                        }
                     } else {
                         return Err("本地数据库应用拉取变更失败，事务已回滚".to_string());
                     }
                 }
-            }
-            if resp.latest_version > current_version {
-                let conn = Connection::open(Path::new(db_path)).unwrap();
-                let _ = conn.execute("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('last_sync_version', ?)", rusqlite::params![resp.latest_version.to_string()]);
             }
         }
         Err(e) => return Err(format!("拉取失败: {}", e)),

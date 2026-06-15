@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Sync no longer aborts entirely when a single file download fails (e.g. 404 from server). The error is logged, the file is queued for retry, and the remaining changes continue to apply.
 - Relaxed the strict `applied == total` pull check that caused sync to roll back when some changes had no data or matched unrecognized tables. Now logs a warning and commits the successfully applied changes.
+- Fixed sync cursor advancing even when the pull transaction rolled back or failed, causing pulled changes to be permanently skipped. Cursor now only advances after a successful commit.
 
 ## [1.1.9] - 2026-06-15
 ### Added
