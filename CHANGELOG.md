@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-06-16
+### Fixed
+- Fixed app crash and hanging sync progress (ERR_CONNECTION_REFUSED) caused by a missing `sync_pending_downloads` table on existing installations. Sync now automatically ensures the latest database schema is applied before starting.
+
 ## [1.2.0] - 2026-06-15
 ### Added
 - Pending download retry mechanism: files that fail to download during sync are recorded in a `sync_pending_downloads` table and automatically retried on the next sync. On successful retry, the corresponding database record's file path is updated in-place.

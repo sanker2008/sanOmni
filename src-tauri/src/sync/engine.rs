@@ -50,6 +50,9 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
         let conn =
             Connection::open(Path::new(db_path)).map_err(|e| format!("打开数据库失败: {}", e))?;
 
+        // 确保表结构是最新的
+        let _ = conn.execute_batch(crate::sync::triggers::SYNC_SCHEMA);
+
         let server_url: String = conn
             .query_row(
                 "SELECT value FROM sync_config WHERE key = 'server_url'",
