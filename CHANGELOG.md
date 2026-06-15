@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-15
+### Added
+- Pending download retry mechanism: files that fail to download during sync are recorded in a `sync_pending_downloads` table and automatically retried on the next sync. On successful retry, the corresponding database record's file path is updated in-place.
+
+### Fixed
+- Sync no longer aborts entirely when a single file download fails (e.g. 404 from server). The error is logged, the file is queued for retry, and the remaining changes continue to apply.
+- Relaxed the strict `applied == total` pull check that caused sync to roll back when some changes had no data or matched unrecognized tables. Now logs a warning and commits the successfully applied changes.
+
 ## [1.1.9] - 2026-06-15
 ### Added
 - Added a Tauri `sync_get_snapshot` command and client support for the sync server snapshot endpoint, enabling full server-state diagnostics for reconciliation workflows.

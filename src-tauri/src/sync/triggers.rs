@@ -12,6 +12,17 @@ CREATE TABLE IF NOT EXISTS sync_config (
     key    TEXT PRIMARY KEY,
     value  TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS sync_pending_downloads (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_hash    TEXT NOT NULL,
+    local_path   TEXT NOT NULL,
+    table_name   TEXT NOT NULL,
+    record_id    TEXT NOT NULL,
+    path_key     TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(file_hash, local_path)
+);
 "#;
 
 pub const SYNC_TRIGGERS: &str = r#"

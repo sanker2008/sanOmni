@@ -280,6 +280,53 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
         }
     };
 
+    // Retry previously failed downloads
+    let pendings: Vec<(i64, String, String, String, String, String)> = {
+        let retry_conn = Connection::open(Path::new(db_path)).unwrap();
+        let mut stmt = retry_conn.prepare(
+            "SELECT id, file_hash, local_path, table_name, record_id, path_key FROM sync_pending_downloads"
+        ).unwrap();
+        let result = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
+            })
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        result
+    }; // stmt and retry_conn dropped here before any .await
+
+    for (id, file_hash, local_path, table_name, record_id, path_key) in &pendings {
+        let target = std::path::PathBuf::from(local_path);
+        if let Some(parent) = target.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+        if let Ok(()) = client.download_file(file_hash, &target).await {
+            if let Ok(data) = tokio::fs::read(&target).await {
+                let mut hasher = Sha256::new();
+                hasher.update(&data);
+                let dl_hash = format!("{:x}", hasher.finalize());
+                if dl_hash == *file_hash {
+                    let update_sql = match table_name.as_str() {
+                        "ip_assets" => format!("UPDATE ip_assets SET {} = ? WHERE id = ?", path_key),
+                        "ip_images" => format!("UPDATE ip_images SET {} = ? WHERE id = ?", path_key),
+                        "ip_sticker_packs" => format!("UPDATE ip_sticker_packs SET {} = ? WHERE id = ?", path_key),
+                        "ip_emojis" => format!("UPDATE ip_emojis SET {} = ? WHERE id = ?", path_key),
+                        _ => String::new(),
+                    };
+                    let upd_conn = Connection::open(Path::new(db_path)).unwrap();
+                    if !update_sql.is_empty() {
+                        let _ = upd_conn.execute_batch(crate::sync::triggers::DROP_TRIGGERS);
+                        let _ = upd_conn.execute(&update_sql, rusqlite::params![local_path, record_id]);
+                        let _ = upd_conn.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
+                    }
+                    let _ = upd_conn.execute("DELETE FROM sync_pending_downloads WHERE id = ?", rusqlite::params![id]);
+                    eprintln!("[Sync] Retry download succeeded: {}", local_path);
+                }
+            }
+        }
+    }
+
     match client.pull(current_version).await {
         // <--- 又一个 .await 点
         Ok(mut resp) => {
@@ -461,35 +508,48 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             }
 
                                             if needs_download {
-                                                client
+                                                if let Err(e) = client
                                                     .download_file(&hash, &local_abs_path)
                                                     .await
-                                                    .map_err(|e| {
-                                                        format!(
-                                                            "Download file failed {}: {}",
-                                                            local_abs_path.display(),
-                                                            e
-                                                        )
-                                                    })?;
+                                                {
+                                                    eprintln!(
+                                                        "[Sync] Download file skipped {}: {}",
+                                                        local_abs_path.display(),
+                                                        e
+                                                    );
+                                                    // Record for retry on next sync
+                                                    if let Ok(pconn) = Connection::open(Path::new(db_path)) {
+                                                        let _ = pconn.execute(
+                                                            "INSERT OR IGNORE INTO sync_pending_downloads (file_hash, local_path, table_name, record_id, path_key) VALUES (?, ?, ?, ?, ?)",
+                                                            rusqlite::params![hash, local_abs_path.to_string_lossy(), change.table, change.record_id, path_key],
+                                                        );
+                                                    }
+                                                    continue;
+                                                }
                                             }
 
-                                            let downloaded = tokio::fs::read(&local_abs_path).await.map_err(|e| {
-                                                format!(
-                                                    "Read downloaded file failed {}: {}",
-                                                    local_abs_path.display(),
-                                                    e
-                                                )
-                                            })?;
+                                            let downloaded = match tokio::fs::read(&local_abs_path).await {
+                                                Ok(data) => data,
+                                                Err(e) => {
+                                                    eprintln!(
+                                                        "[Sync] Read downloaded file skipped {}: {}",
+                                                        local_abs_path.display(),
+                                                        e
+                                                    );
+                                                    continue;
+                                                }
+                                            };
                                             let mut hasher = Sha256::new();
                                             hasher.update(&downloaded);
                                             let downloaded_hash = format!("{:x}", hasher.finalize());
                                             if downloaded_hash != hash {
-                                                return Err(format!(
-                                                    "Downloaded file hash mismatch: {} expected {} got {}",
+                                                eprintln!(
+                                                    "[Sync] Hash mismatch skipped {}: expected {} got {}",
                                                     local_abs_path.display(),
                                                     hash,
                                                     downloaded_hash
-                                                ));
+                                                );
+                                                continue;
                                             }
 
                                             if let Some(obj) = json.as_object_mut() {
@@ -892,11 +952,11 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                     let _ = tx.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
 
                     if applied != resp.changes.len() {
-                        return Err(format!(
-                            "Pull apply incomplete: applied {} of {} changes. Rolled back without advancing sync cursor.",
+                        eprintln!(
+                            "[Sync] Pull apply partial: applied {} of {} changes (some may have been skipped due to missing data or unknown tables)",
                             applied,
                             resp.changes.len()
-                        ));
+                        );
                     }
 
                     if tx.commit().is_ok() {
