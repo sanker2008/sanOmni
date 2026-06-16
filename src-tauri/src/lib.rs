@@ -86,6 +86,7 @@ pub fn run() {
             commands::prompt_groups::add_images_to_prompt_group,
             commands::prompt_groups::remove_images_from_prompt_group,
             commands::prompt_groups::set_prompt_groups_for_image,
+            commands::prompt_groups::update_prompt_group_image_meta,
             commands::prompt_groups::update_prompt_group,
             commands::prompt_groups::delete_prompt_group,
             commands::prompt_groups::auto_group_by_prompt,

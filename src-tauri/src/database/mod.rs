@@ -132,8 +132,31 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         set_db_version(conn, 2)?;
     }
 
+    if current_version < 3 {
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN category TEXT DEFAULT 'Product & Ecommerce'", []);
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN tags TEXT DEFAULT '[]'", []);
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN price REAL DEFAULT 4.99", []);
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN is_published INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN publish_status TEXT DEFAULT 'draft'", []);
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN remote_slug TEXT", []);
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN remote_url TEXT", []);
+        let _ = conn.execute("ALTER TABLE prompt_groups ADD COLUMN last_published_at TEXT", []);
+
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN role TEXT DEFAULT 'gallery'", []);
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN is_cover INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN sort_order INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN caption TEXT", []);
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN variant_key TEXT", []);
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN variant_json TEXT", []);
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN is_sync_enabled INTEGER DEFAULT 1", []);
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN sync_status TEXT DEFAULT 'local'", []);
+        let _ = conn.execute("ALTER TABLE image_prompt_group_relations ADD COLUMN remote_url TEXT", []);
+
+        set_db_version(conn, 3)?;
+    }
+
     // Future migrations go here:
-    // if current_version < 3 { ... set_db_version(conn, 3)?; }
+    // if current_version < 4 { ... set_db_version(conn, 4)?; }
 
     Ok(())
 }
@@ -309,6 +332,14 @@ CREATE TABLE IF NOT EXISTS prompt_groups (
     name                TEXT,
     description         TEXT,
     template_schema     TEXT,
+    category            TEXT DEFAULT 'Product & Ecommerce',
+    tags                TEXT DEFAULT '[]',
+    price               REAL DEFAULT 4.99,
+    is_published        INTEGER DEFAULT 0,
+    publish_status      TEXT DEFAULT 'draft',
+    remote_slug         TEXT,
+    remote_url          TEXT,
+    last_published_at   TEXT,
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL
 );
@@ -317,6 +348,15 @@ CREATE TABLE IF NOT EXISTS prompt_groups (
 CREATE TABLE IF NOT EXISTS image_prompt_group_relations (
     image_id            TEXT NOT NULL,
     prompt_group_id     TEXT NOT NULL,
+    role                TEXT DEFAULT 'gallery',
+    is_cover            INTEGER DEFAULT 0,
+    sort_order          INTEGER DEFAULT 0,
+    caption             TEXT,
+    variant_key         TEXT,
+    variant_json        TEXT,
+    is_sync_enabled     INTEGER DEFAULT 1,
+    sync_status         TEXT DEFAULT 'local',
+    remote_url          TEXT,
     PRIMARY KEY (image_id, prompt_group_id),
     FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
     FOREIGN KEY (prompt_group_id) REFERENCES prompt_groups(id) ON DELETE CASCADE

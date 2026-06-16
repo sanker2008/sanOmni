@@ -40,6 +40,14 @@ export interface PromptGroup {
   name?: string;
   description?: string;
   template_schema?: string;
+  category: string;
+  tags: string;
+  price: number;
+  is_published: boolean;
+  publish_status: string;
+  remote_slug?: string;
+  remote_url?: string;
+  last_published_at?: string;
   image_count: number;
   created_at: string;
   updated_at: string;

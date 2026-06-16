@@ -1210,6 +1210,14 @@ fn fetch_image_prompt_groups(conn: &Connection, image_id: &str) -> Result<Vec<Pr
             pg.name,
             pg.description,
             pg.template_schema,
+            pg.category,
+            pg.tags,
+            pg.price,
+            pg.is_published,
+            pg.publish_status,
+            pg.remote_slug,
+            pg.remote_url,
+            pg.last_published_at,
             (
                 SELECT COUNT(*)
                 FROM image_prompt_group_relations ipgr2
@@ -1231,9 +1239,17 @@ fn fetch_image_prompt_groups(conn: &Connection, image_id: &str) -> Result<Vec<Pr
             name: row.get(3)?,
             description: row.get(4)?,
             template_schema: row.get(5)?,
-            image_count: row.get(6)?,
-            created_at: row.get(7)?,
-            updated_at: row.get(8)?,
+            category: row.get(6)?,
+            tags: row.get(7)?,
+            price: row.get(8)?,
+            is_published: row.get(9)?,
+            publish_status: row.get(10)?,
+            remote_slug: row.get(11)?,
+            remote_url: row.get(12)?,
+            last_published_at: row.get(13)?,
+            image_count: row.get(14)?,
+            created_at: row.get(15)?,
+            updated_at: row.get(16)?,
         })
     })?;
 

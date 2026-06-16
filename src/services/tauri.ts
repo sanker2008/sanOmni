@@ -277,6 +277,15 @@ interface PromptGroupWithImages {
     width?: number;
     height?: number;
     created_at: string;
+    role?: string;
+    is_cover?: boolean;
+    sort_order?: number;
+    caption?: string;
+    variant_key?: string;
+    variant_json?: string;
+    is_sync_enabled?: boolean;
+    sync_status?: string;
+    remote_url?: string;
   }>;
 }
 
@@ -297,6 +306,10 @@ export const promptApi = {
     name?: string;
     description?: string;
     templateSchema?: string;
+    category?: string;
+    tags?: string;
+    price?: number;
+    isPublished?: boolean;
     imageIds: string[];
   }): Promise<PromptGroup> {
     const dbPath = await getDbPath();
@@ -307,13 +320,31 @@ export const promptApi = {
       name: params.name,
       description: params.description,
       templateSchema: params.templateSchema,
+      category: params.category,
+      tags: params.tags,
+      price: params.price,
+      isPublished: params.isPublished,
       imageIds: params.imageIds,
     });
   },
 
   async update(
     groupId: string,
-    payload: { prompt?: string; negativePrompt?: string; name?: string; description?: string; templateSchema?: string }
+    payload: {
+      prompt?: string;
+      negativePrompt?: string;
+      name?: string;
+      description?: string;
+      templateSchema?: string;
+      category?: string;
+      tags?: string;
+      price?: number;
+      isPublished?: boolean;
+      publishStatus?: string;
+      remoteSlug?: string;
+      remoteUrl?: string;
+      lastPublishedAt?: string;
+    }
   ): Promise<void> {
     const dbPath = await getDbPath();
     return invoke("update_prompt_group", { 
@@ -324,6 +355,14 @@ export const promptApi = {
       name: payload.name,
       description: payload.description,
       templateSchema: payload.templateSchema,
+      category: payload.category,
+      tags: payload.tags,
+      price: payload.price,
+      isPublished: payload.isPublished,
+      publishStatus: payload.publishStatus,
+      remoteSlug: payload.remoteSlug,
+      remoteUrl: payload.remoteUrl,
+      lastPublishedAt: payload.lastPublishedAt,
     });
   },
 
@@ -340,6 +379,34 @@ export const promptApi = {
   async removeImages(groupId: string, imageIds: string[]): Promise<void> {
     const dbPath = await getDbPath();
     return invoke("remove_images_from_prompt_group", { dbPath, groupId, imageIds });
+  },
+
+  async updateImageMeta(
+    groupId: string,
+    imageId: string,
+    payload: {
+      role?: string;
+      isCover?: boolean;
+      sortOrder?: number;
+      caption?: string;
+      variantKey?: string;
+      variantJson?: string;
+      isSyncEnabled?: boolean;
+    }
+  ): Promise<void> {
+    const dbPath = await getDbPath();
+    return invoke("update_prompt_group_image_meta", {
+      dbPath,
+      groupId,
+      imageId,
+      role: payload.role,
+      isCover: payload.isCover,
+      sortOrder: payload.sortOrder,
+      caption: payload.caption,
+      variantKey: payload.variantKey,
+      variantJson: payload.variantJson,
+      isSyncEnabled: payload.isSyncEnabled,
+    });
   },
 
   async getForImage(imageId: string): Promise<PromptGroup[]> {

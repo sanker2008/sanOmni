@@ -9,6 +9,19 @@ export interface PublishConfig {
   is_published: boolean;
 }
 
+function parseJsonArray(value?: string): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+}
+
 export async function publishPromptToWeb(groupId: string, config: PublishConfig) {
   try {
     // 1. 获取本地完整的 Prompt 详情
@@ -34,6 +47,36 @@ export async function publishPromptToWeb(groupId: string, config: PublishConfig)
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '');
 
+    const syncImages = images
+      .filter((image) => image.is_sync_enabled !== false && image.role !== "hidden")
+      .map((image, index) => {
+        let variantJson: unknown;
+        if (image.variant_json) {
+          try {
+            variantJson = JSON.parse(image.variant_json);
+          } catch {
+            variantJson = image.variant_json;
+          }
+        }
+
+        return {
+          id: image.id,
+          filename: image.filename,
+          url: image.remote_url || `/images/placeholders/${image.filename}`,
+          role: image.role || (image.is_cover ? "cover" : "gallery"),
+          is_cover: image.is_cover === true,
+          sort_order: image.sort_order ?? index,
+          caption: image.caption,
+          variant_key: image.variant_key,
+          variant_json: variantJson,
+          model_name: image.model_name,
+          vendor_name: image.vendor_name,
+          is_sync_enabled: image.is_sync_enabled !== false,
+        };
+      });
+    const coverImage = syncImages.find((image) => image.is_cover) || syncImages[0];
+    const selectedCoverUrl = coverImage?.url || cover_image_url;
+
     const payload = {
       id: group.id,
       name: name,
@@ -41,11 +84,15 @@ export async function publishPromptToWeb(groupId: string, config: PublishConfig)
       description: group.description || "",
       prompt: group.prompt || "",
       negative_prompt: group.negative_prompt || "",
-      category: config.category || "AI Art",
-      price: config.price ?? 4.99,
+      category: config.category || group.category || "Product & Ecommerce",
+      tags: parseJsonArray(group.tags),
+      price: config.price ?? group.price ?? 4.99,
       is_published: config.is_published,
       template_schema,
-      cover_image_url
+      cover_image_url: selectedCoverUrl,
+      images: syncImages,
+      tested_models: Array.from(new Set(syncImages.map((image) => image.model_name).filter(Boolean))),
+      best_for_models: Array.from(new Set(syncImages.filter((image) => image.is_cover).map((image) => image.model_name).filter(Boolean))),
     };
 
     // 3. 发送到 Next.js 后端

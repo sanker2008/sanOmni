@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { publishPromptToWeb } from '../services/publish';
 import { toast } from '@/hooks/useToast';
 import { Loader2 } from 'lucide-react';
+import { DEFAULT_PROMPT_TEMPLATE_CATEGORY, PROMPT_TEMPLATE_CATEGORIES } from '@/lib/promptTaxonomy';
 
 interface PublishModalProps {
   group: PromptGroup;
@@ -18,20 +19,11 @@ interface PublishModalProps {
   onSuccess: () => void;
 }
 
-const CATEGORIES = [
-  "AI Art",
-  "Photography",
-  "UI/UX Design",
-  "Architecture",
-  "Illustration",
-  "General"
-];
-
 export function PublishModal({ group, initialStatus, isOpen, onClose, onSuccess }: PublishModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const [price, setPrice] = useState(initialStatus?.price?.toString() || "4.99");
-  const [category, setCategory] = useState(initialStatus?.category || "AI Art");
+  const [price, setPrice] = useState(initialStatus?.price?.toString() || group.price?.toString() || "4.99");
+  const [category, setCategory] = useState(initialStatus?.category || group.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY);
   const [isPublished, setIsPublished] = useState(initialStatus?.is_published ?? true);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,8 +72,8 @@ export function PublishModal({ group, initialStatus, isOpen, onClose, onSuccess 
                 <SelectValue placeholder="Select a category" />
               </SelectTrigger>
               <SelectContent>
-                {CATEGORIES.map(cat => (
-                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                {PROMPT_TEMPLATE_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

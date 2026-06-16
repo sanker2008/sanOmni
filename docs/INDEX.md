@@ -4,6 +4,7 @@
 
 ## 🏗️ 架构设计 (`architecture/`)
 - [架构文档](./architecture/ARCHITECTURE.md) - 说明模块化设计与未来拆分规划
+- [Omni-Manager (超级后台) 架构](./architecture/OMNI_MANAGER_ARCHITECTURE.md) - 说明本地商品管理与云端前台的职责分工
 - [存储结构](./architecture/STORAGE_STRUCTURE.md) - 文件存储位置
 - [数据持久化](./architecture/DATA_PERSISTENCE.md) - 数据备份迁移
 - [IP 图片物理隔离](./architecture/IP_IMAGE_SEPARATION.md) - IP 资源设计说明
@@ -27,7 +28,7 @@
 - [IP 作品合集](./features/IP_WORKS_COLLECTION.md) - IP 作品管理
 - [图片切割 (Lab)](./features/LAB_IMAGE_SLICER.md) - 可视化图片切割工具
 - [产品图制作 (Lab)](./features/LAB_PRODUCT_IMAGE_MAKER.md) - 产品图推广制作工具
-- [模板文件说明](./features/template.md)
+- [模板商品化说明](./features/template.md) - 统一分类、图片证据与发布流
 - [模板 Schema 说明](./features/template_schema.md)
 
 ## 💧 水印专题 (`watermark/`)
@@ -49,4 +50,4 @@
 发版说明及历史大功能变更日志，请查阅 `docs/release-notes/` 目录。
 
 ---
-**最后更新**: 2026-06-10
+**最后更新**: 2026-06-16

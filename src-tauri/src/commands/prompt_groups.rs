@@ -12,18 +12,41 @@ pub async fn create_prompt_group(
     name: Option<String>,
     description: Option<String>,
     template_schema: Option<String>,
+    category: Option<String>,
+    tags: Option<String>,
+    price: Option<f64>,
+    is_published: Option<bool>,
     image_ids: Vec<String>,
 ) -> Result<PromptGroup, String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
+    let category = category.unwrap_or_else(|| "Product & Ecommerce".to_string());
+    let tags = tags.unwrap_or_else(|| "[]".to_string());
+    let price = price.unwrap_or(4.99);
+    let is_published = is_published.unwrap_or(false);
+    let publish_status = if is_published { "published" } else { "draft" }.to_string();
 
     // 插入 prompt 组
     conn.execute(
-        "INSERT INTO prompt_groups (id, prompt, negative_prompt, name, description, template_schema, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        rusqlite::params![&id, &prompt, &negative_prompt, &name, &description, &template_schema, &now, &now],
+        "INSERT INTO prompt_groups (id, prompt, negative_prompt, name, description, template_schema, category, tags, price, is_published, publish_status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        rusqlite::params![
+            &id,
+            &prompt,
+            &negative_prompt,
+            &name,
+            &description,
+            &template_schema,
+            &category,
+            &tags,
+            price,
+            is_published,
+            &publish_status,
+            &now,
+            &now
+        ],
     )
     .map_err(|e| e.to_string())?;
 
@@ -44,6 +67,14 @@ pub async fn create_prompt_group(
         name,
         description,
         template_schema,
+        category,
+        tags,
+        price,
+        is_published,
+        publish_status,
+        remote_slug: None,
+        remote_url: None,
+        last_published_at: None,
         image_count: image_ids.len() as i32,
         created_at: now.clone(),
         updated_at: now,
@@ -64,12 +95,20 @@ pub async fn get_prompt_groups(db_path: PathBuf) -> Result<Vec<PromptGroup>, Str
                 pg.name,
                 pg.description,
                 pg.template_schema,
+                pg.category,
+                pg.tags,
+                pg.price,
+                pg.is_published,
+                pg.publish_status,
+                pg.remote_slug,
+                pg.remote_url,
+                pg.last_published_at,
                 COUNT(ipgr.image_id) as image_count,
                 pg.created_at,
                 pg.updated_at
              FROM prompt_groups pg
              LEFT JOIN image_prompt_group_relations ipgr ON pg.id = ipgr.prompt_group_id
-             GROUP BY pg.id, pg.prompt, pg.negative_prompt, pg.name, pg.description, pg.template_schema, pg.created_at, pg.updated_at
+             GROUP BY pg.id, pg.prompt, pg.negative_prompt, pg.name, pg.description, pg.template_schema, pg.category, pg.tags, pg.price, pg.is_published, pg.publish_status, pg.remote_slug, pg.remote_url, pg.last_published_at, pg.created_at, pg.updated_at
              ORDER BY created_at DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -83,9 +122,17 @@ pub async fn get_prompt_groups(db_path: PathBuf) -> Result<Vec<PromptGroup>, Str
                 name: row.get(3)?,
                 description: row.get(4)?,
                 template_schema: row.get(5)?,
-                image_count: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                category: row.get(6)?,
+                tags: row.get(7)?,
+                price: row.get(8)?,
+                is_published: row.get(9)?,
+                publish_status: row.get(10)?,
+                remote_slug: row.get(11)?,
+                remote_url: row.get(12)?,
+                last_published_at: row.get(13)?,
+                image_count: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -106,7 +153,7 @@ pub async fn get_prompt_group_with_images(
     // 获取 prompt 组信息
     let group: PromptGroup = conn
         .query_row(
-            "SELECT id, prompt, negative_prompt, name, description, template_schema, created_at, updated_at
+            "SELECT id, prompt, negative_prompt, name, description, template_schema, category, tags, price, is_published, publish_status, remote_slug, remote_url, last_published_at, created_at, updated_at
              FROM prompt_groups
              WHERE id = ?1",
             [&group_id],
@@ -118,9 +165,17 @@ pub async fn get_prompt_group_with_images(
                     name: row.get(3)?,
                     description: row.get(4)?,
                     template_schema: row.get(5)?,
+                    category: row.get(6)?,
+                    tags: row.get(7)?,
+                    price: row.get(8)?,
+                    is_published: row.get(9)?,
+                    publish_status: row.get(10)?,
+                    remote_slug: row.get(11)?,
+                    remote_url: row.get(12)?,
+                    last_published_at: row.get(13)?,
                     image_count: 0,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
                 })
             },
         )
@@ -132,13 +187,16 @@ pub async fn get_prompt_group_with_images(
             "SELECT 
                 i.id, i.filename, i.absolute_path, i.primary_model_id,
                 m.name as model_name, v.name as vendor_name,
-                i.width, i.height, i.created_at
+                i.width, i.height, i.created_at,
+                ipgr.role, ipgr.is_cover, ipgr.sort_order, ipgr.caption,
+                ipgr.variant_key, ipgr.variant_json, ipgr.is_sync_enabled,
+                ipgr.sync_status, ipgr.remote_url
              FROM images i
              INNER JOIN image_prompt_group_relations ipgr ON i.id = ipgr.image_id
              INNER JOIN models m ON i.primary_model_id = m.id
              INNER JOIN vendors v ON m.vendor_id = v.id
              WHERE ipgr.prompt_group_id = ?1
-             ORDER BY v.name, m.name, i.created_at",
+             ORDER BY ipgr.sort_order, v.name, m.name, i.created_at",
         )
         .map_err(|e| e.to_string())?;
 
@@ -154,6 +212,15 @@ pub async fn get_prompt_group_with_images(
                 "width": row.get::<_, Option<i32>>(6)?,
                 "height": row.get::<_, Option<i32>>(7)?,
                 "created_at": row.get::<_, String>(8)?,
+                "role": row.get::<_, Option<String>>(9)?.unwrap_or_else(|| "gallery".to_string()),
+                "is_cover": row.get::<_, bool>(10)?,
+                "sort_order": row.get::<_, i32>(11)?,
+                "caption": row.get::<_, Option<String>>(12)?,
+                "variant_key": row.get::<_, Option<String>>(13)?,
+                "variant_json": row.get::<_, Option<String>>(14)?,
+                "is_sync_enabled": row.get::<_, bool>(15)?,
+                "sync_status": row.get::<_, Option<String>>(16)?.unwrap_or_else(|| "local".to_string()),
+                "remote_url": row.get::<_, Option<String>>(17)?,
             }))
         })
         .map_err(|e| e.to_string())?
@@ -212,6 +279,14 @@ pub async fn get_prompt_groups_for_image(
                 pg.name,
                 pg.description,
                 pg.template_schema,
+                pg.category,
+                pg.tags,
+                pg.price,
+                pg.is_published,
+                pg.publish_status,
+                pg.remote_slug,
+                pg.remote_url,
+                pg.last_published_at,
                 (
                     SELECT COUNT(*)
                     FROM image_prompt_group_relations ipgr2
@@ -235,9 +310,17 @@ pub async fn get_prompt_groups_for_image(
                 name: row.get(3)?,
                 description: row.get(4)?,
                 template_schema: row.get(5)?,
-                image_count: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                category: row.get(6)?,
+                tags: row.get(7)?,
+                price: row.get(8)?,
+                is_published: row.get(9)?,
+                publish_status: row.get(10)?,
+                remote_slug: row.get(11)?,
+                remote_url: row.get(12)?,
+                last_published_at: row.get(13)?,
+                image_count: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -314,6 +397,73 @@ pub async fn remove_images_from_prompt_group(
 
 /// 更新 Prompt 组
 #[tauri::command]
+pub async fn update_prompt_group_image_meta(
+    db_path: PathBuf,
+    group_id: String,
+    image_id: String,
+    role: Option<String>,
+    is_cover: Option<bool>,
+    sort_order: Option<i32>,
+    caption: Option<String>,
+    variant_key: Option<String>,
+    variant_json: Option<String>,
+    is_sync_enabled: Option<bool>,
+) -> Result<(), String> {
+    let mut conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    if is_cover.unwrap_or(false) {
+        tx.execute(
+            "UPDATE image_prompt_group_relations SET is_cover = 0, role = CASE WHEN role = 'cover' THEN 'gallery' ELSE role END WHERE prompt_group_id = ?1",
+            [&group_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let current_role = role.unwrap_or_else(|| {
+        if is_cover.unwrap_or(false) {
+            "cover".to_string()
+        } else {
+            "gallery".to_string()
+        }
+    });
+
+    tx.execute(
+        "UPDATE image_prompt_group_relations
+         SET role = ?1,
+             is_cover = ?2,
+             sort_order = ?3,
+             caption = ?4,
+             variant_key = ?5,
+             variant_json = ?6,
+             is_sync_enabled = ?7
+         WHERE prompt_group_id = ?8 AND image_id = ?9",
+        rusqlite::params![
+            current_role,
+            is_cover.unwrap_or(false),
+            sort_order.unwrap_or(0),
+            caption,
+            variant_key,
+            variant_json,
+            is_sync_enabled.unwrap_or(true),
+            &group_id,
+            &image_id
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+    tx.execute(
+        "UPDATE prompt_groups SET updated_at = ?1 WHERE id = ?2",
+        rusqlite::params![&now, &group_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn update_prompt_group(
     db_path: PathBuf,
     group_id: String,
@@ -322,6 +472,14 @@ pub async fn update_prompt_group(
     name: Option<String>,
     description: Option<String>,
     template_schema: Option<String>,
+    category: Option<String>,
+    tags: Option<String>,
+    price: Option<f64>,
+    is_published: Option<bool>,
+    publish_status: Option<String>,
+    remote_slug: Option<String>,
+    remote_url: Option<String>,
+    last_published_at: Option<String>,
 ) -> Result<(), String> {
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
@@ -353,6 +511,46 @@ pub async fn update_prompt_group(
     if let Some(ts) = template_schema {
         updates.push("template_schema = ?");
         params.push(Box::new(ts));
+    }
+
+    if let Some(c) = category {
+        updates.push("category = ?");
+        params.push(Box::new(c));
+    }
+
+    if let Some(t) = tags {
+        updates.push("tags = ?");
+        params.push(Box::new(t));
+    }
+
+    if let Some(p) = price {
+        updates.push("price = ?");
+        params.push(Box::new(p));
+    }
+
+    if let Some(ip) = is_published {
+        updates.push("is_published = ?");
+        params.push(Box::new(ip));
+    }
+
+    if let Some(ps) = publish_status {
+        updates.push("publish_status = ?");
+        params.push(Box::new(ps));
+    }
+
+    if let Some(rs) = remote_slug {
+        updates.push("remote_slug = ?");
+        params.push(Box::new(rs));
+    }
+
+    if let Some(ru) = remote_url {
+        updates.push("remote_url = ?");
+        params.push(Box::new(ru));
+    }
+
+    if let Some(lpa) = last_published_at {
+        updates.push("last_published_at = ?");
+        params.push(Box::new(lpa));
     }
 
     let sql = format!(
@@ -425,8 +623,8 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
 
             // 创建 prompt 组
             conn.execute(
-                "INSERT INTO prompt_groups (id, prompt, negative_prompt, name, description, template_schema, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO prompt_groups (id, prompt, negative_prompt, name, description, template_schema, category, tags, price, is_published, publish_status, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 rusqlite::params![
                     &id,
                     &prompt,
@@ -434,6 +632,11 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
                     None::<String>,
                     Some(format!("自动创建 - {} 张图片", image_ids.len())),
                     None::<String>,
+                    "Product & Ecommerce",
+                    "[]",
+                    4.99,
+                    false,
+                    "draft",
                     &now,
                     &now
                 ],
@@ -457,6 +660,14 @@ pub async fn auto_group_by_prompt(db_path: PathBuf) -> Result<Vec<PromptGroup>, 
                 name: None,
                 description: Some(format!("自动创建 - {} 张图片", image_ids.len())),
                 template_schema: None,
+                category: "Product & Ecommerce".to_string(),
+                tags: "[]".to_string(),
+                price: 4.99,
+                is_published: false,
+                publish_status: "draft".to_string(),
+                remote_slug: None,
+                remote_url: None,
+                last_published_at: None,
                 image_count: image_ids.len() as i32,
                 created_at: now.clone(),
                 updated_at: now.clone(),

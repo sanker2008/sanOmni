@@ -15,6 +15,11 @@ import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { SmartPromptRenderer } from "./SmartPromptRenderer";
 import { getPublishStatus, type PublishConfig } from "@/services/publish";
 import { PublishModal } from "./PublishModal";
+import {
+  DEFAULT_PROMPT_TEMPLATE_CATEGORY,
+  PROMPT_TEMPLATE_CATEGORIES,
+  getPromptCategoryLabel,
+} from "@/lib/promptTaxonomy";
 
 interface PromptGroupWithImages {
   group: PromptGroup;
@@ -28,6 +33,15 @@ interface PromptGroupWithImages {
     width?: number;
     height?: number;
     created_at: string;
+    role?: string;
+    is_cover?: boolean;
+    sort_order?: number;
+    caption?: string;
+    variant_key?: string;
+    variant_json?: string;
+    is_sync_enabled?: boolean;
+    sync_status?: string;
+    remote_url?: string;
   }>;
 }
 
@@ -38,6 +52,9 @@ interface PromptFormState {
   name: string;
   description: string;
   template_schema: string;
+  category: string;
+  tags: string;
+  price: string;
   imageIds: string[];
 }
 
@@ -47,7 +64,21 @@ const EMPTY_FORM: PromptFormState = {
   name: "",
   description: "",
   template_schema: "",
+  category: DEFAULT_PROMPT_TEMPLATE_CATEGORY,
+  tags: "",
+  price: "",
   imageIds: [],
+};
+
+const splitPromptTags = (tags?: string) =>
+  (tags || "")
+    .split(/[,，]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+const formatPromptPrice = (price?: number) => {
+  if (price === undefined || price === null || Number.isNaN(price)) return "";
+  return `$${price.toFixed(2)}`;
 };
 
 export function PromptGroupsView() {
@@ -69,6 +100,8 @@ export function PromptGroupsView() {
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilterMode, setGroupFilterMode] = useState<"all" | "linked" | "unlinked">("all");
+  const [publishFilterMode, setPublishFilterMode] = useState<"all" | "published" | "unpublished">("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
@@ -90,7 +123,7 @@ export function PromptGroupsView() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, groupFilterMode]);
+  }, [searchQuery, groupFilterMode, publishFilterMode, categoryFilter]);
 
   const filteredGroups = useMemo(() => {
     let result = groups;
@@ -102,6 +135,16 @@ export function PromptGroupsView() {
       result = result.filter((group) => group.image_count === 0);
     }
 
+    if (publishFilterMode === "published") {
+      result = result.filter((group) => publishStatuses.get(group.id)?.is_published === true);
+    } else if (publishFilterMode === "unpublished") {
+      result = result.filter((group) => publishStatuses.get(group.id)?.is_published !== true);
+    }
+
+    if (categoryFilter !== "all") {
+      result = result.filter((group) => (group.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY) === categoryFilter);
+    }
+
     // Filter by search query
     const query = searchQuery.trim().toLowerCase();
     if (!query) return result;
@@ -109,11 +152,14 @@ export function PromptGroupsView() {
     return result.filter((group) => {
       return (
         group.prompt.toLowerCase().includes(query) ||
+        (group.name && group.name.toLowerCase().includes(query)) ||
+        (group.category && getPromptCategoryLabel(group.category).toLowerCase().includes(query)) ||
+        (group.tags && group.tags.toLowerCase().includes(query)) ||
         (group.description && group.description.toLowerCase().includes(query)) ||
         (group.negative_prompt && group.negative_prompt.toLowerCase().includes(query))
       );
     });
-  }, [groups, searchQuery, groupFilterMode]);
+  }, [groups, searchQuery, groupFilterMode, publishFilterMode, categoryFilter, publishStatuses]);
 
   const paginatedGroups = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -127,14 +173,26 @@ export function PromptGroupsView() {
     }
   }, [filteredGroups.length, currentPage, pageSize]);
 
-  const fetchPublishStatuses = async () => {
-    if (paginatedGroups.length === 0) return;
-    const ids = paginatedGroups.map(g => g.id);
+  const fetchPublishStatuses = async (targetGroups: PromptGroup[] = paginatedGroups) => {
+    if (targetGroups.length === 0) return;
+    const ids = targetGroups.map(g => g.id);
     const statuses = await getPublishStatus(ids);
     setPublishStatuses(current => {
       const next = new Map(current);
-      statuses.forEach(s => next.set(s.id, { price: s.price, category: s.category, is_published: s.is_published }));
-      return next;
+      let changed = false;
+      statuses.forEach(s => {
+        const previous = current.get(s.id);
+        if (
+          !previous ||
+          previous.price !== s.price ||
+          previous.category !== s.category ||
+          previous.is_published !== s.is_published
+        ) {
+          next.set(s.id, { price: s.price, category: s.category, is_published: s.is_published });
+          changed = true;
+        }
+      });
+      return changed ? next : current;
     });
   };
 
@@ -165,6 +223,7 @@ export function PromptGroupsView() {
       setIsLoading(true);
       const allGroups = await promptApi.getAll();
       setGroups(allGroups);
+      void fetchPublishStatuses(allGroups);
       
       // 加载每个组的前几张图片
       const imagesMap = new Map();
@@ -221,6 +280,9 @@ export function PromptGroupsView() {
         name: result.group.name || "",
         description: result.group.description || "",
         template_schema: result.group.template_schema || "",
+        category: result.group.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY,
+        tags: result.group.tags || "",
+        price: result.group.price?.toString() || "",
         imageIds: result.images.map((image) => image.id),
       });
       setImageSearch("");
@@ -286,6 +348,10 @@ export function PromptGroupsView() {
     let name = form.name.trim();
     let description = form.description.trim();
     const templateSchema = form.template_schema.trim() || undefined;
+    const category = form.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY;
+    const tags = form.tags.trim();
+    const parsedPrice = Number.parseFloat(form.price);
+    const price = Number.isFinite(parsedPrice) ? parsedPrice : undefined;
 
     // 如果用户没有填某些字段，但填了 Template JSON，尝试从 JSON 中提取
     if (templateSchema) {
@@ -331,6 +397,9 @@ export function PromptGroupsView() {
           name: name || undefined,
           description: description || undefined,
           templateSchema: templateSchema,
+          category,
+          tags,
+          price,
         });
 
         const toAdd = form.imageIds.filter((id) => !previousIds.has(id));
@@ -351,6 +420,9 @@ export function PromptGroupsView() {
           name: name || undefined,
           description: description || undefined,
           templateSchema: templateSchema,
+          category,
+          tags,
+          price,
           imageIds: form.imageIds,
         });
       }
@@ -636,13 +708,13 @@ export function PromptGroupsView() {
           <Sparkles className="h-5 w-5 text-amber-500" />
           <h2 className="text-lg font-semibold">sanPrompt</h2>
           <Badge variant="secondary">
-            {searchQuery || groupFilterMode !== "all" 
+            {searchQuery || groupFilterMode !== "all" || publishFilterMode !== "all" || categoryFilter !== "all"
               ? `${filteredGroups.length} / ${groups.length}` 
               : groups.length} 个 Prompt
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="flex items-center rounded-md border bg-muted/50 p-0.5">
             <button
               onClick={() => setViewMode("list")}
@@ -697,6 +769,29 @@ export function PromptGroupsView() {
             <option value="unlinked">未关联图片</option>
           </select>
 
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+          >
+            <option value="all">全部分类</option>
+            {PROMPT_TEMPLATE_CATEGORIES.map((category) => (
+              <option key={category.value} value={category.value}>
+                {category.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={publishFilterMode}
+            onChange={(e) => setPublishFilterMode(e.target.value as "all" | "published" | "unpublished")}
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+          >
+            <option value="all">全部上架状态</option>
+            <option value="published">已上架</option>
+            <option value="unpublished">未上架</option>
+          </select>
+
           <Button variant="outline" size="sm" onClick={() => void loadGroups()} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             刷新
@@ -721,12 +816,16 @@ export function PromptGroupsView() {
                     ? "没有已关联图片的 Prompt"
                     : groupFilterMode === "unlinked"
                     ? "没有未关联图片的 Prompt"
+                    : categoryFilter !== "all"
+                    ? "没有该分类下的 Prompt"
                     : "还没有 Prompt"}
                 </p>
                 <p className="mt-2 text-sm">
                   {searchQuery 
                     ? "请尝试更改搜索关键词" 
                     : groupFilterMode !== "all"
+                    ? "请尝试更改筛选条件"
+                    : categoryFilter !== "all"
                     ? "请尝试更改筛选条件"
                     : "创建一个 Prompt，并直接关联已有图片。"}
                 </p>
@@ -751,6 +850,26 @@ export function PromptGroupsView() {
                       {group.description && (
                         <CardDescription className="mt-1 text-xs">{group.description}</CardDescription>
                       )}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <Badge variant="secondary" className="font-normal">
+                          {getPromptCategoryLabel(group.category)}
+                        </Badge>
+                        {splitPromptTags(group.tags).slice(0, 3).map((tag) => (
+                          <Badge key={tag} variant="outline" className="font-normal">
+                            {tag}
+                          </Badge>
+                        ))}
+                        {splitPromptTags(group.tags).length > 3 && (
+                          <Badge variant="outline" className="font-normal">
+                            +{splitPromptTags(group.tags).length - 3}
+                          </Badge>
+                        )}
+                        {group.price !== undefined && group.price !== null && (
+                          <Badge variant="outline" className="font-normal">
+                            {formatPromptPrice(group.price)}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-col gap-2 items-end">
                       <Badge variant="outline">{group.image_count} 张</Badge>
@@ -899,6 +1018,18 @@ export function PromptGroupsView() {
           {selectedGroup && (
             <ScrollArea className="max-h-[70vh]">
               <div className="space-y-6 pt-2">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">{getPromptCategoryLabel(selectedGroup.group.category)}</Badge>
+                  {splitPromptTags(selectedGroup.group.tags).map((tag) => (
+                    <Badge key={tag} variant="outline">
+                      {tag}
+                    </Badge>
+                  ))}
+                  {selectedGroup.group.price !== undefined && selectedGroup.group.price !== null && (
+                    <Badge variant="outline">{formatPromptPrice(selectedGroup.group.price)}</Badge>
+                  )}
+                </div>
+
                 <SmartPromptRenderer 
                   templateSchemaStr={selectedGroup.group.template_schema || ""} 
                   basePrompt={selectedGroup.group.prompt} 
@@ -1053,6 +1184,42 @@ export function PromptGroupsView() {
                       onChange={(e) => handleFieldChange("name" as any, e.target.value)}
                       placeholder="可选，例如: 极简摄影"
                     />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">分类</label>
+                      <select
+                        value={form.category}
+                        onChange={(e) => handleFieldChange("category", e.target.value)}
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        {PROMPT_TEMPLATE_CATEGORIES.map((category) => (
+                          <option key={category.value} value={category.value}>
+                            {category.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">标签</label>
+                      <Input
+                        value={form.tags}
+                        onChange={(e) => handleFieldChange("tags", e.target.value)}
+                        placeholder="逗号分隔，例如: 写实, 海报"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">价格</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.price}
+                        onChange={(e) => handleFieldChange("price", e.target.value)}
+                        placeholder="例如: 4.99"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">

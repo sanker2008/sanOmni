@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
-import { imageApi } from "@/services/tauri";
+import { imageApi, vendorApi } from "@/services/tauri";
 import { toast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +67,19 @@ export default function ArchivedView() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [isVendorsDialogOpen, setIsVendorsDialogOpen] = useState(false);
   const [isQuickImporting, setIsQuickImporting] = useState(false);
+
+  useEffect(() => {
+    void loadVendors();
+  }, []);
+
+  const loadVendors = async () => {
+    try {
+      const data = await vendorApi.getAll();
+      useVendorStore.getState().setVendors(data);
+    } catch (error) {
+      console.error("Failed to load vendors:", error);
+    }
+  };
 
   const handleQuickUpload = async () => {
     if (!selectedModel || !selectedVendor) {
