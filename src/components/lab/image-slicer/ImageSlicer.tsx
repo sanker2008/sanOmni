@@ -273,6 +273,7 @@ export default function ImageSlicer() {
         type="file"
         accept="image/*"
         className="hidden"
+        onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
         onChange={(e) => e.target.files?.[0] && handleImageFile(e.target.files[0])}
       />
 

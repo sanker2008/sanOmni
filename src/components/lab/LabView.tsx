@@ -20,6 +20,7 @@ import {
   PenTool,
   Eraser,
   HelpCircle,
+  User,
 } from 'lucide-react';
 import PngToSvg from './png-to-svg/PngToSvg';
 import {
@@ -30,6 +31,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+
+import PoseStudio from './pose-studio/PoseStudio';
 
 // ─── Tool Registry ─────────────────────────────────────────
 
@@ -44,6 +47,21 @@ interface LabTool {
 }
 
 const LAB_TOOLS: LabTool[] = [
+  {
+    id: 'pose-studio',
+    name: '3D姿态参考',
+    description: '摆放 3D 白膜人物，调整相机光线导出参考图',
+    icon: <User className="w-4 h-4" />,
+    component: PoseStudio,
+    available: true,
+    instructions: [
+      '1. 默认包含一个基础白膜人物。你可以点击右上角 + 号添加形状或更多人物。',
+      '2. 在左侧面板选中对象后，右侧属性面板可调整其位置、旋转、缩放和颜色。',
+      '3. 在 3D 视图中：按住左键旋转视角，按住右键平移，滚动鼠标滚轮缩放。',
+      '4. 在右侧属性面板的“环境设置”中可以调整相机 FOV，以及环境光和主光源方向颜色。',
+      '5. 调整好满意的构图后，在底部设置所需图片尺寸，点击【导出参考图】即可。'
+    ]
+  },
   {
     id: 'ai-image-editor',
     name: 'AI P图',

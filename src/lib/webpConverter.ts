@@ -1,6 +1,6 @@
-import { remove, writeFile } from '@tauri-apps/plugin-fs';
+import { remove, writeFile, exists } from '@tauri-apps/plugin-fs';
 import { ipImageApi } from '@/services/tauri';
-import { useIpImageStore, type IpImageWithRelations } from '@/stores';
+import { useIpImageStore, useUIStore, type IpImageWithRelations } from '@/stores';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 export async function convertIpImageToWebp(image: IpImageWithRelations, quality: number = 0.9): Promise<IpImageWithRelations> {
@@ -44,9 +44,52 @@ export async function convertIpImageToWebp(image: IpImageWithRelations, quality:
 
   // Generate new paths
   const oldPath = image.absolute_path;
-  const newAbsolutePath = oldPath.replace(/\.[^/.]+$/, '.webp');
-  const newFilename = image.filename.replace(/\.[^/.]+$/, '.webp');
-  const newRelativePath = image.relative_path.replace(/\.[^/.]+$/, '.webp');
+  let newAbsolutePath = oldPath.replace(/\.[^/.]+$/, '.webp');
+  let newFilename = image.filename.replace(/\.[^/.]+$/, '.webp');
+  let newRelativePath = image.relative_path.replace(/\.[^/.]+$/, '.webp');
+
+  if (await exists(newAbsolutePath) && newAbsolutePath !== oldPath) {
+    const { settings } = useUIStore.getState();
+    const template = settings.ipNamingTemplate || "{ip}-{date}-{time}";
+    
+    const parts = image.relative_path.split(/[/\\]/);
+    const ipName = parts.length > 1 ? parts[1] : 'unknown';
+    
+    const now = new Date();
+    const dateStr = image.created_at ? image.created_at.substring(0, 10) : now.toISOString().substring(0, 10);
+    const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0') + now.getSeconds().toString().padStart(2, '0');
+    
+    let candidateStem = template
+      .replace("{ip}", ipName)
+      .replace("{date}", dateStr)
+      .replace("{time}", timeStr)
+      .replace("{index}", timeStr)
+      .replace("{original}", image.original_filename || "");
+      
+    let counter = 1;
+    let finalFilename = `${candidateStem}.webp`;
+    let basePath = newAbsolutePath.substring(0, newAbsolutePath.length - newFilename.length);
+    let finalPath = basePath + finalFilename;
+    
+    while (await exists(finalPath)) {
+       finalFilename = `${candidateStem}_${counter}.webp`;
+       finalPath = basePath + finalFilename;
+       counter++;
+    }
+    
+    newAbsolutePath = finalPath;
+    newRelativePath = newRelativePath.substring(0, newRelativePath.length - newFilename.length) + finalFilename;
+    newFilename = finalFilename;
+  }
+
+  // Delete the old file first if we are overwriting, to ensure the file is truncated
+  if (await exists(newAbsolutePath)) {
+    try {
+      await remove(newAbsolutePath);
+    } catch (e) {
+      console.warn('Failed to remove existing file before overwrite:', e);
+    }
+  }
 
   // Write new file
   await writeFile(newAbsolutePath, uint8Array);
@@ -172,9 +215,52 @@ export async function convertIpImageToPng(image: IpImageWithRelations): Promise<
 
   // Generate new paths
   const oldPath = image.absolute_path;
-  const newAbsolutePath = oldPath.replace(/\.[^/.]+$/, '.png');
-  const newFilename = image.filename.replace(/\.[^/.]+$/, '.png');
-  const newRelativePath = image.relative_path.replace(/\.[^/.]+$/, '.png');
+  let newAbsolutePath = oldPath.replace(/\.[^/.]+$/, '.png');
+  let newFilename = image.filename.replace(/\.[^/.]+$/, '.png');
+  let newRelativePath = image.relative_path.replace(/\.[^/.]+$/, '.png');
+
+  if (await exists(newAbsolutePath) && newAbsolutePath !== oldPath) {
+    const { settings } = useUIStore.getState();
+    const template = settings.ipNamingTemplate || "{ip}-{date}-{time}";
+    
+    const parts = image.relative_path.split(/[/\\]/);
+    const ipName = parts.length > 1 ? parts[1] : 'unknown';
+    
+    const now = new Date();
+    const dateStr = image.created_at ? image.created_at.substring(0, 10) : now.toISOString().substring(0, 10);
+    const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0') + now.getSeconds().toString().padStart(2, '0');
+    
+    let candidateStem = template
+      .replace("{ip}", ipName)
+      .replace("{date}", dateStr)
+      .replace("{time}", timeStr)
+      .replace("{index}", timeStr)
+      .replace("{original}", image.original_filename || "");
+      
+    let counter = 1;
+    let finalFilename = `${candidateStem}.png`;
+    let basePath = newAbsolutePath.substring(0, newAbsolutePath.length - newFilename.length);
+    let finalPath = basePath + finalFilename;
+    
+    while (await exists(finalPath)) {
+       finalFilename = `${candidateStem}_${counter}.png`;
+       finalPath = basePath + finalFilename;
+       counter++;
+    }
+    
+    newAbsolutePath = finalPath;
+    newRelativePath = newRelativePath.substring(0, newRelativePath.length - newFilename.length) + finalFilename;
+    newFilename = finalFilename;
+  }
+
+  // Delete the old file first if we are overwriting, to ensure the file is truncated
+  if (await exists(newAbsolutePath)) {
+    try {
+      await remove(newAbsolutePath);
+    } catch (e) {
+      console.warn('Failed to remove existing file before overwrite:', e);
+    }
+  }
 
   // Write new file
   await writeFile(newAbsolutePath, uint8Array);

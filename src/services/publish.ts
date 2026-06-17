@@ -122,27 +122,38 @@ export async function publishPromptToWeb(groupId: string, config: PublishConfig)
 }
 
 export async function getPublishStatus(ids: string[]) {
-  try {
-    const response = await fetch(SANPROMPT_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${SYNC_SECRET}`
-      },
-      body: JSON.stringify({
-        action: "get_status",
-        payload: { ids }
-      })
-    });
+  if (!ids || ids.length === 0) return [];
 
-    if (!response.ok) {
-      throw new Error("Failed to fetch status");
+  const CHUNK_SIZE = 20;
+  const allResults: { id: string; price: number; category: string; is_published: boolean }[] = [];
+
+  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + CHUNK_SIZE);
+    try {
+      const response = await fetch(SANPROMPT_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${SYNC_SECRET}`
+        },
+        body: JSON.stringify({
+          action: "get_status",
+          payload: { ids: chunk }
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && Array.isArray(result.data)) {
+          allResults.push(...result.data);
+        }
+      } else {
+        console.error(`Get status chunk error: ${response.status} ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error("Get status chunk error:", error);
     }
-
-    const result = await response.json();
-    return result.data as { id: string; price: number; category: string; is_published: boolean }[];
-  } catch (error) {
-    console.error("Get status error:", error);
-    return [];
   }
+
+  return allResults;
 }
