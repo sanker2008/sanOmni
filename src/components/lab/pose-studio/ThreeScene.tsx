@@ -6,6 +6,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Move, RotateCcw, Maximize2 } from 'lucide-react';
 import { SceneObject, CameraConfig, LightConfig, ObjectType, JointName } from './types';
 
+const CHARACTER_JOINT_NAMES: JointName[] = [
+  'spine', 'neck',
+  'leftShoulder', 'leftElbow', 'leftWrist',
+  'rightShoulder', 'rightElbow', 'rightWrist',
+  'leftHip', 'leftKnee', 'leftAnkle',
+  'rightHip', 'rightKnee', 'rightAnkle',
+];
+
 // ── Pure helpers defined OUTSIDE the component (stable, no re-creation) ──────
 
 function buildCharacterGroup(): THREE.Group {
@@ -167,6 +175,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({
     ambient:     THREE.AmbientLight;
     directional: THREE.DirectionalLight;
     point:       THREE.PointLight;
+    extraPoints: Map<string, THREE.PointLight>;
   } | null>(null);
 
   // ── Init (runs once) ──────────────────────────────────────────────────────
@@ -214,7 +223,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({
     pointLight.position.set(pp.x, pp.y, pp.z);
     if (lights.pointLightEnabled) scene.add(pointLight);
 
-    lightsRef.current = { ambient: ambientLight, directional: dirLight, point: pointLight };
+    lightsRef.current = { ambient: ambientLight, directional: dirLight, point: pointLight, extraPoints: new Map() };
 
     // TransformControls setup
     const tControls = new TransformControls(camera, renderer.domElement);
@@ -365,7 +374,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({
   // ── Sync lights ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!lightsRef.current) return;
-    const { ambient: a, directional: d, point: p } = lightsRef.current;
+    const { ambient: a, directional: d, point: p, extraPoints } = lightsRef.current;
 
     a.color.set(lights.ambientColor);
     a.intensity = lights.ambientIntensity;
@@ -383,6 +392,34 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({
     } else {
       sceneRef.current?.remove(p);
     }
+
+    const nextExtraLights = lights.extraPointLights ?? [];
+    const nextIds = new Set(nextExtraLights.map(light => light.id));
+
+    extraPoints.forEach((light, id) => {
+      if (!nextIds.has(id)) {
+        sceneRef.current?.remove(light);
+        extraPoints.delete(id);
+      }
+    });
+
+    nextExtraLights.forEach((cfg) => {
+      let light = extraPoints.get(cfg.id);
+      if (!light) {
+        light = new THREE.PointLight(cfg.color, cfg.intensity, 100);
+        extraPoints.set(cfg.id, light);
+      }
+
+      light.color.set(cfg.color);
+      light.intensity = cfg.intensity;
+      light.position.set(cfg.position.x, cfg.position.y, cfg.position.z);
+
+      if (cfg.enabled) {
+        if (!sceneRef.current?.children.includes(light)) sceneRef.current?.add(light);
+      } else {
+        sceneRef.current?.remove(light);
+      }
+    });
   }, [lights]);
 
   // ── Sync camera ──────────────────────────────────────────────────────────
@@ -494,15 +531,17 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({
           }
         });
 
-        // Apply joint rotations
-        if (obj.joints) {
-          Object.entries(obj.joints).forEach(([jName, rot]) => {
-            const jointGroup = mesh!.getObjectByName(jName);
-            if (jointGroup && rot) {
-              jointGroup.rotation.set(rot.x, rot.y, rot.z);
-            }
-          });
-        }
+        CHARACTER_JOINT_NAMES.forEach((jName) => {
+          const jointGroup = mesh!.getObjectByName(jName);
+          jointGroup?.rotation.set(0, 0, 0);
+        });
+
+        Object.entries(obj.joints || {}).forEach(([jName, rot]) => {
+          const jointGroup = mesh!.getObjectByName(jName);
+          if (jointGroup && rot) {
+            jointGroup.rotation.set(rot.x, rot.y, rot.z);
+          }
+        });
       }
     });
   }, [objects]);

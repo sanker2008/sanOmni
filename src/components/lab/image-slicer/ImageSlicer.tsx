@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { readFile, remove } from '@tauri-apps/plugin-fs';
+import { join } from '@tauri-apps/api/path';
+import { geminiWatermarkApi } from '@/services/tauri';
+import { getLabsRoot } from '@/lib/pathUtils';
 import { Guideline, SliceItem, ExportConfig } from './types';
 import { calculateEqualGuidelines, computeSlices, processSliceToCanvas, generateSliceFileName } from './utils';
-import { getDefaultExportPath, saveFile } from './fs';
+import { clearTempImages, ensureDirectory, getDefaultExportPath, listTempImages, loadTempImage, saveFile, TempImageEntry } from './fs';
 import SlicerCanvas from './SlicerCanvas';
 import SliceGridPreview from './SliceGridPreview';
 import ExportSettings from './ExportSettings';
@@ -9,8 +14,11 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/useToast';
 import {
   Upload,
+  History,
   Layers,
   Trash2,
+  Eraser,
+  Loader2,
   Plus,
   ArrowRight,
   Sparkles,
@@ -19,6 +27,35 @@ import {
   ArrowLeft,
   XCircle,
 } from 'lucide-react';
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function findAvailableGuidelinePosition(existingPositions: number[], limit: number) {
+  if (limit <= 2) return Math.max(0, Math.round(limit / 2));
+
+  const base = Math.round(limit / 2);
+  const step = Math.max(8, Math.round(limit / 12));
+  const minGap = 4;
+  const isFree = (position: number) =>
+    !existingPositions.some((existing) => Math.abs(existing - position) < minGap);
+
+  for (let i = 0; i <= 12; i += 1) {
+    const candidates = i === 0 ? [base] : [base + step * i, base - step * i];
+    for (const candidate of candidates) {
+      const position = Math.max(1, Math.min(limit - 1, candidate));
+      if (isFree(position)) return position;
+    }
+  }
+
+  return base;
+}
 
 export default function ImageSlicer() {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -32,6 +69,10 @@ export default function ImageSlicer() {
 
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  const [isRemovingWatermark, setIsRemovingWatermark] = useState(false);
+  const [tempHistory, setTempHistory] = useState<TempImageEntry[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   // Equal division parameters
   const [rows, setRows] = useState<number>(3);
@@ -51,6 +92,53 @@ export default function ImageSlicer() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentWatermarkOutputPathRef = useRef<string | null>(null);
+
+  const applyImageSrc = useCallback((src: string, filename: string, successTitle = '图片加载成功') => {
+    const img = new Image();
+    img.onload = () => {
+      currentWatermarkOutputPathRef.current = null;
+      setOriginalWidth(img.width);
+      setOriginalHeight(img.height);
+      setImageSrc(src);
+      setOriginalFilename(filename);
+      setGuidelines([]);
+      setActiveTab('editor');
+
+      const v = calculateEqualGuidelines(img.width, 3, 'vertical', false, 10);
+      const h = calculateEqualGuidelines(img.height, 3, 'horizontal', false, 10);
+      setGuidelines([...v, ...h]);
+
+      toast({
+        title: successTitle,
+        description: `分辨率: ${img.width} x ${img.height} px`,
+        variant: 'default',
+      });
+    };
+    img.onerror = () => {
+      toast({
+        title: '图片加载失败',
+        description: '无法读取该图片，请换一张重试。',
+        variant: 'destructive',
+      });
+    };
+    img.src = src;
+  }, []);
+
+  const loadTempHistory = useCallback(async () => {
+    setIsLoadingHistory(true);
+    try {
+      setTempHistory(await listTempImages());
+    } catch (error: any) {
+      toast({
+        title: '临时图片历史读取失败',
+        description: error?.message || String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
 
   // Initialize default export path on mount
   useEffect(() => {
@@ -87,6 +175,7 @@ export default function ImageSlicer() {
       const dataUrl = reader.result as string;
       const img = new Image();
       img.onload = () => {
+        currentWatermarkOutputPathRef.current = null;
         setOriginalWidth(img.width);
         setOriginalHeight(img.height);
         setImageSrc(dataUrl);
@@ -117,6 +206,133 @@ export default function ImageSlicer() {
     }
   };
 
+  const handleOpenHistory = async () => {
+    setIsHistoryOpen(true);
+    await loadTempHistory();
+  };
+
+  const handleLoadTempImage = async (entry: TempImageEntry) => {
+    try {
+      const src = await loadTempImage(entry);
+      applyImageSrc(src, entry.name, '已从临时历史载入');
+      setIsHistoryOpen(false);
+    } catch (error: any) {
+      toast({
+        title: '载入临时图片失败',
+        description: error?.message || String(error),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleClearTempHistory = async () => {
+    try {
+      const count = await clearTempImages();
+      setTempHistory([]);
+      toast({
+        title: '临时图片已清空',
+        description: count > 0 ? `已删除 ${count} 个临时图片文件。` : '临时目录中没有可清理的图片。',
+      });
+    } catch (error: any) {
+      toast({
+        title: '清空临时图片失败',
+        description: error?.message || String(error),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleApplyWatermarkResult = useCallback((processedImageSrc: string) => {
+    const img = new Image();
+    img.onload = () => {
+      const dimensionsChanged = img.width !== originalWidth || img.height !== originalHeight;
+
+      setImageSrc(processedImageSrc);
+      setOriginalWidth(img.width);
+      setOriginalHeight(img.height);
+      setOriginalFilename((current) => {
+        const baseName = current.replace(/\.[^/.]+$/, '') || 'image';
+        return `${baseName}_watermark_removed.png`;
+      });
+      setActiveTab('editor');
+
+      if (dimensionsChanged) {
+        const v = calculateEqualGuidelines(img.width, cols, 'vertical', doubleLines, gutter);
+        const h = calculateEqualGuidelines(img.height, rows, 'horizontal', doubleLines, gutter);
+        setGuidelines([...v, ...h]);
+      }
+    };
+    img.onerror = () => {
+      toast({
+        title: '图片更新失败',
+        description: '去水印结果无法加载，请重试。',
+        variant: 'destructive',
+      });
+    };
+    img.src = processedImageSrc;
+  }, [cols, doubleLines, gutter, originalHeight, originalWidth, rows]);
+
+  const handleRemoveGeminiWatermark = useCallback(async () => {
+    if (!imageSrc || isRemovingWatermark) return;
+
+    setIsRemovingWatermark(true);
+
+    try {
+      const labsRoot = await getLabsRoot();
+      const tempDir = await join(labsRoot, 'image_slicer', 'temp');
+      await ensureDirectory(tempDir);
+
+      const jobId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const inputFileName = `gemini_watermark_input_${jobId}.png`;
+      const outputFileName = `gemini_watermark_output_${jobId}.png`;
+      const inputPath = await join(tempDir, inputFileName);
+      const outputPath = await join(tempDir, outputFileName);
+
+      const imageResponse = await fetch(imageSrc);
+      const imageBlob = await imageResponse.blob();
+      const imageBuffer = await imageBlob.arrayBuffer();
+      await saveFile(tempDir, inputFileName, new Uint8Array(imageBuffer));
+
+      const result = await geminiWatermarkApi.autoRemove(inputPath, outputPath);
+      if (!result.success) {
+        throw new Error('Gemini 水印去除失败');
+      }
+
+      const outputBuffer = await readFile(outputPath);
+      const outputBlob = new Blob([outputBuffer], { type: 'image/png' });
+      const outputDataUrl = await blobToDataUrl(outputBlob);
+
+      await remove(inputPath).catch((error) => {
+        console.warn('Failed to remove temporary slicer watermark input:', inputPath, error);
+      });
+
+      const previousOutputPath = currentWatermarkOutputPathRef.current;
+      currentWatermarkOutputPathRef.current = outputPath;
+      if (previousOutputPath && previousOutputPath !== outputPath) {
+        await remove(previousOutputPath).catch((error) => {
+          console.warn('Failed to remove previous slicer watermark output:', previousOutputPath, error);
+        });
+      }
+
+      handleApplyWatermarkResult(outputDataUrl);
+      toast({
+        title: 'Gemini 水印已去除',
+        description: result.watermark_detected
+          ? '已使用 Gemini 水印反算算法处理当前切割源图。'
+          : '未明确检测到水印，但已完成反算处理。',
+      });
+    } catch (error: any) {
+      console.error('Gemini watermark removal failed in slicer:', error);
+      toast({
+        title: 'Gemini 去水印失败',
+        description: error?.message || String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRemovingWatermark(false);
+    }
+  }, [handleApplyWatermarkResult, imageSrc, isRemovingWatermark]);
+
   // Guideline handlers
   const handleApplyEqualDivision = () => {
     if (originalWidth === 0 || originalHeight === 0) return;
@@ -133,19 +349,23 @@ export default function ImageSlicer() {
 
   const handleAddManualGuideline = (type: 'horizontal' | 'vertical') => {
     if (originalWidth === 0 || originalHeight === 0) return;
-    const midPoint = Math.round(type === 'vertical' ? originalWidth / 2 : originalHeight / 2);
+    const limit = type === 'vertical' ? originalWidth : originalHeight;
+    const existingPositions = guidelines
+      .filter((guide) => guide.type === type)
+      .map((guide) => guide.position);
+    const position = findAvailableGuidelinePosition(existingPositions, limit);
 
     const newGuide: Guideline = {
-      id: `manual_${type}_${Date.now()}`,
+      id: `manual_${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       type,
-      position: midPoint,
+      position,
       isAuto: false,
     };
 
     setGuidelines((prev) => [...prev, newGuide]);
     toast({
       title: `添加了${type === 'vertical' ? '垂直' : '水平'}参考线`,
-      description: `位置位于 ${midPoint} px`,
+      description: `位置位于 ${position} px`,
       variant: 'default',
     });
   };
@@ -264,6 +484,13 @@ export default function ImageSlicer() {
   // Sort and display guidelines in sidebar manager
   const vGuides = guidelines.filter((g) => g.type === 'vertical').sort((a, b) => a.position - b.position);
   const hGuides = guidelines.filter((g) => g.type === 'horizontal').sort((a, b) => a.position - b.position);
+  const formatTempImageTime = (timestamp: number) =>
+    timestamp > 0 ? new Date(timestamp).toLocaleString() : '未知时间';
+  const formatTempImageSize = (size: number) => {
+    if (size <= 0) return '';
+    if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  };
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
@@ -314,6 +541,29 @@ export default function ImageSlicer() {
             >
               <XCircle className="w-3.5 h-3.5" />
               更换图片
+            </button>
+            <button
+              type="button"
+              onClick={handleRemoveGeminiWatermark}
+              disabled={isRemovingWatermark}
+              className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors bg-muted/40 hover:bg-muted/80 px-2 py-1 rounded border"
+              title="切割前去除 Gemini 水印"
+            >
+              {isRemovingWatermark ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Eraser className="w-3.5 h-3.5" />
+              )}
+              {isRemovingWatermark ? '处理中...' : '去 Gemini 水印'}
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenHistory}
+              className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors bg-muted/40 hover:bg-muted/80 px-2 py-1 rounded border"
+              title="选择之前生成的临时图片"
+            >
+              <History className="w-3.5 h-3.5" />
+              历史图片
             </button>
             <div className="w-px h-4 bg-border" />
             <div className="flex flex-col">
@@ -632,9 +882,107 @@ export default function ImageSlicer() {
               <FileImage className="w-3.5 h-3.5" />
               支持常用 JPG、PNG、WEBP 等格式
             </div>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleOpenHistory();
+              }}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-border bg-background/80 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+            >
+              <History className="w-3.5 h-3.5" />
+              查看临时历史
+            </button>
           </div>
         </div>
       )}
+
+      {isHistoryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6">
+          <div className="flex max-h-[82vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-primary" />
+                <div>
+                  <h3 className="text-sm font-semibold">临时图片历史</h3>
+                  <p className="text-xs text-muted-foreground">
+                    这些文件位于 labs/image_slicer/temp，不会自动定时清空。
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={loadTempHistory}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                  disabled={isLoadingHistory}
+                >
+                  {isLoadingHistory ? '读取中...' : '刷新'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearTempHistory}
+                  className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+                >
+                  清空历史
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryOpen(false)}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {tempHistory.length === 0 ? (
+                <div className="flex min-h-[220px] flex-col items-center justify-center rounded-md border border-dashed border-border text-center text-sm text-muted-foreground">
+                  <History className="mb-3 h-8 w-8 opacity-40" />
+                  <p>{isLoadingHistory ? '正在读取临时图片...' : '暂无临时图片历史'}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
+                  {tempHistory.map((entry) => (
+                    <button
+                      key={entry.path}
+                      type="button"
+                      onClick={() => handleLoadTempImage(entry)}
+                      className="group overflow-hidden rounded-md border border-border bg-background text-left hover:border-primary/60 hover:shadow-sm"
+                      title={entry.path}
+                    >
+                      <div className="aspect-square bg-muted">
+                        <img
+                          src={convertFileSrc(entry.path)}
+                          alt={entry.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="space-y-1 p-2">
+                        <div className="truncate text-xs font-medium group-hover:text-primary">
+                          {entry.name}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {formatTempImageTime(entry.modifiedAt)}
+                        </div>
+                        {entry.size > 0 && (
+                          <div className="text-[10px] text-muted-foreground">
+                            {formatTempImageSize(entry.size)}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

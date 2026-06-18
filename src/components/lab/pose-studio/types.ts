@@ -94,6 +94,16 @@ export interface LightConfig {
   pointLightIntensity: number;
   pointLightColor: string;
   pointLightPosition: Vector3;
+  extraPointLights?: PointLightConfig[];
+}
+
+export interface PointLightConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  intensity: number;
+  color: string;
+  position: Vector3;
 }
 
 export interface CameraConfig {
@@ -125,6 +135,7 @@ export const DEFAULT_LIGHTS: LightConfig = {
   pointLightIntensity: 0.8,
   pointLightColor: '#ffddaa',
   pointLightPosition: { x: -5, y: 2, z: -5 },
+  extraPointLights: [],
 };
 
 export const DEFAULT_CAMERA: CameraConfig = {

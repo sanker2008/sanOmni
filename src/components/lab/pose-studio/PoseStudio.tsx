@@ -24,6 +24,7 @@ export default function PoseStudio() {
   const sceneRef = useRef<ThreeSceneRef>(null);
 
   const selectedObject = objects.find(o => o.id === selectedObjectId) ?? null;
+  const characterColor = objects.find(o => o.type === 'character')?.color ?? '#e8e8e8';
 
   // ── Object handlers ───────────────────────────────────────────────────────
 
@@ -44,6 +45,10 @@ export default function PoseStudio() {
 
   const handleUpdateObject = (id: string, updates: Partial<SceneObject>) =>
     setObjects(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o));
+
+  const handleUpdateCharacterColor = (color: string) => {
+    setObjects(prev => prev.map(o => o.type === 'character' ? { ...o, color } : o));
+  };
 
   // ── Export ────────────────────────────────────────────────────────────────
 
@@ -144,9 +149,11 @@ export default function PoseStudio() {
           selectedObject={selectedObject}
           selectedJointName={selectedJointName}
           onSelectJoint={setSelectedJointName}
+          characterColor={characterColor}
           lights={lights}
           cameraConfig={cameraConfig}
           onUpdateObject={handleUpdateObject}
+          onUpdateCharacterColor={handleUpdateCharacterColor}
           onUpdateLights={(updates: Partial<LightConfig>) => setLights(prev => ({ ...prev, ...updates }))}
           onUpdateCamera={(updates: Partial<CameraConfig>) => setCameraConfig(prev => ({ ...prev, ...updates }))}
         />

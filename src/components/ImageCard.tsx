@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useImageStore, useIpImageStore, useUIStore, type ImageWithRelations, type IpImageWithRelations } from "@/stores";
 import { Card } from "@/components/ui/card";
@@ -46,6 +46,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
   const showMenu = false;
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [naturalDisplaySize, setNaturalDisplaySize] = useState<{ width: number; height: number } | null>(null);
   const [removing, setRemoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -467,6 +468,36 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = event.currentTarget;
+    const container = target.parentElement;
+    setImageLoaded(true);
+
+    if (
+      container &&
+      target.naturalWidth > 0 &&
+      target.naturalHeight > 0 &&
+      (target.naturalWidth < container.clientWidth || target.naturalHeight < container.clientHeight)
+    ) {
+      setNaturalDisplaySize({
+        width: target.naturalWidth,
+        height: target.naturalHeight,
+      });
+    } else {
+      setNaturalDisplaySize(null);
+    }
+  };
+
+  const imageSizingClass = naturalDisplaySize
+    ? "max-w-full max-h-full w-auto h-auto object-contain"
+    : `w-full h-full ${showFullImage ? "object-contain" : "object-cover"}`;
+  const naturalImageStyle: CSSProperties | undefined = naturalDisplaySize
+    ? {
+        maxWidth: `min(100%, ${naturalDisplaySize.width}px)`,
+        maxHeight: `min(100%, ${naturalDisplaySize.height}px)`,
+      }
+    : undefined;
+
   const getStatusBadge = () => {
     if (image.status === "archived") {
       return null;
@@ -513,7 +544,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
           </button>
 
           {/* Thumbnail */}
-          <div className="flex-shrink-0 w-12 h-12 rounded-md overflow-hidden bg-muted relative">
+          <div className="flex-shrink-0 w-12 h-12 rounded-md overflow-hidden bg-muted relative flex items-center justify-center">
             {imageError ? (
               <div className="w-full h-full flex items-center justify-center">
                 <ImageIcon className="w-5 h-5 text-muted-foreground" />
@@ -522,8 +553,9 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
               <img
                 src={`${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`}
                 alt={image.filename}
-                className={`w-full h-full ${showFullImage ? 'object-contain' : 'object-cover'} transition-opacity ${imageLoaded ? "opacity-100" : "opacity-0"}`}
-                onLoad={() => setImageLoaded(true)}
+                className={`${imageSizingClass} transition-opacity ${imageLoaded ? "opacity-100" : "opacity-0"}`}
+                style={naturalImageStyle}
+                onLoad={handleImageLoad}
                 onError={() => setImageError(true)}
               />
             )}
@@ -787,7 +819,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
 
       {/* Image preview */}
       <div className="w-full pb-[100%] h-0 bg-muted relative">
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 flex items-center justify-center">
           {!imageLoaded && !imageError && (
             <div className="absolute inset-0 flex items-center justify-center">
               <ImageIcon className="w-8 h-8 text-muted-foreground/50" />
@@ -801,10 +833,11 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
             <img
               src={`${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`}
               alt={image.filename}
-              className={`w-full h-full ${showFullImage ? 'object-contain' : 'object-cover'} transition-opacity ${
+              className={`${imageSizingClass} transition-opacity ${
                 imageLoaded ? "opacity-100" : "opacity-0"
               }`}
-              onLoad={() => setImageLoaded(true)}
+              style={naturalImageStyle}
+              onLoad={handleImageLoad}
               onError={() => setImageError(true)}
             />
           )}
