@@ -467,7 +467,7 @@ export default function BatchEditModal({ open, onClose, isIpMode = false }: Batc
                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="">不修改当前关联</option>
-                    <option value="ungrouped">解除关联 (移出分组)</option>
+                    <option value="ungrouped">未分组表情</option>
                     {ipStickerPacks.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
