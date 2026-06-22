@@ -1,6 +1,6 @@
 import { mkdir, readDir, readFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
-import { getLabsRoot } from "@/lib/pathUtils";
+import { getLabsRoot, openPath } from "@/lib/pathUtils";
 
 export interface TempImageEntry {
   name: string;
@@ -103,39 +103,11 @@ export async function clearTempImages(): Promise<number> {
   return images.length;
 }
 
-import { open as openShell, Command } from '@tauri-apps/plugin-shell';
-
 /**
  * Open target export folder in system explorer (Finder/Explorer).
  */
 export async function openExportFolder(dirPath: string): Promise<void> {
   await ensureDirectory(dirPath);
   console.log('Opening export directory:', dirPath);
-  
-  try {
-    // 1. Try standard openShell (works if path is accepted by the sandbox)
-    await openShell(dirPath);
-  } catch (e) {
-    console.warn('openShell failed, trying registered OS command fallback:', e);
-    try {
-      // 2. Detect OS to invoke the correct allowed native shell command
-      const ua = navigator.userAgent.toLowerCase();
-      let cmdName = 'open'; // default to Mac
-      
-      if (ua.includes('win')) {
-        cmdName = 'explorer';
-      } else if (ua.includes('mac')) {
-        cmdName = 'open';
-      } else {
-        cmdName = 'xdg-open';
-      }
-
-      console.log(`Executing Tauri native command: ${cmdName} [${dirPath}]`);
-      const cmd = Command.create(cmdName, [dirPath]);
-      await cmd.execute();
-    } catch (e2) {
-      console.error('All folder opening methods failed:', e2);
-      throw e2;
-    }
-  }
+  await openPath(dirPath);
 }

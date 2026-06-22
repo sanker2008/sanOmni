@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
-import { getLabsRoot } from "@/lib/pathUtils";
-import { open as openShell, Command } from '@tauri-apps/plugin-shell';
+import { getLabsRoot, openPath } from "@/lib/pathUtils";
 
 /**
  * Get the default export path.
@@ -41,28 +40,5 @@ export async function saveFile(dirPath: string, fileName: string, data: Uint8Arr
 export async function openExportFolder(dirPath: string): Promise<void> {
   await ensureDirectory(dirPath);
   console.log('Opening export directory:', dirPath);
-  
-  try {
-    await openShell(dirPath);
-  } catch (e) {
-    console.warn('openShell failed, trying registered OS command fallback:', e);
-    try {
-      const ua = navigator.userAgent.toLowerCase();
-      let cmdName = 'open';
-      
-      if (ua.includes('win')) {
-        cmdName = 'explorer';
-      } else if (ua.includes('mac')) {
-        cmdName = 'open';
-      } else {
-        cmdName = 'xdg-open';
-      }
-
-      const cmd = Command.create(cmdName, [dirPath]);
-      await cmd.execute();
-    } catch (e2) {
-      console.error('All folder opening methods failed:', e2);
-      throw e2;
-    }
-  }
+  await openPath(dirPath);
 }

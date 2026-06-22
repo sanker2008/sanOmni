@@ -5,9 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Trash2, Undo2, X, Loader2, FolderOpen, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { toast } from "@/hooks/useToast";
-import { Command } from "@tauri-apps/plugin-shell";
 import ConfirmDialog from "./ConfirmDialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { openPath } from "@/lib/pathUtils";
 
 interface TrashItem {
   filename: string;
@@ -291,17 +291,7 @@ export default function TrashView() {
         await mkdir(trashDirPath, { recursive: true });
       }
 
-      // 根据平台打开文件夹
-      if (navigator.userAgent.includes('Windows')) {
-        // Windows: 使用 explorer
-        await Command.create('explorer', [trashDirPath]).execute();
-      } else if (navigator.userAgent.includes('Mac')) {
-        // macOS: 使用 open
-        await Command.create('open', [trashDirPath]).execute();
-      } else {
-        // Linux: 使用 xdg-open
-        await Command.create('xdg-open', [trashDirPath]).execute();
-      }
+      await openPath(trashDirPath);
     } catch (error) {
       console.error("Failed to open trash folder:", error);
       toast({

@@ -3,7 +3,7 @@
  */
 import { mkdir, writeFile, readFile, readDir, remove } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
-import { getLabsRoot } from "@/lib/pathUtils";
+import { getLabsRoot, openPath } from "@/lib/pathUtils";
 import type { ProjectData, ProjectMeta } from './types';
 
 // ─── 路径工具 ──────────────────────────────────────────────
@@ -211,32 +211,7 @@ export async function renameProject(projectId: string, newName: string): Promise
 export async function openOutputFolder(): Promise<void> {
   const dir = await getOutputPath();
   await ensureDirectory(dir);
-  try {
-    const { open } = await import('@tauri-apps/plugin-shell');
-    await open(dir);
-  } catch (e) {
-    console.warn('openShell failed, trying fallback:', e);
-    try {
-      const { Command } = await import('@tauri-apps/plugin-shell');
-      const ua = navigator.userAgent.toLowerCase();
-      let cmdName = 'open'; // default to Mac
-      
-      if (ua.includes('win')) {
-        cmdName = 'explorer';
-      } else if (ua.includes('mac')) {
-        cmdName = 'open';
-      } else {
-        cmdName = 'xdg-open';
-      }
-
-      console.log(`Executing Tauri native command: ${cmdName} [${dir}]`);
-      const cmd = Command.create(cmdName, [dir]);
-      await cmd.execute();
-    } catch (e2) {
-      console.error('All folder opening methods failed:', e2);
-      throw e2;
-    }
-  }
+  await openPath(dir);
 }
 
 // ─── 内部工具 ──────────────────────────────────────────────

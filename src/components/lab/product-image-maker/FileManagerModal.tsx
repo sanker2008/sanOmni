@@ -7,8 +7,8 @@ import { FileImage, LayoutTemplate, Trash2, Edit2, Play, Image as ImageIcon } fr
 import { listProjects, deleteFile, renameFile, listExports, deleteExport } from './fs';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useProductImageStore } from './useProductImageStore';
-import { open as openShell } from '@tauri-apps/plugin-shell';
 import { toast } from '@/hooks/useToast';
+import { openPath } from '@/lib/pathUtils';
 
 type TabType = 'project' | 'template' | 'export';
 
@@ -100,14 +100,7 @@ export default function FileManagerModal({ open, onOpenChange, onOpenProject, in
     if (activeTab === 'export') {
       try {
         if (item.absolutePath) {
-          try {
-            await openShell(item.absolutePath);
-          } catch (openErr) {
-            console.warn('openShell failed, trying explorer fallback', openErr);
-            // Fallback for Windows if regex validation fails
-            const { Command } = await import('@tauri-apps/plugin-shell');
-            await Command.create('explorer', [item.absolutePath]).execute();
-          }
+          await openPath(item.absolutePath);
         } else {
           toast({ title: '路径错误', description: '无法获取该文件的绝对路径', variant: 'destructive' });
         }

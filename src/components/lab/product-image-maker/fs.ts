@@ -8,8 +8,7 @@ import {
   rename,
 } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
-import { getLabsRoot } from "@/lib/pathUtils";
-import { open, Command } from '@tauri-apps/plugin-shell';
+import { getLabsRoot, openPath } from "@/lib/pathUtils";
 
 async function getBaseConfig() {
   const labsRoot = await getLabsRoot();
@@ -156,29 +155,5 @@ export async function openExportFolder() {
   const { root } = await getBaseConfig();
   const dirPath = await join(root, 'exports');
   console.log('Opening export folder:', dirPath);
-  
-  try {
-    await open(dirPath);
-  } catch (e) {
-    console.error('Failed to open with open(), trying OS fallback...', e);
-    try {
-      const ua = navigator.userAgent.toLowerCase();
-      let cmdName = 'open'; // default to Mac
-      
-      if (ua.includes('win')) {
-        cmdName = 'explorer';
-      } else if (ua.includes('mac')) {
-        cmdName = 'open';
-      } else {
-        cmdName = 'xdg-open';
-      }
-
-      console.log(`Executing Tauri native command: ${cmdName} [${dirPath}]`);
-      const cmd = Command.create(cmdName, [dirPath]);
-      await cmd.execute();
-    } catch (e2) {
-      console.error('All folder opening methods failed:', e2);
-      throw e2;
-    }
-  }
+  await openPath(dirPath);
 }

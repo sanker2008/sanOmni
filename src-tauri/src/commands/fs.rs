@@ -4,6 +4,16 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
+fn validate_os_path_arg(path: &str) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("Path is empty".to_string());
+    }
+    if path.contains('\0') {
+        return Err("Path contains invalid null byte".to_string());
+    }
+    Ok(())
+}
+
 fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
     fs::create_dir_all(&dst)?;
     for entry in fs::read_dir(src)? {
@@ -288,6 +298,8 @@ pub fn repair_database_paths(
 
 #[tauri::command]
 pub fn show_in_folder(path: String) -> Result<(), String> {
+    validate_os_path_arg(&path)?;
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
@@ -321,6 +333,37 @@ pub fn show_in_folder(path: String) -> Result<(), String> {
                 .spawn()
                 .map_err(|e| format!("Failed to open folder: {}", e))?;
         }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_path(path: String) -> Result<(), String> {
+    validate_os_path_arg(&path)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open path: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open path: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open path: {}", e))?;
     }
 
     Ok(())

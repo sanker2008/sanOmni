@@ -137,6 +137,7 @@ pub fn run() {
             commands::fs::check_directory_status,
             commands::fs::repair_database_paths,
             commands::fs::show_in_folder,
+            commands::fs::open_path,
             // Sync Commands
             commands::sync_commands::sync_test_connection,
             commands::sync_commands::sync_enable,

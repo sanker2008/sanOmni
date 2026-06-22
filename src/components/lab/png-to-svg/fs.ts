@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
-import { getLabsRoot } from "@/lib/pathUtils";
+import { getLabsRoot, openPath } from "@/lib/pathUtils";
 
 /** 获取 PngToSvg 根目录 */
 export async function getBasePath(): Promise<string> {
@@ -40,30 +40,5 @@ export async function saveSvg(svgContent: string, filename: string): Promise<str
 export async function openOutputFolder(): Promise<void> {
   const dir = await getOutputPath();
   await ensureDirectory(dir);
-  try {
-    const { open } = await import('@tauri-apps/plugin-shell');
-    await open(dir);
-  } catch (e) {
-    console.warn('openShell failed, trying fallback:', e);
-    try {
-      const { Command } = await import('@tauri-apps/plugin-shell');
-      const ua = navigator.userAgent.toLowerCase();
-      let cmdName = 'open';
-      
-      if (ua.includes('win')) {
-        cmdName = 'explorer';
-      } else if (ua.includes('mac')) {
-        cmdName = 'open';
-      } else {
-        cmdName = 'xdg-open';
-      }
-
-      console.log(`Executing Tauri native command: ${cmdName} [${dir}]`);
-      const cmd = Command.create(cmdName, [dir]);
-      await cmd.execute();
-    } catch (e2) {
-      console.error('All folder opening methods failed:', e2);
-      throw e2;
-    }
-  }
+  await openPath(dir);
 }

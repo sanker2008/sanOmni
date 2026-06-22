@@ -4,6 +4,7 @@ import { useImageStore, useIpImageStore, useUIStore } from "@/stores";
 import type { ImageWithRelations, IpImageWithRelations } from "@/stores";
 import { toast } from "@/hooks/useToast";
 import { imageApi, ipImageApi } from "@/services/tauri";
+import { openPath } from "@/lib/pathUtils";
 import {
   Dialog,
   DialogContent,
@@ -178,16 +179,7 @@ export default function ImageViewer() {
   const handleOpenExternal = async () => {
     if (!image) return;
     try {
-      const { Command } = await import("@tauri-apps/plugin-shell");
-      
-      // 根据操作系统打开图片
-      if (navigator.platform.toLowerCase().includes('win')) {
-        await Command.create('explorer', [image.absolute_path]).execute();
-      } else if (navigator.platform.toLowerCase().includes('mac')) {
-        await Command.create('open', [image.absolute_path]).execute();
-      } else {
-        await Command.create('xdg-open', [image.absolute_path]).execute();
-      }
+      await openPath(image.absolute_path);
     } catch (error) {
       console.error("Failed to open image:", error);
       toast({

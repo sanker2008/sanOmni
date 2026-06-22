@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi, ipApi } from "@/services/tauri";
 import { convertIpImageToWebp, convertIpImageToPng } from "@/lib/webpConverter";
+import { revealFileInFolder } from "@/lib/pathUtils";
 
 type AnyImage = ImageWithRelations | IpImageWithRelations;
 const isPromptImage = (img: AnyImage): img is ImageWithRelations => "models" in img;
@@ -430,25 +431,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
   const handleOpenFolder = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const { Command } = await import("@tauri-apps/plugin-shell");
-      
-      // 获取文件所在目录
-      const dirPath = image.absolute_path.substring(0, Math.max(
-        image.absolute_path.lastIndexOf('/'),
-        image.absolute_path.lastIndexOf('\\')
-      ));
-
-      // 根据操作系统打开文件管理器
-      if (navigator.platform.toLowerCase().includes('win')) {
-        // Windows: 使用 explorer 并选中文件
-        await Command.create('explorer', ['/select,', image.absolute_path]).execute();
-      } else if (navigator.platform.toLowerCase().includes('mac')) {
-        // macOS: 使用 open 并选中文件
-        await Command.create('open', ['-R', image.absolute_path]).execute();
-      } else {
-        // Linux: 打开文件夹（不同发行版可能不同）
-        await Command.create('xdg-open', [dirPath]).execute();
-      }
+      await revealFileInFolder(image.absolute_path);
     } catch (error) {
       console.error("Failed to open folder:", error);
       toast({

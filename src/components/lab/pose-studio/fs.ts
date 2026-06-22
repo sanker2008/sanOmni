@@ -7,8 +7,7 @@ import {
   remove,
 } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
-import { getLabsRoot } from "@/lib/pathUtils";
-import { open, Command } from '@tauri-apps/plugin-shell';
+import { getLabsRoot, openPath } from "@/lib/pathUtils";
 
 async function getBaseConfig() {
   const labsRoot = await getLabsRoot();
@@ -109,24 +108,5 @@ export async function openExportFolder() {
   await ensureToolDirectories();
   const { root } = await getBaseConfig();
   const dirPath = await join(root, 'exports');
-  
-  try {
-    await open(dirPath);
-  } catch (e) {
-    try {
-      const ua = navigator.userAgent.toLowerCase();
-      let cmdName = 'open';
-      if (ua.includes('win')) {
-        cmdName = 'explorer';
-      } else if (ua.includes('mac')) {
-        cmdName = 'open';
-      } else {
-        cmdName = 'xdg-open';
-      }
-      const cmd = Command.create(cmdName, [dirPath]);
-      await cmd.execute();
-    } catch (e2) {
-      throw e2;
-    }
-  }
+  await openPath(dirPath);
 }

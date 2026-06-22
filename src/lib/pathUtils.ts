@@ -69,3 +69,13 @@ export async function revealFileInFolder(filePath: string) {
     console.error('Failed to reveal file in folder:', e);
   }
 }
+
+export async function openPath(path: string) {
+  if (!path) return;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('open_path', { path });
+  } catch (e) {
+    console.error('Failed to open path:', e);
+  }
+}

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { revealFileInFolder } from '@/lib/pathUtils';
 
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 3;
@@ -111,19 +112,9 @@ export default function NodeCanvas() {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node?.filePath) return;
     try {
-      const { dirname } = await import('@tauri-apps/api/path');
-      const dir = await dirname(node.filePath);
-      const { open } = await import('@tauri-apps/plugin-shell');
-      await open(dir);
+      await revealFileInFolder(node.filePath);
     } catch (e) {
       console.error('Open folder failed:', e);
-      try {
-        const { Command } = await import('@tauri-apps/plugin-shell');
-        const cmd = Command.create('open', ['-R', node.filePath]);
-        await cmd.execute();
-      } catch (e2) {
-        console.error('Reveal in Finder also failed:', e2);
-      }
     }
   }, [nodes]);
 
