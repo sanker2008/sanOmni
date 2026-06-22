@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { readFile, remove } from '@tauri-apps/plugin-fs';
+import { readFile, remove } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
 import { geminiWatermarkApi } from '@/services/tauri';
 import { getLabsRoot } from '@/lib/pathUtils';
@@ -299,7 +299,8 @@ export default function ImageSlicer() {
       }
 
       const outputBuffer = await readFile(outputPath);
-      const outputBlob = new Blob([outputBuffer], { type: 'image/png' });
+      const outputBytes = new Uint8Array(outputBuffer);
+      const outputBlob = new Blob([outputBytes.buffer], { type: 'image/png' });
       const outputDataUrl = await blobToDataUrl(outputBlob);
 
       await remove(inputPath).catch((error) => {

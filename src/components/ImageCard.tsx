@@ -22,6 +22,7 @@ import {
 import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi, ipApi } from "@/services/tauri";
 import { convertIpImageToWebp, convertIpImageToPng } from "@/lib/webpConverter";
 import { revealFileInFolder } from "@/lib/pathUtils";
+import { exists, mkdir, rename } from "@/services/secureFs";
 
 type AnyImage = ImageWithRelations | IpImageWithRelations;
 const isPromptImage = (img: AnyImage): img is ImageWithRelations => "models" in img;
@@ -347,7 +348,6 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
       if (success) {
         try {
           // 移动原图到应用回收站
-          const { mkdir, exists, rename } = await import("@tauri-apps/plugin-fs");
           const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
           

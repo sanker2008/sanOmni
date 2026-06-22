@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useIpImageStore, useUIStore, type IpAssetDetail, type IpStickerPack, type IpAsset } from "@/stores";
 import { ipImageApi, ipApi } from "@/services/tauri";
+import { authorizeFsPaths, copyFile, exists, mkdir, rename, stat } from "@/services/secureFs";
 import { toast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +69,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
   try {
     const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
-    const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
+    await authorizeFsPaths([avatarPath]);
     
     const { settings } = useUIStore.getState();
 
@@ -694,7 +695,6 @@ export default function IpArchivedView() {
       }
 
       if (success) {
-        const { mkdir, exists, rename } = await import("@tauri-apps/plugin-fs");
         const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
         const appDir = await getAppRoot();
@@ -1051,11 +1051,11 @@ export default function IpArchivedView() {
       if (!selected) return;
       const paths = Array.isArray(selected) ? selected : [selected];
       if (paths.length === 0) return;
+      await authorizeFsPaths(paths as string[]);
 
       setIsQuickUploading(true);
       const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
-      const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
       const { settings } = useUIStore.getState();
 
       let inboxDir: string;

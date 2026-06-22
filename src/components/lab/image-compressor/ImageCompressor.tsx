@@ -4,7 +4,7 @@ import { toast } from '@/hooks/useToast';
 import { useUIStore } from '@/stores';
 import { open } from '@tauri-apps/plugin-dialog';
 import { geminiWatermarkApi } from '@/services/tauri';
-import { readFile } from '@tauri-apps/plugin-fs';
+import { authorizeFsPaths, readFile } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
 import { getLabsRoot } from '@/lib/pathUtils';
 import {
@@ -125,6 +125,7 @@ export default function ImageCompressor() {
         title: '选择导出文件夹',
       });
       if (selected && typeof selected === 'string') {
+        await authorizeFsPaths([selected]);
         setExportPath(selected);
       }
     } catch (e) {
@@ -156,7 +157,8 @@ export default function ImageCompressor() {
       const result = await geminiWatermarkApi.autoRemove(inputPath, outputPath);
       if (result.success) {
         const outputBuffer = await readFile(outputPath);
-        const outputBlob = new Blob([outputBuffer], { type: 'image/png' });
+        const outputBytes = new Uint8Array(outputBuffer);
+        const outputBlob = new Blob([outputBytes.buffer], { type: 'image/png' });
         
         const reader = new FileReader();
         reader.onload = () => {

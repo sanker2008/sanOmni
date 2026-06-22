@@ -8,6 +8,7 @@ import { toast } from "@/hooks/useToast";
 import ConfirmDialog from "./ConfirmDialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { openPath } from "@/lib/pathUtils";
+import { exists, mkdir, readDir, remove, rename, stat } from "@/services/secureFs";
 
 interface TrashItem {
   filename: string;
@@ -32,7 +33,6 @@ export default function TrashView() {
   const loadTrashItems = async () => {
     setLoading(true);
     try {
-      const { readDir, exists } = await import("@tauri-apps/plugin-fs");
       const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
       
@@ -59,7 +59,6 @@ export default function TrashView() {
           const timestamp = match ? parseInt(match[1]) : 0;
           
           // 获取文件大小
-          const { stat } = await import("@tauri-apps/plugin-fs");
           const fileInfo = await stat(filePath);
           
           items.push({
@@ -104,7 +103,6 @@ export default function TrashView() {
     try {
       const originalFilename = item.filename.replace(/_\d+\./, ".");
 
-      const { rename, exists } = await import("@tauri-apps/plugin-fs");
       const { invoke } = await import("@tauri-apps/api/core");
       
       // 通过文件名查找对应的图片记录
@@ -146,7 +144,6 @@ export default function TrashView() {
         await rename(item.path, currentPath);
         
         // 3. 删除临时备份
-        const { remove } = await import("@tauri-apps/plugin-fs");
         await remove(tempBackupPath);
         
         toast({
@@ -189,7 +186,6 @@ export default function TrashView() {
     setDeleteItem(null);
 
     try {
-      const { remove } = await import("@tauri-apps/plugin-fs");
       await remove(item.path);
 
       toast({
@@ -253,8 +249,6 @@ export default function TrashView() {
     setShowEmptyConfirm(false);
 
     try {
-      const { remove } = await import("@tauri-apps/plugin-fs");
-      
       for (const item of trashItems) {
         await remove(item.path);
       }
@@ -286,7 +280,6 @@ export default function TrashView() {
 
     try {
       // 确保回收站目录存在
-      const { exists, mkdir } = await import("@tauri-apps/plugin-fs");
       if (!(await exists(trashDirPath))) {
         await mkdir(trashDirPath, { recursive: true });
       }

@@ -14,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { ipImageApi } from "@/services/tauri";
 import { useUIStore } from "@/stores";
 import SyncButton from "@/components/SyncButton";
+import { authorizeFsPaths, copyFile, exists, mkdir, stat } from "@/services/secureFs";
 
 interface IpSidebarProps {
   onIpSelect: (ipId: string | null) => void;
@@ -30,7 +31,7 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
   try {
     const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
-    const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
+    await authorizeFsPaths([avatarPath]);
     
     const { settings } = useUIStore.getState();
 

@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import type { EditorNode, EditorEdge, Viewport, ProjectMeta, ProjectData } from './types';
 import * as fsUtil from './fs';
+import { remove } from '@/services/secureFs';
 
 interface AiImageEditorState {
   // ─── Node graph ──────────────────────────────────────────
@@ -302,7 +303,6 @@ export const useAiImageEditorStore = create<AiImageEditorState>((set, get) => ({
     
     // 执行延迟删除
     if (state.pendingDeleteFiles.length > 0) {
-      const { remove } = await import('@tauri-apps/plugin-fs');
       for (const filePath of state.pendingDeleteFiles) {
         try {
           await remove(filePath);

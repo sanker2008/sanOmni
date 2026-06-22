@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Review remediation documentation for sanOmni, sanPrompt, and sanomni-sync-server boundaries.
 - Secure filesystem service path for moving local asset operations behind Tauri commands and user-authorized roots.
+- Release note for the June 2026 cross-project review remediation.
 
 ### Changed
 - sanPrompt publish secrets are stored through the system keyring instead of SQLite settings or source code.
 - sanIP sync sends explicit domain and protocol metadata to the sync server.
 - Top-level domain views, global modals, and sanLabs tools are lazy-loaded to reduce initial bundle size.
 - Local file/folder opening is routed through Tauri commands so broad frontend shell execution can remain disabled.
+- Broad Tauri filesystem plugin permissions are removed; local asset filesystem operations now use the secure FS command layer.
 
 ### Added
 - Emoji Management: Added batch operations (select all, batch change group, batch delete) for emojis.

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAiImageEditorStore } from './useAiImageEditorStore';
 import NodeCanvas from './NodeCanvas';
 import MaskEditor from './MaskEditor';
-import { openOutputFolder } from './fs';
+import { openOutputFolder, saveInputImage } from './fs';
 import { toast } from '@/hooks/useToast';
 import {
   ImagePlus, Save, FolderOpen, FilePlus2, Trash2,
@@ -24,6 +24,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { authorizeFsPaths, readFile } from '@/services/secureFs';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,8 +80,8 @@ export default function AiImageEditor() {
       if (!selected) return;
       const paths = Array.isArray(selected) ? selected : [selected];
       if (paths.length === 0) return;
+      await authorizeFsPaths(paths as string[]);
 
-      const { readFile } = await import('@tauri-apps/plugin-fs');
       const { basename } = await import('@tauri-apps/api/path');
 
       for (const filePath of paths) {
@@ -101,7 +102,6 @@ export default function AiImageEditor() {
             (async () => {
               try {
                 // 将文件复制/存入我们统一规划的 inputs 目录
-                const { saveInputImage } = await import('./fs');
                 const newFilePath = await saveInputImage(dataUrl, fileName);
                 addSourceNode(dataUrl, fileName, img.width, img.height, newFilePath);
               } catch (e) {
@@ -147,7 +147,6 @@ export default function AiImageEditor() {
         img.onload = () => {
           (async () => {
             try {
-              const { saveInputImage } = await import('./fs');
               const filePath = await saveInputImage(dataUrl, file.name);
               addSourceNode(dataUrl, file.name, img.width, img.height, filePath);
             } catch (e) {

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useImageStore, useUIStore, useVendorStore } from "@/stores";
 import { imageApi, vendorApi } from "@/services/tauri";
+import { authorizeFsPaths, copyFile, exists, mkdir, stat } from "@/services/secureFs";
 import { toast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,11 +107,11 @@ export default function ArchivedView() {
       if (!selected) return;
 
       const files = Array.isArray(selected) ? selected : [selected];
+      await authorizeFsPaths(files as string[]);
       setIsQuickImporting(true);
 
       const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
-      const { copyFile, exists, mkdir, stat } = await import("@tauri-apps/plugin-fs");
 
       const customInboxPath = useUIStore.getState().settings.customInboxPath;
       const customArchivedPath = useUIStore.getState().settings.customArchivedPath;

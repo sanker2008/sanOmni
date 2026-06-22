@@ -20,6 +20,8 @@ can be added without mixing tables or record semantics.
 
 ## sanOmni Remediation
 
+Status: implemented and verified in `sanOmni`.
+
 ### Publishing Secret Storage
 
 The sanPrompt publish secret must not be stored in source code or plain SQLite
@@ -68,6 +70,21 @@ Filesystem access is being moved behind `src/services/secureFs.ts` and Rust
 commands in `src-tauri/src/commands/fs.rs`. New code should not import
 `@tauri-apps/plugin-fs` directly for arbitrary local asset paths. Use the secure
 FS service so app data and user-authorized asset roots are checked consistently.
+
+The broad frontend filesystem plugin permission set has now been removed from
+`src-tauri/capabilities/default.json`, and `tauri_plugin_fs` is no longer
+registered in `src-tauri/src/lib.rs`. Frontend asset operations use
+`src/services/secureFs.ts`, which calls Rust commands that check either app data
+paths or user-authorized roots before reading, writing, copying, renaming,
+listing, or deleting local files.
+
+Current expected rules for new code:
+
+1. Do not add `@tauri-apps/plugin-fs` imports for local asset operations.
+2. Authorize paths selected by users before operating on them.
+3. Use the secure FS wrapper for file reads/writes and directory operations.
+4. Keep native open/reveal behavior inside Rust commands.
+5. Do not reintroduce wildcard filesystem scopes such as `**`.
 
 ## sanPrompt Remediation
 
@@ -146,11 +163,18 @@ npm run build
 cargo test
 ```
 
+Latest verification from `sanOmni` on 2026-06-22:
+
+- `npm run build` passed.
+- `cd src-tauri && cargo check` passed.
+- No direct `@tauri-apps/plugin-fs` imports remain under `src/` or `src-tauri/`.
+- No `tauri_plugin_fs`, `fs:allow-*`, or `fs:scope` permission remains under
+  `src-tauri/`.
+
 ## Known Follow-Up Work
 
-- Complete migration from direct `@tauri-apps/plugin-fs` usage to
-  `src/services/secureFs.ts`, then remove broad filesystem capability scope.
-- Clean remaining Vite import-shape warnings where modules are both statically
-  and dynamically imported.
+- Clean remaining Vite import-shape warnings for `src/services/tauri.ts`, where
+  the same core API module is both statically and dynamically imported. This is
+  a bundle-shape cleanup item, not a filesystem-permission blocker.
 - Decide whether sanPrompt needs production PWA support under Turbopack; if so,
   migrate Serwist integration rather than enabling the unsupported path.
