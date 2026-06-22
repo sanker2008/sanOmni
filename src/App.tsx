@@ -1,11 +1,7 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { settingsApi } from "@/services/tauri";
 import { useUIStore } from "@/stores";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import PromptDomainView from "@/components/PromptDomainView";
-import QuickEditModal from "@/components/QuickEditModal";
-import ImageViewer from "@/components/ImageViewer";
-import SettingsView from "@/components/settings/SettingsView";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 
@@ -16,10 +12,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Settings, Sun, Moon, Monitor, LayoutTemplate, Users, FlaskConical } from "lucide-react";
-import IpDomainView from "@/components/IpDomainView";
-import LabView from "@/components/lab/LabView";
 import UpdateChecker from "@/components/UpdateChecker";
 import type { Theme } from "@/stores";
+
+const PromptDomainView = lazy(() => import("@/components/PromptDomainView"));
+const IpDomainView = lazy(() => import("@/components/IpDomainView"));
+const LabView = lazy(() => import("@/components/lab/LabView"));
+const QuickEditModal = lazy(() => import("@/components/QuickEditModal"));
+const ImageViewer = lazy(() => import("@/components/ImageViewer"));
+const SettingsView = lazy(() => import("@/components/settings/SettingsView"));
 
 const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
 const THEME_LABELS: Record<Theme, string> = {
@@ -123,6 +124,7 @@ function App() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-hidden relative">
+          <Suspense fallback={null}>
             {import.meta.env.VITE_APP_MODE === "prompt_only" ? (
               <PromptDomainView />
             ) : activeTab === "prompt" ? (
@@ -132,16 +134,23 @@ function App() {
             ) : (
               <LabView />
             )}
+          </Suspense>
         </main>
 
         {/* Quick Edit Modal */}
-        <QuickEditModal />
+        <Suspense fallback={null}>
+          <QuickEditModal />
+        </Suspense>
 
         {/* Image Viewer */}
-        <ImageViewer />
+        <Suspense fallback={null}>
+          <ImageViewer />
+        </Suspense>
 
         {/* Settings View */}
-        <SettingsView />
+        <Suspense fallback={null}>
+          <SettingsView />
+        </Suspense>
 
         {/* Toast Notifications */}
         <Toaster />

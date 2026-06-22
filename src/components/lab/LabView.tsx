@@ -5,12 +5,7 @@
  * This component is the only bridge between Labs and the main app shell.
  */
 
-import { useState } from 'react';
-import ProductImageMaker from './product-image-maker/ProductImageMaker';
-import ImageSlicer from './image-slicer/ImageSlicer';
-import AiImageEditor from './ai-image-editor/AiImageEditor';
-import ImageCompressor from './image-compressor/ImageCompressor';
-import WatermarkRemover from './watermark-remover/WatermarkRemover';
+import { lazy, Suspense, useState, type ComponentType, type LazyExoticComponent, type ReactNode } from 'react';
 import {
   ImageIcon,
   Scissors,
@@ -22,7 +17,6 @@ import {
   HelpCircle,
   User,
 } from 'lucide-react';
-import PngToSvg from './png-to-svg/PngToSvg';
 import {
   Dialog,
   DialogContent,
@@ -32,16 +26,24 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
-import PoseStudio from './pose-studio/PoseStudio';
+const ProductImageMaker = lazy(() => import('./product-image-maker/ProductImageMaker'));
+const ImageSlicer = lazy(() => import('./image-slicer/ImageSlicer'));
+const AiImageEditor = lazy(() => import('./ai-image-editor/AiImageEditor'));
+const ImageCompressor = lazy(() => import('./image-compressor/ImageCompressor'));
+const WatermarkRemover = lazy(() => import('./watermark-remover/WatermarkRemover'));
+const PngToSvg = lazy(() => import('./png-to-svg/PngToSvg'));
+const PoseStudio = lazy(() => import('./pose-studio/PoseStudio'));
 
 // ─── Tool Registry ─────────────────────────────────────────
+
+type LabToolComponent = ComponentType | LazyExoticComponent<ComponentType>;
 
 interface LabTool {
   id: string;
   name: string;
   description: string;
-  icon: React.ReactNode;
-  component: React.ComponentType | null;
+  icon: ReactNode;
+  component: LabToolComponent | null;
   available: boolean;
   instructions?: string[];
 }
@@ -224,7 +226,15 @@ export default function LabView() {
       {/* Main content — active tool */}
       <div className="flex-1 overflow-hidden">
         {ActiveComponent ? (
-          <ActiveComponent />
+          <Suspense
+            fallback={
+              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                Loading tool...
+              </div>
+            }
+          >
+            <ActiveComponent />
+          </Suspense>
         ) : (
           <div className="h-full flex items-center justify-center text-muted-foreground">
             <div className="text-center">
