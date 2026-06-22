@@ -1,7 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+pub const SYNC_PROTOCOL_VERSION: i64 = 1;
+pub const SANIP_SYNC_DOMAIN: &str = "sanIP";
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SyncChange {
+    #[serde(default = "default_sync_domain")]
+    pub domain: String,
     pub table: String,
     pub record_id: String,
     pub operation: String,
@@ -11,6 +16,9 @@ pub struct SyncChange {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PushRequest {
+    #[serde(default = "default_sync_domain")]
+    pub domain: String,
+    pub protocol_version: i64,
     pub device_id: String,
     pub changes: Vec<SyncChange>,
 }
@@ -25,6 +33,10 @@ pub struct PushResponse {
 pub struct PullResponse {
     pub changes: Vec<SyncChange>,
     pub latest_version: i64,
+}
+
+fn default_sync_domain() -> String {
+    SANIP_SYNC_DOMAIN.to_string()
 }
 
 pub struct SyncClient {
@@ -77,8 +89,8 @@ impl SyncClient {
         since_version: i64,
     ) -> Result<PullResponse, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
-            "{}/api/sync/pull?since_version={}",
-            self.server_url, since_version
+            "{}/api/sync/pull?domain={}&since_version={}",
+            self.server_url, SANIP_SYNC_DOMAIN, since_version
         );
         let resp = self
             .client
@@ -223,7 +235,10 @@ impl SyncClient {
     pub async fn fetch_snapshot(
         &self,
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!("{}/api/sync/snapshot", self.server_url);
+        let url = format!(
+            "{}/api/sync/snapshot?domain={}",
+            self.server_url, SANIP_SYNC_DOMAIN
+        );
         let resp = self
             .client
             .get(&url)

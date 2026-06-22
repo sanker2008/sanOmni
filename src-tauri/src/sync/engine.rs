@@ -1,4 +1,6 @@
-use crate::sync::client::{PushRequest, SyncChange, SyncClient};
+use crate::sync::client::{
+    PushRequest, SyncChange, SyncClient, SANIP_SYNC_DOMAIN, SYNC_PROTOCOL_VERSION,
+};
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -99,6 +101,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                 let id: i64 = row.get(0)?;
                 pending_ids.push(id);
                 Ok(SyncChange {
+                    domain: SANIP_SYNC_DOMAIN.to_string(),
                     table: row.get(1)?,
                     record_id: row.get(2)?,
                     operation: row.get(3)?,
@@ -223,6 +226,8 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
 
     if !changes.is_empty() {
         let req = PushRequest {
+            domain: SANIP_SYNC_DOMAIN.to_string(),
+            protocol_version: SYNC_PROTOCOL_VERSION,
             device_id: device_id.clone(),
             changes: changes.clone(),
         };

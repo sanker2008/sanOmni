@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   showFullImage: false,  // 列表中是否显示完整图片（不裁剪）
   lightThemeColor: "#2563eb",
   darkThemeColor: "#60a5fa",
+  sanPromptPublishUrl: "http://localhost:3000/api/sync",
+  sanPromptPublishSecret: "",
 
   // AI P图 设置
   aiImageEditorProvider: "mock",          // 当前选择的供应商 id

@@ -1,12 +1,23 @@
-import { promptApi } from "./tauri";
+import { promptApi, settingsApi } from "./tauri";
 
-const SANPROMPT_API_URL = "http://localhost:3000/api/sync";
-const SYNC_SECRET = "sanprompt_default_secret_2026"; // Hardcoded for MVP, should be in env
+const DEFAULT_SANPROMPT_API_URL = "http://localhost:3000/api/sync";
 
 export interface PublishConfig {
   price: number;
   category: string;
   is_published: boolean;
+}
+
+async function getPublishTarget() {
+  const settings = await settingsApi.getAll();
+  const apiUrl = (settings.sanPromptPublishUrl || DEFAULT_SANPROMPT_API_URL).trim();
+  const secret = (settings.sanPromptPublishSecret || "").trim();
+
+  if (!secret) {
+    throw new Error("sanPrompt publish secret is not configured. Set it in sanPrompt settings before publishing.");
+  }
+
+  return { apiUrl, secret };
 }
 
 function parseJsonArray(value?: string): string[] {
@@ -24,6 +35,7 @@ function parseJsonArray(value?: string): string[] {
 
 export async function publishPromptToWeb(groupId: string, config: PublishConfig) {
   try {
+    const { apiUrl, secret } = await getPublishTarget();
     // 1. 获取本地完整的 Prompt 详情
     const detail = await promptApi.getOne(groupId);
     const { group, images } = detail;
@@ -96,11 +108,11 @@ export async function publishPromptToWeb(groupId: string, config: PublishConfig)
     };
 
     // 3. 发送到 Next.js 后端
-    const response = await fetch(SANPROMPT_API_URL, {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${SYNC_SECRET}`
+        "Authorization": `Bearer ${secret}`
       },
       body: JSON.stringify({
         action: "publish_template",
@@ -124,17 +136,25 @@ export async function publishPromptToWeb(groupId: string, config: PublishConfig)
 export async function getPublishStatus(ids: string[]) {
   if (!ids || ids.length === 0) return [];
 
+  let target: { apiUrl: string; secret: string };
+  try {
+    target = await getPublishTarget();
+  } catch (error) {
+    console.error("Get status skipped:", error);
+    return [];
+  }
+
   const CHUNK_SIZE = 20;
   const allResults: { id: string; price: number; category: string; is_published: boolean }[] = [];
 
   for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
     const chunk = ids.slice(i, i + CHUNK_SIZE);
     try {
-      const response = await fetch(SANPROMPT_API_URL, {
+      const response = await fetch(target.apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${SYNC_SECRET}`
+          "Authorization": `Bearer ${target.secret}`
         },
         body: JSON.stringify({
           action: "get_status",

@@ -99,6 +99,33 @@ export default function PromptSettingsTab({
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">sanPrompt 网站发布</CardTitle>
+          <CardDescription>
+            配置 sanOmni 作为本地后台发布模板到 sanPrompt 前台网站时使用的 API 地址和密钥。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">发布 API 地址</label>
+            <Input
+              value={localSettings.sanPromptPublishUrl || ""}
+              onChange={(e) => handleLocalUpdate("sanPromptPublishUrl", e.target.value)}
+              placeholder="https://your-domain.com/api/sync"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">发布密钥</label>
+            <Input
+              type="password"
+              value={localSettings.sanPromptPublishSecret || ""}
+              onChange={(e) => handleLocalUpdate("sanPromptPublishSecret", e.target.value)}
+              placeholder="与 sanPrompt 环境变量 SYNC_SECRET 保持一致"
+            />
+          </div>
+        </CardContent>
+      </Card>
             <div className="space-y-6">
               <div className="text-lg font-semibold mb-4 border-b pb-2">归档与路径配置</div>
               <Card>

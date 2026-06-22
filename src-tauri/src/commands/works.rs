@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
@@ -13,6 +13,47 @@ fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
     let app_root = crate::commands::get_app_root_from_handle(app_handle, &default_app_data_dir);
     let db_path = app_root.join("data").join("database.sqlite");
     Connection::open(db_path).map_err(|e| e.to_string())
+}
+
+fn work_sort_clause(sort_by: Option<&str>, sort_order: Option<&str>) -> &'static str {
+    let column = match sort_by.unwrap_or("created_at") {
+        "name" => "name",
+        "path" => "path",
+        "work_type" => "work_type",
+        "release_date" => "release_date",
+        "producer" => "producer",
+        "director_author" => "director_author",
+        "status" => "status",
+        "updated_at" => "updated_at",
+        "created_at" => "created_at",
+        _ => return " ORDER BY created_at DESC",
+    };
+
+    let direction = match sort_order.unwrap_or("desc").to_ascii_lowercase().as_str() {
+        "asc" => "ASC",
+        _ => "DESC",
+    };
+
+    match (column, direction) {
+        ("name", "ASC") => " ORDER BY name ASC",
+        ("name", "DESC") => " ORDER BY name DESC",
+        ("path", "ASC") => " ORDER BY path ASC",
+        ("path", "DESC") => " ORDER BY path DESC",
+        ("work_type", "ASC") => " ORDER BY work_type ASC",
+        ("work_type", "DESC") => " ORDER BY work_type DESC",
+        ("release_date", "ASC") => " ORDER BY release_date ASC",
+        ("release_date", "DESC") => " ORDER BY release_date DESC",
+        ("producer", "ASC") => " ORDER BY producer ASC",
+        ("producer", "DESC") => " ORDER BY producer DESC",
+        ("director_author", "ASC") => " ORDER BY director_author ASC",
+        ("director_author", "DESC") => " ORDER BY director_author DESC",
+        ("status", "ASC") => " ORDER BY status ASC",
+        ("status", "DESC") => " ORDER BY status DESC",
+        ("updated_at", "ASC") => " ORDER BY updated_at ASC",
+        ("updated_at", "DESC") => " ORDER BY updated_at DESC",
+        ("created_at", "ASC") => " ORDER BY created_at ASC",
+        _ => " ORDER BY created_at DESC",
+    }
 }
 
 // Path resolver helpers
@@ -140,11 +181,12 @@ pub async fn get_works(
         }
 
         // Sorting
-        let sort_by = f.sort_by.unwrap_or_else(|| "created_at".to_string());
-        let sort_order = f.sort_order.unwrap_or_else(|| "desc".to_string());
-        query.push_str(&format!(" ORDER BY {} {}", sort_by, sort_order));
+        query.push_str(work_sort_clause(
+            f.sort_by.as_deref(),
+            f.sort_order.as_deref(),
+        ));
     } else {
-        query.push_str(" ORDER BY created_at DESC");
+        query.push_str(work_sort_clause(None, None));
     }
 
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
@@ -427,6 +469,35 @@ pub async fn delete_work(app_handle: AppHandle, id: String) -> Result<(), String
     cleanup_work_files(&app_handle, &id)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::work_sort_clause;
+
+    #[test]
+    fn work_sort_clause_accepts_allowlisted_columns_and_directions() {
+        assert_eq!(
+            work_sort_clause(Some("name"), Some("asc")),
+            " ORDER BY name ASC"
+        );
+        assert_eq!(
+            work_sort_clause(Some("updated_at"), Some("DESC")),
+            " ORDER BY updated_at DESC"
+        );
+    }
+
+    #[test]
+    fn work_sort_clause_rejects_sql_fragments() {
+        assert_eq!(
+            work_sort_clause(Some("created_at; DROP TABLE works"), Some("asc")),
+            " ORDER BY created_at DESC"
+        );
+        assert_eq!(
+            work_sort_clause(Some("name"), Some("DESC; DROP TABLE works")),
+            " ORDER BY name DESC"
+        );
+    }
 }
 
 #[tauri::command]
