@@ -11,7 +11,6 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   lightThemeColor: "#2563eb",
   darkThemeColor: "#60a5fa",
   sanPromptPublishUrl: "http://localhost:3000/api/sync",
-  sanPromptPublishSecret: "",
 
   // AI P图 设置
   aiImageEditorProvider: "mock",          // 当前选择的供应商 id

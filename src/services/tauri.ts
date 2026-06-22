@@ -704,11 +704,25 @@ export const settingsApi = {
     return result.data || {};
   },
 
+  async getSanPromptPublishSecret(): Promise<string> {
+    const result = await invoke<CommandResult<string>>("get_sanprompt_publish_secret");
+    if (!result.success) throw new Error(result.error || "Failed to get sanPrompt publish secret");
+    return result.data || "";
+  },
+
+  async setSanPromptPublishSecret(secret: string): Promise<boolean> {
+    const result = await invoke<CommandResult<boolean>>("set_sanprompt_publish_secret", { secret });
+    if (!result.success) throw new Error(result.error || "Failed to save sanPrompt publish secret");
+    return result.data || false;
+  },
+
   async save(settings: Record<string, string>): Promise<boolean> {
     const dbPath = await getDbPath();
+    const persistedSettings = { ...settings };
+    delete persistedSettings.sanPromptPublishSecret;
     const result = await invoke<CommandResult<boolean>>("save_settings", {
       dbPath,
-      settings,
+      settings: persistedSettings,
     });
     if (!result.success) throw new Error(result.error || "Failed to save settings");
     return result.data || false;

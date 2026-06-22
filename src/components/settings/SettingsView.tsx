@@ -15,6 +15,18 @@ import AboutTab from "./AboutTab";
 import SyncTab from "./SyncTab";
 import TrashView from "@/components/TrashView";
 
+const KEYRING_SETTING_KEYS = new Set(["sanPromptPublishSecret"]);
+
+function buildPersistedSettings(settings: Record<string, any>): Record<string, string> {
+  const settingsToSave: Record<string, string> = {};
+  Object.entries(settings).forEach(([k, v]) => {
+    if (KEYRING_SETTING_KEYS.has(k)) return;
+    if (typeof v === "string") settingsToSave[k] = v;
+    else settingsToSave[k] = String(v);
+  });
+  return settingsToSave;
+}
+
 export default function SettingsView() {
   const { settingsOpen, closeSettings, settings, updateSetting, settingsTab, setSettingsTab } = useUIStore();
   const activeSettingsTab = (settingsTab as SettingsTab) || "general";
@@ -32,8 +44,17 @@ export default function SettingsView() {
     if (settingsOpen) {
       setLocalSettings({ ...DEFAULT_SETTINGS, ...settings });
       setHasChanges(false);
+      import("@/services/tauri").then(async ({ settingsApi }) => {
+        try {
+          const secret = await settingsApi.getSanPromptPublishSecret();
+          setLocalSettings((prev) => ({ ...prev, sanPromptPublishSecret: secret }));
+          updateSetting("sanPromptPublishSecret", secret);
+        } catch (e) {
+          console.error("Failed to load sanPrompt publish secret:", e);
+        }
+      });
     }
-  }, [settingsOpen, settings]);
+  }, [settingsOpen, settings, updateSetting]);
 
   // 检测变更
   useEffect(() => {
@@ -72,11 +93,8 @@ export default function SettingsView() {
         });
         
         // 保存其他设置
-        const settingsToSave: Record<string, string> = {};
-        Object.entries(localSettings).forEach(([k, v]) => {
-          if (typeof v === "string") settingsToSave[k] = v;
-          else settingsToSave[k] = String(v);
-        });
+        const settingsToSave = buildPersistedSettings(localSettings);
+        await settingsApi.setSanPromptPublishSecret(localSettings.sanPromptPublishSecret || "");
         
         await settingsApi.save(settingsToSave);
 
@@ -115,11 +133,8 @@ export default function SettingsView() {
 
     // 如果不迁移或没有迁移需求
     import("@/services/tauri").then(async ({ settingsApi }) => {
-      const settingsToSave: Record<string, string> = {};
-      Object.entries(localSettings).forEach(([k, v]) => {
-        if (typeof v === "string") settingsToSave[k] = v;
-        else settingsToSave[k] = String(v);
-      });
+      const settingsToSave = buildPersistedSettings(localSettings);
+      await settingsApi.setSanPromptPublishSecret(localSettings.sanPromptPublishSecret || "");
       await settingsApi.save(settingsToSave).catch(e => console.error("Failed to save settings to DB:", e));
 
       // ALWAYS save to the default DB as well, because Rust relies on the default DB to find the unifiedRootPath

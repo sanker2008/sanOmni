@@ -40,7 +40,6 @@
       ]
     },
     "shell:default",
-    "shell:allow-execute",
     "updater:default",
     "updater:allow-check",
     "updater:allow-download-and-install",
@@ -48,7 +47,7 @@
       "identifier": "shell:allow-open",
       "allow": [
         {
-          "url": "^.*$"
+          "url": "^https://github\\.com/sanker2008/sanOmni(/.*)?$"
         }
       ]
     },

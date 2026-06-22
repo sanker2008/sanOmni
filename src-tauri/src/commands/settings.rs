@@ -3,6 +3,10 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+const SANPROMPT_KEYRING_SERVICE: &str = "sanomni-sanprompt";
+const SANPROMPT_PUBLISH_SECRET_ACCOUNT: &str = "publish_secret";
+const KEYRING_SETTING_KEYS: &[&str] = &["sanPromptPublishSecret"];
+
 #[tauri::command]
 pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
     let conn = match Connection::open(&db_path) {
@@ -28,13 +32,44 @@ pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
     for row in rows {
         match row {
             Ok((key, value)) => {
-                settings.insert(key, value);
+                if !KEYRING_SETTING_KEYS.contains(&key.as_str()) {
+                    settings.insert(key, value);
+                }
             }
             Err(e) => return CommandResult::err(format!("Failed to read setting row: {}", e)),
         }
     }
 
     CommandResult::ok(settings)
+}
+
+#[tauri::command]
+pub fn get_sanprompt_publish_secret() -> CommandResult<String> {
+    match keyring::Entry::new(SANPROMPT_KEYRING_SERVICE, SANPROMPT_PUBLISH_SECRET_ACCOUNT)
+        .and_then(|entry| entry.get_password())
+    {
+        Ok(secret) => CommandResult::ok(secret),
+        Err(_) => CommandResult::ok(String::new()),
+    }
+}
+
+#[tauri::command]
+pub fn set_sanprompt_publish_secret(secret: String) -> CommandResult<bool> {
+    let entry =
+        match keyring::Entry::new(SANPROMPT_KEYRING_SERVICE, SANPROMPT_PUBLISH_SECRET_ACCOUNT) {
+            Ok(entry) => entry,
+            Err(e) => return CommandResult::err(format!("Failed to open keyring: {}", e)),
+        };
+
+    if secret.trim().is_empty() {
+        let _ = entry.delete_password();
+        return CommandResult::ok(true);
+    }
+
+    match entry.set_password(secret.trim()) {
+        Ok(_) => CommandResult::ok(true),
+        Err(e) => CommandResult::err(format!("Failed to save publish secret: {}", e)),
+    }
 }
 
 #[tauri::command]
@@ -53,7 +88,14 @@ pub fn save_settings(db_path: String, settings: HashMap<String, String>) -> Comm
         Err(e) => return CommandResult::err(format!("Failed to begin transaction: {}", e)),
     }
 
+    for key in KEYRING_SETTING_KEYS {
+        let _ = conn.execute("DELETE FROM settings WHERE key = ?1", rusqlite::params![key]);
+    }
+
     for (key, value) in &settings {
+        if KEYRING_SETTING_KEYS.contains(&key.as_str()) {
+            continue;
+        }
         // 使用 UPSERT (INSERT OR REPLACE) 语法
         let sql = "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)
                    ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = ?3";

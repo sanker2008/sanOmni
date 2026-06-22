@@ -11,7 +11,14 @@ export interface PublishConfig {
 async function getPublishTarget() {
   const settings = await settingsApi.getAll();
   const apiUrl = (settings.sanPromptPublishUrl || DEFAULT_SANPROMPT_API_URL).trim();
-  const secret = (settings.sanPromptPublishSecret || "").trim();
+  let secret = (await settingsApi.getSanPromptPublishSecret()).trim();
+  const legacySecret = (settings.sanPromptPublishSecret || "").trim();
+  if (!secret && legacySecret) {
+    secret = legacySecret;
+    settingsApi.setSanPromptPublishSecret(legacySecret).catch((error) => {
+      console.error("Failed to migrate sanPrompt publish secret to keyring:", error);
+    });
+  }
 
   if (!secret) {
     throw new Error("sanPrompt publish secret is not configured. Set it in sanPrompt settings before publishing.");
