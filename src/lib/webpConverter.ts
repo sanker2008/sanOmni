@@ -1,4 +1,4 @@
-import { remove, writeFile, exists } from '@tauri-apps/plugin-fs';
+import { remove, writeFile, exists } from '@/services/secureFs';
 import { ipImageApi } from '@/services/tauri';
 import { useIpImageStore, useUIStore, type IpImageWithRelations } from '@/stores';
 import { convertFileSrc } from '@tauri-apps/api/core';

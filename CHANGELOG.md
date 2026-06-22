@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Review remediation documentation for sanOmni, sanPrompt, and sanomni-sync-server boundaries.
+- Secure filesystem service path for moving local asset operations behind Tauri commands and user-authorized roots.
+
+### Changed
+- sanPrompt publish secrets are stored through the system keyring instead of SQLite settings or source code.
+- sanIP sync sends explicit domain and protocol metadata to the sync server.
+- Top-level domain views, global modals, and sanLabs tools are lazy-loaded to reduce initial bundle size.
+- Local file/folder opening is routed through Tauri commands so broad frontend shell execution can remain disabled.
+
+### Added
 - Emoji Management: Added batch operations (select all, batch change group, batch delete) for emojis.
 - Emoji Management: Added a "Revert to image" (退回普通图片) action for emojis to safely remove their emoji status without deleting the original asset from the archive.
 - Emoji Management: Added secondary confirmation dialogs for both single and batch emoji deletions to prevent accidental data loss.

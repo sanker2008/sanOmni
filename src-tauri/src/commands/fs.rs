@@ -1,8 +1,34 @@
 use super::CommandResult;
+use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::UNIX_EPOCH;
+use tauri::Manager;
+
+#[derive(Default)]
+pub struct FsAccessState {
+    authorized_roots: Mutex<HashSet<PathBuf>>,
+}
+
+#[derive(Serialize)]
+pub struct SecureDirEntry {
+    name: String,
+    path: String,
+    is_file: bool,
+    is_directory: bool,
+}
+
+#[derive(Serialize)]
+pub struct SecureFileStat {
+    is_file: bool,
+    is_directory: bool,
+    size: u64,
+    modified_at: Option<u128>,
+}
 
 fn validate_os_path_arg(path: &str) -> Result<(), String> {
     if path.trim().is_empty() {
@@ -12,6 +38,83 @@ fn validate_os_path_arg(path: &str) -> Result<(), String> {
         return Err("Path contains invalid null byte".to_string());
     }
     Ok(())
+}
+
+fn canonicalize_access_root(path: &Path) -> Result<PathBuf, String> {
+    let canonical = fs::canonicalize(path)
+        .map_err(|e| format!("Failed to resolve path '{}': {}", path.display(), e))?;
+    if canonical.is_file() {
+        Ok(canonical
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or(canonical))
+    } else {
+        Ok(canonical)
+    }
+}
+
+fn canonicalize_existing_parent(path: &Path) -> Result<PathBuf, String> {
+    let mut current = path;
+    loop {
+        if current.exists() {
+            return fs::canonicalize(current)
+                .map_err(|e| format!("Failed to resolve path '{}': {}", current.display(), e));
+        }
+        current = current
+            .parent()
+            .ok_or_else(|| format!("Path has no existing parent: {}", path.display()))?;
+    }
+}
+
+fn app_data_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))
+        .and_then(|p| canonicalize_access_root(&p))
+}
+
+fn is_authorized_path(
+    app: &tauri::AppHandle,
+    state: &tauri::State<FsAccessState>,
+    path: &Path,
+) -> Result<bool, String> {
+    let target = canonicalize_existing_parent(path)?;
+    let app_root = app_data_root(app)?;
+    if target.starts_with(&app_root) {
+        return Ok(true);
+    }
+
+    let roots = state
+        .authorized_roots
+        .lock()
+        .map_err(|_| "Failed to lock authorized path state".to_string())?;
+
+    Ok(roots.iter().any(|root| target.starts_with(root)))
+}
+
+fn require_authorized_path(
+    app: &tauri::AppHandle,
+    state: &tauri::State<FsAccessState>,
+    path: &str,
+) -> Result<PathBuf, String> {
+    validate_os_path_arg(path)?;
+    let path_buf = PathBuf::from(path);
+    if is_authorized_path(app, state, &path_buf)? {
+        Ok(path_buf)
+    } else {
+        Err(format!("Path is not authorized: {}", path))
+    }
+}
+
+fn require_authorized_paths(
+    app: &tauri::AppHandle,
+    state: &tauri::State<FsAccessState>,
+    paths: &[&str],
+) -> Result<Vec<PathBuf>, String> {
+    paths
+        .iter()
+        .map(|path| require_authorized_path(app, state, path))
+        .collect()
 }
 
 fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
@@ -367,4 +470,209 @@ pub fn open_path(path: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn authorize_fs_paths(
+    paths: Vec<String>,
+    state: tauri::State<FsAccessState>,
+) -> CommandResult<bool> {
+    let mut roots = match state.authorized_roots.lock() {
+        Ok(roots) => roots,
+        Err(_) => return CommandResult::err("Failed to lock authorized path state".to_string()),
+    };
+
+    for path in paths {
+        if path.trim().is_empty() {
+            continue;
+        }
+        match canonicalize_access_root(Path::new(&path)) {
+            Ok(root) => {
+                roots.insert(root);
+            }
+            Err(e) => return CommandResult::err(e),
+        }
+    }
+
+    CommandResult::ok(true)
+}
+
+#[tauri::command]
+pub fn secure_fs_exists(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+) -> CommandResult<bool> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => CommandResult::ok(path.exists()),
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_mkdir(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+    recursive: bool,
+) -> CommandResult<bool> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => {
+            let result = if recursive {
+                fs::create_dir_all(path)
+            } else {
+                fs::create_dir(path)
+            };
+            match result {
+                Ok(_) => CommandResult::ok(true),
+                Err(e) => CommandResult::err(format!("Failed to create directory: {}", e)),
+            }
+        }
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_read_file(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+) -> CommandResult<Vec<u8>> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => match fs::read(path) {
+            Ok(data) => CommandResult::ok(data),
+            Err(e) => CommandResult::err(format!("Failed to read file: {}", e)),
+        },
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_write_file(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+    data: Vec<u8>,
+) -> CommandResult<bool> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => match fs::write(path, data) {
+            Ok(_) => CommandResult::ok(true),
+            Err(e) => CommandResult::err(format!("Failed to write file: {}", e)),
+        },
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_copy_file(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    source: String,
+    target: String,
+) -> CommandResult<bool> {
+    match require_authorized_paths(&app, &state, &[&source, &target]) {
+        Ok(paths) => match fs::copy(&paths[0], &paths[1]) {
+            Ok(_) => CommandResult::ok(true),
+            Err(e) => CommandResult::err(format!("Failed to copy file: {}", e)),
+        },
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_rename(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    source: String,
+    target: String,
+) -> CommandResult<bool> {
+    match require_authorized_paths(&app, &state, &[&source, &target]) {
+        Ok(paths) => match fs::rename(&paths[0], &paths[1]) {
+            Ok(_) => CommandResult::ok(true),
+            Err(e) => CommandResult::err(format!("Failed to rename path: {}", e)),
+        },
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_remove(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+    recursive: bool,
+) -> CommandResult<bool> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => {
+            let result = if path.is_dir() {
+                if recursive {
+                    fs::remove_dir_all(path)
+                } else {
+                    fs::remove_dir(path)
+                }
+            } else {
+                fs::remove_file(path)
+            };
+            match result {
+                Ok(_) => CommandResult::ok(true),
+                Err(e) => CommandResult::err(format!("Failed to remove path: {}", e)),
+            }
+        }
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_read_dir(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+) -> CommandResult<Vec<SecureDirEntry>> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => {
+            let entries = match fs::read_dir(&path) {
+                Ok(entries) => entries,
+                Err(e) => return CommandResult::err(format!("Failed to read directory: {}", e)),
+            };
+            let mut result = Vec::new();
+            for entry in entries.flatten() {
+                let file_type = match entry.file_type() {
+                    Ok(file_type) => file_type,
+                    Err(_) => continue,
+                };
+                result.push(SecureDirEntry {
+                    name: entry.file_name().to_string_lossy().to_string(),
+                    path: entry.path().to_string_lossy().to_string(),
+                    is_file: file_type.is_file(),
+                    is_directory: file_type.is_dir(),
+                });
+            }
+            CommandResult::ok(result)
+        }
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_stat(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+) -> CommandResult<SecureFileStat> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => match fs::metadata(path) {
+            Ok(metadata) => CommandResult::ok(SecureFileStat {
+                is_file: metadata.is_file(),
+                is_directory: metadata.is_dir(),
+                size: metadata.len(),
+                modified_at: metadata
+                    .modified()
+                    .ok()
+                    .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_millis()),
+            }),
+            Err(e) => CommandResult::err(format!("Failed to stat path: {}", e)),
+        },
+        Err(e) => CommandResult::err(e),
+    }
 }

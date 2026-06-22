@@ -1,8 +1,8 @@
 /**
  * fs.ts — 文件系统工具 & 项目持久化
  */
-import { mkdir, writeFile, readFile, readDir, remove } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
+import { mkdir, writeFile, readFile, readDir, remove } from '@/services/secureFs';
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
 import type { ProjectData, ProjectMeta } from './types';
 

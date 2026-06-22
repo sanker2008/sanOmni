@@ -59,7 +59,7 @@ export interface RepairReport {
 export async function getDbPath(): Promise<string> {
   const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
-  const { exists, mkdir } = await import("@tauri-apps/plugin-fs");
+  const { exists, mkdir } = await import("@/services/secureFs");
   
   const appDir = await getAppRoot();
   const dataDir = await join(appDir, "data");

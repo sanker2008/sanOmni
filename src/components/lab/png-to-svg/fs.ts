@@ -1,6 +1,6 @@
-import { mkdir, writeFile } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
+import { mkdir, writeFile } from '@/services/secureFs';
 
 /** 获取 PngToSvg 根目录 */
 export async function getBasePath(): Promise<string> {

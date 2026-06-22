@@ -6,7 +6,10 @@ export async function getAppRoot(): Promise<string> {
     if (settingsStr) {
       const settings = JSON.parse(settingsStr);
       if (settings.unifiedRootPath && settings.unifiedRootPath.trim()) {
-        return settings.unifiedRootPath.trim();
+        const root = settings.unifiedRootPath.trim();
+        const { authorizeFsPaths } = await import("@/services/secureFs");
+        await authorizeFsPaths([root]).catch(error => console.error("Failed to authorize app root:", error));
+        return root;
       }
     }
   } catch (e) {
@@ -22,7 +25,10 @@ export async function getLabsRoot(): Promise<string> {
     if (settingsStr) {
       const settings = JSON.parse(settingsStr);
       if (settings.labsCustomRootPath && settings.labsCustomRootPath.trim()) {
-        return settings.labsCustomRootPath.trim();
+        const root = settings.labsCustomRootPath.trim();
+        const { authorizeFsPaths } = await import("@/services/secureFs");
+        await authorizeFsPaths([root]).catch(error => console.error("Failed to authorize labs root:", error));
+        return root;
       }
     }
   } catch (e) {

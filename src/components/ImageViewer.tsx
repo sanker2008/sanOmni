@@ -5,6 +5,7 @@ import type { ImageWithRelations, IpImageWithRelations } from "@/stores";
 import { toast } from "@/hooks/useToast";
 import { imageApi, ipImageApi } from "@/services/tauri";
 import { openPath } from "@/lib/pathUtils";
+import { authorizeFsPaths, copyFile } from "@/services/secureFs";
 import {
   Dialog,
   DialogContent,
@@ -194,7 +195,6 @@ export default function ImageViewer() {
     if (!image) return;
     try {
       const { save } = await import("@tauri-apps/plugin-dialog");
-      const { copyFile } = await import("@tauri-apps/plugin-fs");
       
       const savePath = await save({
         defaultPath: image.filename,
@@ -205,6 +205,7 @@ export default function ImageViewer() {
       });
 
       if (savePath) {
+        await authorizeFsPaths([savePath]);
         await copyFile(image.absolute_path, savePath);
       }
     } catch (error) {

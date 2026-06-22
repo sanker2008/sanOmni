@@ -1,6 +1,6 @@
-import { mkdir, readDir, readFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs';
 import { join } from "@tauri-apps/api/path";
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
+import { mkdir, readDir, readFile, remove, stat, writeFile } from '@/services/secureFs';
 
 export interface TempImageEntry {
   name: string;
@@ -86,7 +86,8 @@ export async function listTempImages(): Promise<TempImageEntry[]> {
 
 export async function loadTempImage(entry: TempImageEntry): Promise<string> {
   const data = await readFile(entry.path);
-  const blob = new Blob([data], { type: getImageMimeType(entry.name) });
+  const bytes = new Uint8Array(data);
+  const blob = new Blob([bytes.buffer], { type: getImageMimeType(entry.name) });
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);

@@ -13,6 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .manage(commands::fs::FsAccessState::default())
         .setup(|app| {
             // Use Tauri's app data directory
             let app_data_dir = app
@@ -138,6 +139,16 @@ pub fn run() {
             commands::fs::repair_database_paths,
             commands::fs::show_in_folder,
             commands::fs::open_path,
+            commands::fs::authorize_fs_paths,
+            commands::fs::secure_fs_exists,
+            commands::fs::secure_fs_mkdir,
+            commands::fs::secure_fs_read_file,
+            commands::fs::secure_fs_write_file,
+            commands::fs::secure_fs_copy_file,
+            commands::fs::secure_fs_rename,
+            commands::fs::secure_fs_remove,
+            commands::fs::secure_fs_read_dir,
+            commands::fs::secure_fs_stat,
             // Sync Commands
             commands::sync_commands::sync_test_connection,
             commands::sync_commands::sync_enable,

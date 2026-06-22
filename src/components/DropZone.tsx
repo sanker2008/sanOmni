@@ -4,7 +4,7 @@ import { imageApi, ipImageApi, classifyApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
 import { Upload, Image as ImageIcon, FolderOpen, Loader2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { stat } from "@tauri-apps/plugin-fs";
+import { authorizeFsPaths, copyFile, exists, mkdir, readDir, stat } from "@/services/secureFs";
 import { toast } from "@/hooks/useToast";
 
 interface DropZoneProps {
@@ -43,6 +43,7 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
             setIsDragging(false);
             const paths = event.payload.paths.filter(p => isImageFile(p));
             if (paths.length > 0) {
+              authorizeFsPaths(paths).catch(error => console.error("Failed to authorize dropped paths:", error));
               importPaths(paths);
             } else {
               console.warn("No valid image files in drop");
@@ -84,6 +85,7 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
 
       if (selected) {
         const files = Array.isArray(selected) ? selected : [selected];
+        await authorizeFsPaths(files as string[]);
         await importPaths(files as string[]);
       }
     } catch (error) {
@@ -102,6 +104,7 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
         return;
       }
 
+      await authorizeFsPaths([selectedFolder]);
       // Read all files in the selected folder
       const entries = await readDirRecursive(selectedFolder);
       const imagePaths = entries.filter(isImageFile);
@@ -119,7 +122,6 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
 
   // Helper function to recursively read directory
   const readDirRecursive = async (dirPath: string): Promise<string[]> => {
-    const { readDir } = await import("@tauri-apps/plugin-fs");
     const results: string[] = [];
 
     try {
@@ -147,9 +149,9 @@ export default function DropZone({ onImportComplete, imageType = "prompt", ipId 
     console.log("importPaths called with:", paths);
     setIsImporting(true);
     try {
+      await authorizeFsPaths(paths);
       const { join } = await import("@tauri-apps/api/path");
       const { getAppRoot } = await import("@/lib/pathUtils");
-      const { copyFile, exists, mkdir } = await import("@tauri-apps/plugin-fs");
       
       // 使用自定义路径或默认路径
       let inboxDir: string;

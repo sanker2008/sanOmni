@@ -5,7 +5,7 @@ import {
   readTextFile,
   writeFile,
   remove,
-} from '@tauri-apps/plugin-fs';
+} from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
 
