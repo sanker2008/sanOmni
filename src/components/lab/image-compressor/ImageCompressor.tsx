@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getDefaultExportPath, saveFile, openExportFolder, ensureDirectory } from './fs';
 import { toast } from '@/hooks/useToast';
 import { useUIStore } from '@/stores';
@@ -7,6 +7,7 @@ import { geminiWatermarkApi, isGeminiWatermarkRemovalSuccessful } from '@/servic
 import { authorizeFsPaths, readFile } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
 import { getLabsRoot } from '@/lib/pathUtils';
+import { pickFiles } from '@/lib/tauriFilePicker';
 import {
   Upload,
   Settings,
@@ -46,7 +47,6 @@ export default function ImageCompressor() {
   const [exactHeight, setExactHeight] = useState<number | ''>('');
   const [exportPath, setExportPath] = useState<string>('');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const initPath = async () => {
@@ -99,6 +99,34 @@ export default function ImageCompressor() {
     }
   }, []);
 
+  const handlePickFiles = useCallback(async () => {
+    try {
+      const picked = await pickFiles({
+        multiple: true,
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
+        filterName: '图片文件',
+      });
+      if (picked.length > 0) {
+        const newItems: FileItem[] = picked.map(p => ({
+          id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          file: p.file,
+          name: p.file.name,
+          size: p.file.size,
+          dataUrl: p.dataUrl,
+          status: 'pending' as const,
+        }));
+        setFiles(prev => [...prev, ...newItems]);
+        toast({
+          title: '图片已加载',
+          description: `成功加载 ${newItems.length} 张图片`,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to pick files:', error);
+      toast({ title: '选择图片失败', description: String(error), variant: 'destructive' });
+    }
+  }, []);
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -112,9 +140,6 @@ export default function ImageCompressor() {
 
   const clearFiles = () => {
     setFiles([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
   const selectExportFolder = async () => {
@@ -284,19 +309,6 @@ export default function ImageCompressor() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files) {
-            handleFiles(e.target.files);
-          }
-          e.target.value = '';
-        }}
-      />
 
       {files.length > 0 && (
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/40 shrink-0 select-none">
@@ -311,10 +323,7 @@ export default function ImageCompressor() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (fileInputRef.current) fileInputRef.current.value = '';
-                fileInputRef.current?.click();
-              }}
+              onClick={handlePickFiles}
               className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors bg-muted/40 hover:bg-muted/80 px-2 py-1 rounded border"
             >
               <Upload className="w-3.5 h-3.5" />
@@ -382,10 +391,7 @@ export default function ImageCompressor() {
           <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900/5 dark:bg-black/10 select-none" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
             <div
               className="w-full max-w-xl aspect-[16/10] bg-card border-2 border-dashed border-border/80 hover:border-primary/50 hover:shadow-lg rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all duration-300 cursor-pointer group"
-              onClick={() => {
-                if (fileInputRef.current) fileInputRef.current.value = '';
-                fileInputRef.current?.click();
-              }}
+              onClick={handlePickFiles}
             >
               <div className="w-16 h-16 rounded-full bg-primary/5 group-hover:bg-primary/10 text-primary/70 flex items-center justify-center transition-all mb-5 group-hover:scale-105">
                 <Upload className="w-8 h-8" />

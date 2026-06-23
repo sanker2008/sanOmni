@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { pickSingleFile } from '@/lib/tauriFilePicker';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { readFile, remove } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
@@ -91,7 +92,6 @@ export default function ImageSlicer() {
     exportPath: '',
   });
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const currentWatermarkOutputPathRef = useRef<string | null>(null);
 
   const applyImageSrc = useCallback((src: string, filename: string, successTitle = '图片加载成功') => {
@@ -173,31 +173,26 @@ export default function ImageSlicer() {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
-      const img = new Image();
-      img.onload = () => {
-        currentWatermarkOutputPathRef.current = null;
-        setOriginalWidth(img.width);
-        setOriginalHeight(img.height);
-        setImageSrc(dataUrl);
-        setOriginalFilename(file.name);
-        setGuidelines([]); // Reset lines
-        setActiveTab('editor');
-
-        // Automatically set up a standard 3x3 equal division guidelines to onboard the user nicely
-        const v = calculateEqualGuidelines(img.width, 3, 'vertical', false, 10);
-        const h = calculateEqualGuidelines(img.height, 3, 'horizontal', false, 10);
-        setGuidelines([...v, ...h]);
-
-        toast({
-          title: '图片加载成功',
-          description: `分辨率: ${img.width} × ${img.height} px`,
-          variant: 'default',
-        });
-      };
-      img.src = dataUrl;
+      applyImageSrc(dataUrl, file.name);
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [applyImageSrc]);
+
+  // Handle picking an image via Tauri dialog
+  const handlePickImage = useCallback(async () => {
+    try {
+      const picked = await pickSingleFile({
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
+        filterName: '图片文件',
+      });
+      if (picked) {
+        applyImageSrc(picked.dataUrl, picked.file.name);
+      }
+    } catch (error) {
+      console.error('Failed to pick image:', error);
+      toast({ title: '选择图片失败', description: String(error), variant: 'destructive' });
+    }
+  }, [applyImageSrc]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -495,15 +490,6 @@ export default function ImageSlicer() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
-        onChange={(e) => e.target.files?.[0] && handleImageFile(e.target.files[0])}
-      />
 
       {/* Toolbar / Header */}
       {imageSrc && (
@@ -866,7 +852,7 @@ export default function ImageSlicer() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             className="w-full max-w-xl aspect-[16/10] bg-card border-2 border-dashed border-border/80 hover:border-primary/50 hover:shadow-lg rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all duration-300 cursor-pointer group"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handlePickImage}
           >
             <div className="w-16 h-16 rounded-full bg-primary/5 group-hover:bg-primary/10 text-primary/70 flex items-center justify-center transition-all mb-5 group-hover:scale-105">
               <Upload className="w-8 h-8" />

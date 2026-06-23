@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Upload, Download, RefreshCw, FolderOpen, Image as ImageIcon, HelpCircle, Settings, PlayCircle } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
 import { saveSvg, openOutputFolder } from './fs';
+import { pickSingleFile } from '@/lib/tauriFilePicker';
 // @ts-ignore
 import ImageTracer from 'imagetracerjs';
 
@@ -24,15 +25,22 @@ export default function PngToSvg() {
   const [minColorRatio, setMinColorRatio] = useState<number>(0.02);
   const [colorQuantCycles, setColorQuantCycles] = useState<number>(3);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      setSelectedFile(file);
-      const url = URL.createObjectURL(file);
-      setImageUrl(url);
-      setSvgContent(null);
+
+  const handlePickImage = useCallback(async () => {
+    try {
+      const picked = await pickSingleFile({
+        extensions: ['png', 'jpg', 'jpeg', 'webp'],
+        filterName: '图片文件',
+      });
+      if (picked) {
+        setSelectedFile(picked.file);
+        setImageUrl(picked.dataUrl);
+        setSvgContent(null);
+      }
+    } catch (error) {
+      console.error('Failed to pick image:', error);
     }
-  };
+  }, []);
 
   const processImage = () => {
     if (!imageUrl) return;
@@ -159,13 +167,10 @@ export default function PngToSvg() {
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 select-none">
-              <div className="w-full max-w-xl aspect-[16/10] bg-card border-2 border-dashed border-border/80 hover:border-primary/50 hover:shadow-lg rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all duration-300 cursor-pointer group relative">
-                <input
-                  type="file"
-                  accept="image/png, image/jpeg, image/webp"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  onChange={handleFileChange}
-                />
+              <div
+                className="w-full max-w-xl aspect-[16/10] bg-card border-2 border-dashed border-border/80 hover:border-primary/50 hover:shadow-lg rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all duration-300 cursor-pointer group"
+                onClick={handlePickImage}
+              >
                 <div className="w-16 h-16 rounded-full bg-primary/5 group-hover:bg-primary/10 text-primary/70 flex items-center justify-center transition-all mb-5 group-hover:scale-105">
                   <Upload className="w-8 h-8" />
                 </div>
@@ -195,15 +200,12 @@ export default function PngToSvg() {
             {imageUrl && (
               <div className="space-y-2 mb-4">
                 <span className="text-xs font-semibold text-foreground/90 block">更改图片</span>
-                <label className="flex items-center justify-center gap-2 w-full py-1.5 bg-muted/60 hover:bg-muted text-foreground/80 text-xs rounded border border-border/60 transition-colors cursor-pointer">
+                <label
+                  className="flex items-center justify-center gap-2 w-full py-1.5 bg-muted/60 hover:bg-muted text-foreground/80 text-xs rounded border border-border/60 transition-colors cursor-pointer"
+                  onClick={handlePickImage}
+                >
                   <Upload className="w-3.5 h-3.5" />
                   重新选择图片
-                  <input
-                    type="file"
-                    accept="image/png, image/jpeg, image/webp"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
                 </label>
               </div>
             )}

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import { Upload, X, Star, Search, ChevronDown, Check } from "lucide-react";
+import { pickFiles } from "@/lib/tauriFilePicker";
 
 interface CharacterEditModalProps {
   workId: string;
@@ -65,7 +66,6 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
     | { type: 'new'; url: string; file: File };
     
   const [images, setImages] = useState<ImageItem[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isSaving, setIsSaving] = useState(false);
 
@@ -126,20 +126,24 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
     }
   }, [open, character]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const newItems = Array.from(files).map(file => ({
-        type: 'new' as const,
-        url: URL.createObjectURL(file),
-        file
-      }));
-      setImages(prev => [...prev, ...newItems]);
+  const triggerFileSelect = async () => {
+    try {
+      const picked = await pickFiles({
+        multiple: true,
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
+        filterName: '图片文件',
+      });
+      if (picked.length > 0) {
+        const newItems = picked.map(p => ({
+          type: 'new' as const,
+          url: p.dataUrl,
+          file: p.file,
+        }));
+        setImages(prev => [...prev, ...newItems]);
+      }
+    } catch (error) {
+      console.error('Failed to pick images:', error);
     }
-  };
-
-  const triggerFileSelect = () => {
-    fileInputRef.current?.click();
   };
 
   const handleRemoveImage = (index: number) => {
@@ -381,14 +385,6 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
           <div className="flex flex-col gap-2">
             <label className="text-xs font-semibold text-muted-foreground">剧照 / 设定图图片管理（支持多图）</label>
             
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*"
-              multiple
-              className="hidden"
-            />
 
             <div className="flex flex-wrap gap-3 items-center">
               {/* Uploder card */}

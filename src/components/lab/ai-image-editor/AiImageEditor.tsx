@@ -39,7 +39,6 @@ export default function AiImageEditor() {
     renameCurrentProject, refreshProjectList, organizeNodes, clearAllNodes,
   } = useAiImageEditorStore();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -122,9 +121,7 @@ export default function AiImageEditor() {
         }
       }
     } catch (e: any) {
-      console.error('[AI Editor] Dialog error:', e);
-      // 降级：打开 HTML file input
-      fileInputRef.current?.click();
+      toast({ title: '选择图片失败', description: e?.message || String(e), variant: 'destructive' });
     }
   }, [addSourceNode]);
 
@@ -161,7 +158,6 @@ export default function AiImageEditor() {
       };
       reader.readAsDataURL(file);
     }
-    if (fileInputRef.current) fileInputRef.current.value = '';
   }, [addSourceNode]);
 
   // ─── 拖拽导入 ────────────────────────────────────────────
@@ -228,15 +224,6 @@ export default function AiImageEditor() {
 
   return (
     <div className="h-full flex flex-col" data-ai-editor onDragOver={handleDragOver} onDrop={handleDrop}>
-      {/* 隐藏文件输入 */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(e) => handleImageImport(e.target.files)}
-      />
 
       {/* 工具栏 */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/50">

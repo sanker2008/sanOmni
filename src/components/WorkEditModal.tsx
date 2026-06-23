@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { type WorkWithRelations, useWorksStore, useTagStore, useUIStore } from "@/stores";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/useToast";
 import { Upload, X, Check } from "lucide-react";
 import { tagApi } from "@/services/tauri";
+import { pickSingleFile } from "@/lib/tauriFilePicker";
 
 interface WorkEditModalProps {
   work: WorkWithRelations | null; // null for creating
@@ -54,7 +55,6 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
   // Cover file
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Selected tag IDs
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -108,16 +108,19 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
     }
   }, [open, work]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setCoverFile(file);
-      setCoverPreview(URL.createObjectURL(file));
+  const triggerFileSelect = async () => {
+    try {
+      const picked = await pickSingleFile({
+        extensions: ['png', 'jpg', 'jpeg', 'webp'],
+        filterName: '封面图片',
+      });
+      if (picked) {
+        setCoverFile(picked.file);
+        setCoverPreview(picked.dataUrl);
+      }
+    } catch (error) {
+      console.error('Failed to pick cover image:', error);
     }
-  };
-
-  const triggerFileSelect = () => {
-    fileInputRef.current?.click();
   };
 
   const handleToggleTag = (tagId: string) => {
@@ -229,13 +232,7 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-4">
           {/* Cover image upload pane */}
           <div className="flex flex-col items-center justify-center gap-3 border rounded-lg p-4 bg-muted/40 aspect-[3/4] max-w-[200px] mx-auto md:mx-0 w-full relative">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*"
-              className="hidden"
-            />
+
             {coverPreview ? (
               <div className="w-full h-full relative group rounded overflow-hidden border bg-background flex items-center justify-center">
                 <img src={coverPreview} className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`} alt="Cover Preview" />

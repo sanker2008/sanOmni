@@ -16,6 +16,7 @@ import { ensureToolDirectories, saveProject, loadProject, saveExport, listProjec
 import { Download, RotateCcw, Save, FolderOpen, FileCode2, ChevronDown, Undo2, Redo2, Edit2 } from 'lucide-react';
 import { toast } from '@/hooks/useToast';
 import { useUIStore } from '@/stores';
+import { pickFiles } from '@/lib/tauriFilePicker';
 import {
   Dialog,
   DialogContent,
@@ -60,7 +61,6 @@ export default function ProductImageMaker() {
     pushHistory,
   } = useProductImageStore();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceLayerIdRef = useRef<string | null>(null);
 
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false);
@@ -247,47 +247,42 @@ export default function ProductImageMaker() {
 
   // ─── Image Upload Handler ──────────────────────────────
 
-  const handleImageUpload = useCallback(
-    (files: FileList | null) => {
-      if (!files || files.length === 0) return;
-
-      for (const file of Array.from(files)) {
-        if (!file.type.startsWith('image/')) continue;
-
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          const img = new Image();
-          img.onload = () => {
-            if (replaceLayerIdRef.current) {
-              updateLayer(replaceLayerIdRef.current, {
-                src: dataUrl,
-                filename: file.name,
-                naturalWidth: img.width,
-                naturalHeight: img.height,
-              });
-              replaceLayerIdRef.current = null;
-            } else {
-              addImageLayer(dataUrl, file.name, img.width, img.height);
-            }
-          };
-          img.src = dataUrl;
+  const handleAddImageViaDialog = useCallback(async () => {
+    try {
+      const picked = await pickFiles({
+        multiple: true,
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
+        filterName: '图片文件',
+      });
+      for (const p of picked) {
+        const img = new Image();
+        img.onload = () => {
+          if (replaceLayerIdRef.current) {
+            updateLayer(replaceLayerIdRef.current, {
+              src: p.dataUrl,
+              filename: p.file.name,
+              naturalWidth: img.width,
+              naturalHeight: img.height,
+            });
+            replaceLayerIdRef.current = null;
+          } else {
+            addImageLayer(p.dataUrl, p.file.name, img.width, img.height);
+          }
         };
-        reader.readAsDataURL(file);
+        img.src = p.dataUrl;
       }
-    },
-    [addImageLayer, updateLayer],
-  );
+    } catch (error) {
+      console.error('Failed to pick images:', error);
+      toast({ title: '选择图片失败', description: String(error), variant: 'destructive' });
+    }
+  }, [addImageLayer, updateLayer]);
 
   const handleReplaceImage = useCallback(
     (layerId: string) => {
       replaceLayerIdRef.current = layerId;
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-        fileInputRef.current.click();
-      }
+      handleAddImageViaDialog();
     },
-    [],
+    [handleAddImageViaDialog],
   );
 
   // ─── Export ────────────────────────────────────────────
@@ -453,15 +448,6 @@ export default function ProductImageMaker() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(e) => handleImageUpload(e.target.files)}
-      />
 
       {/* Confirm New Dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -756,7 +742,7 @@ export default function ProductImageMaker() {
                 onAddShapeLayer={addShapeLayer}
                 onAddImageLayer={() => {
                   replaceLayerIdRef.current = null;
-                  fileInputRef.current?.click();
+                  handleAddImageViaDialog();
                 }}
               />
             </div>

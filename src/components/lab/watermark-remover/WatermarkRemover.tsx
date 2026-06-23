@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { generateInpaint } from '../ai-image-editor/api';
 import { saveFile, getDefaultExportPath } from '../image-compressor/fs';
 import { toast } from '@/hooks/useToast';
 import { Upload, Eraser, Download, Paintbrush, PlayCircle, Loader2 } from 'lucide-react';
+import { pickSingleFile } from '@/lib/tauriFilePicker';
 
 export default function WatermarkRemover() {
   const [image, setImage] = useState<string | null>(null);
@@ -10,23 +11,26 @@ export default function WatermarkRemover() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [brushSize, setBrushSize] = useState(20);
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
   const isDrawing = useRef(false);
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setImage(event.target?.result as string);
-      setResultImage(null);
-    };
-    reader.readAsDataURL(file);
-  };
+  const handlePickImage = useCallback(async () => {
+    try {
+      const picked = await pickSingleFile({
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
+        filterName: '图片文件',
+      });
+      if (picked) {
+        setImage(picked.dataUrl);
+        setResultImage(null);
+      }
+    } catch (error) {
+      console.error('Failed to pick image:', error);
+    }
+  }, []);
 
   const getCanvasPos = (e: React.MouseEvent) => {
     const canvas = canvasRef.current;
@@ -159,13 +163,6 @@ export default function WatermarkRemover() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFile}
-      />
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/40 shrink-0 select-none">
@@ -218,7 +215,7 @@ export default function WatermarkRemover() {
           <div className="flex-1 flex flex-col items-center justify-center p-8 select-none">
             <div
               className="w-full max-w-lg aspect-[16/10] bg-card border-2 border-dashed border-border/80 hover:border-primary/50 hover:shadow-lg rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all cursor-pointer group"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={handlePickImage}
             >
               <div className="w-16 h-16 rounded-full bg-primary/5 group-hover:bg-primary/10 text-primary/70 flex items-center justify-center transition-all mb-5 group-hover:scale-105">
                 <Upload className="w-8 h-8" />
