@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi, ipApi } from "@/services/tauri";
+import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi, ipApi, isGeminiWatermarkRemovalSuccessful } from "@/services/tauri";
 import { convertIpImageToWebp, convertIpImageToPng } from "@/lib/webpConverter";
 import { revealFileInFolder } from "@/lib/pathUtils";
 import { exists, mkdir, rename } from "@/services/secureFs";
@@ -334,7 +334,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
           image.absolute_path,
           tempPath
         );
-        success = result.success;
+        success = isGeminiWatermarkRemovalSuccessful(result);
       } else {
         // 其他情况使用通用算法
         const result = await watermarkApi.remove(

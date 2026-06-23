@@ -4,6 +4,51 @@
 
 ---
 
+## [2026-06-23] - Gemini 水印大小与位置变化导致去除失败
+
+### 1. 问题
+- 两张样例图尺寸同为 `2752x1536`，但 Gemini 水印位置不同。
+- 图一水印右/下边距约 `196px`，旧逻辑只搜索右下角 `128px` 范围，导致检测不到或 fallback 到错误位置。
+- 图二水印更靠近传统右下角区域，因此旧逻辑可以成功。
+- `rqm0` 样例的水印叠在脸角和手臂上，NCC 自由搜索被右侧白底假峰值带偏，改错了 `(967,844)` 而不是新 profile 的 `(880,880)`。
+- `c80u` 黑底样例使用新版 `96px / margin 192` alpha，旧 `bg_96` 反算后会留下亮边残影。
+- 多个前端入口只判断 `result.success`，低置信 fallback 也可能被当作成功并替换原图。
+
+### 2. 修复
+- `src-tauri/src/commands/gemini_watermark_removal.rs`
+  - 水印尺寸从 `[96, 48]` 扩展为 `[96, 72, 48, 36]`。
+  - 支持从现有 alpha map 缩放生成 `72px` 和 `36px` 模板。
+  - 新增 `bg_96_20260520.png` alpha 模板，兼容 Gemini 新版透明度。
+  - 新增已知 Gemini 下载 profile 优先检测：大图 `96px / margin 192 / alpha 20260520`，以及 `1024x1024` 图片上的 `48px / margin 96 / alpha legacy_scale_0.60`。
+  - `48px / margin 96` profile 使用独立较低 evidence 阈值，避免脸角/手臂等强纹理区域分数偏低时退回自由搜索并命中 `(967,844)` 白底假峰值。
+  - 已知新版 profile 优先于自由搜索，避免人物、文字、钟表等内容产生的 NCC 假峰值覆盖真实水印位置。
+  - 搜索区域从固定 `128px` 扩展为按图片尺寸计算的右下角区域。
+  - 使用粗搜 + 局部精搜，提高兼容性并控制耗时。
+  - `method` 输出命中的 `size / x / y / conf / profile / alpha`，便于排查。
+- `src/services/tauri.ts`
+  - 新增 `isGeminiWatermarkRemovalSuccessful(result)`，统一要求 `success && watermark_detected`。
+- 前端入口已统一接入该 helper：
+  - `src/components/ImageCard.tsx`
+  - `src/components/IpArchivedView.tsx`
+  - `src/components/lab/image-compressor/ImageCompressor.tsx`
+  - `src/components/lab/image-slicer/ImageSlicer.tsx`
+- 新增文档：`docs/watermark/GEMINI_WATERMARK_REMOVAL.md`。
+- sanLabs 新增 `Gemini 水印高级修复`：
+  - 支持自动处理、手动框选水印区域、profile 切换和 alpha 强度微调。
+  - 用于一键流程遇到 `profile=false`、命中错误位置、白色残留、变深残影等情况时兜底。
+  - 手动处理仍复用后端 `advanced_remove_gemini_watermark`，避免维护第二套算法。
+
+### 3. 验证
+- `cargo test gemini_watermark_removal` 通过。
+- `cargo test` 通过，23 个测试全绿。
+- `npm run build` 通过，仅有既有 Vite chunk 警告。
+
+### 4. 约定
+- 后续新增 Gemini 去水印入口时，不能只判断 `result.success`。
+- 替换原图或读回去水印结果前，必须使用 `isGeminiWatermarkRemovalSuccessful(result)`。
+
+---
+
 ## [2026-06-15] - 云同步数据安全加固与快照对账通道
 
 ### 1. 问题

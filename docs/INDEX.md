@@ -34,6 +34,7 @@
 ## 💧 水印专题 (`watermark/`)
 - [水印检测算法](./watermark/WATERMARK_DETECTION_ALGORITHM.md) - 水印检测
 - [水印检测测试](./watermark/WATERMARK_DETECTION_TESTING.md) - 测试指南
+- [Gemini 水印去除兼容说明](./watermark/GEMINI_WATERMARK_REMOVAL.md) - Gemini 水印多尺寸、多位置兼容策略
 - [豆包水印去除](./watermark/DOUBAO_WATERMARK_REMOVAL.md) - 针对豆包的去除方案
 - [豆包水印去除总结](./watermark/DOUBAO_WATERMARK_SUMMARY.md)
 
@@ -50,4 +51,4 @@
 发版说明及历史大功能变更日志，请查阅 `docs/release-notes/` 目录。
 
 ---
-**最后更新**: 2026-06-16
+**最后更新**: 2026-06-23

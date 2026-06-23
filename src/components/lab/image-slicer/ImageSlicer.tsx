@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { readFile, remove } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
-import { geminiWatermarkApi } from '@/services/tauri';
+import { geminiWatermarkApi, isGeminiWatermarkRemovalSuccessful } from '@/services/tauri';
 import { getLabsRoot } from '@/lib/pathUtils';
 import { Guideline, SliceItem, ExportConfig } from './types';
 import { calculateEqualGuidelines, computeSlices, processSliceToCanvas, generateSliceFileName } from './utils';
@@ -294,7 +294,7 @@ export default function ImageSlicer() {
       await saveFile(tempDir, inputFileName, new Uint8Array(imageBuffer));
 
       const result = await geminiWatermarkApi.autoRemove(inputPath, outputPath);
-      if (!result.success) {
+      if (!isGeminiWatermarkRemovalSuccessful(result)) {
         throw new Error('Gemini 水印去除失败');
       }
 

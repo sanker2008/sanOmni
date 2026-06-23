@@ -1379,7 +1379,7 @@ sanIPBox 数据库:
 
 </details>
 
-#### 共享 (16 个命令)
+#### 共享 (17 个命令)
 
 <details>
 <summary>点击展开完整列表</summary>
@@ -1390,8 +1390,8 @@ sanIPBox 数据库:
 **watermark_removal.rs** (2):
 `remove_watermark`, `batch_remove_watermarks`
 
-**gemini_watermark_removal.rs** (3):
-`remove_gemini_watermark`, `batch_remove_gemini_watermarks`, `auto_remove_gemini_watermark`
+**gemini_watermark_removal.rs** (4):
+`remove_gemini_watermark`, `batch_remove_gemini_watermarks`, `auto_remove_gemini_watermark`, `advanced_remove_gemini_watermark`
 
 **watcher.rs** (3):
 `start_folder_watcher`, `stop_folder_watcher`, `get_active_watchers`

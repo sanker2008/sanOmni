@@ -685,10 +685,10 @@ export default function IpArchivedView() {
       const tempPath = `${outputDir}${baseName}_temp_${Date.now()}.${ext}`;
 
       let success = false;
-      const { geminiWatermarkApi, watermarkApi } = await import("@/services/tauri");
+      const { geminiWatermarkApi, watermarkApi, isGeminiWatermarkRemovalSuccessful } = await import("@/services/tauri");
       if (method === "gemini") {
         const result = await geminiWatermarkApi.autoRemove(currentPath, tempPath);
-        success = result.success;
+        success = isGeminiWatermarkRemovalSuccessful(result);
       } else {
         const result = await watermarkApi.remove(currentPath, tempPath, undefined);
         success = result.success;

@@ -15,6 +15,7 @@ import {
   PenTool,
   Eraser,
   HelpCircle,
+  Sparkles,
   User,
 } from 'lucide-react';
 import {
@@ -33,6 +34,7 @@ const ImageCompressor = lazy(() => import('./image-compressor/ImageCompressor'))
 const WatermarkRemover = lazy(() => import('./watermark-remover/WatermarkRemover'));
 const PngToSvg = lazy(() => import('./png-to-svg/PngToSvg'));
 const PoseStudio = lazy(() => import('./pose-studio/PoseStudio'));
+const GeminiWatermarkLab = lazy(() => import('./gemini-watermark-lab/GeminiWatermarkLab'));
 
 // ─── Tool Registry ─────────────────────────────────────────
 
@@ -90,6 +92,21 @@ const LAB_TOOLS: LabTool[] = [
       '2. 在右侧面板调整画笔大小。',
       '3. 仔细涂抹覆盖所有的水印或不需要的元素。',
       '4. 点击“去除”按钮，AI 会根据周围的像素自动推断并填补背景。'
+    ]
+  },
+  {
+    id: 'gemini-watermark-lab',
+    name: 'Gemini 水印高级修复',
+    description: '自动 profile、手动框选、alpha 微调用于一键失败兜底',
+    icon: <Sparkles className="w-4 h-4" />,
+    component: GeminiWatermarkLab,
+    available: true,
+    instructions: [
+      '1. 先选择 Gemini 生成图，点击【自动处理】。自动模式会优先尝试已知 profile：1024 图的 48px / margin 96 / legacy_scale_0.60，以及大图的 96px / margin 192 / 20260520。',
+      '2. 如果最近一次命中信息显示 profile=false，或 x/y 明显命中右下白底、边缘、文字等错误位置，回到原图点击【框选水印】，只框住可见 Gemini 水印区域。',
+      '3. 手动模式下优先用 Auto；1024x1024 且水印在脸角、手臂等强纹理位置时可选【48px 新位置】；大图黑底残留或变深时可选【96px 新版】；旧图再尝试 Legacy。',
+      '4. 白色水印没有消干净时可把 Alpha 强度略微调高；处理后发黑、变深或亮边明显时调低。每次建议只调整 5%-10%。',
+      '5. 结果可靠时会显示 success && watermark_detected。只成功写出文件但 watermark_detected=false 时，不应替换正式原图，应继续手动框选或切换 profile。'
     ]
   },
   {

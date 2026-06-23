@@ -513,6 +513,20 @@ export interface GeminiWatermarkRemovalRequest {
   region?: WatermarkRegion;
 }
 
+export interface AdvancedGeminiWatermarkRemovalRequest {
+  image_path: string;
+  output_path: string;
+  region?: WatermarkRegion;
+  profile?: string;
+  alpha_scale?: number;
+}
+
+export function isGeminiWatermarkRemovalSuccessful(
+  result: GeminiWatermarkRemovalResult
+): boolean {
+  return result.success && result.watermark_detected;
+}
+
 export const geminiWatermarkApi = {
   /**
    * 使用反向透明度混合算法移除 Gemini 水印
@@ -564,6 +578,15 @@ export const geminiWatermarkApi = {
   ): Promise<GeminiWatermarkRemovalResult[]> {
     const result = await invoke<GeminiWatermarkRemovalResult[]>("batch_remove_gemini_watermarks", {
       requests,
+    });
+    return result;
+  },
+
+  async advancedRemove(
+    request: AdvancedGeminiWatermarkRemovalRequest
+  ): Promise<GeminiWatermarkRemovalResult> {
+    const result = await invoke<GeminiWatermarkRemovalResult>("advanced_remove_gemini_watermark", {
+      request,
     });
     return result;
   },

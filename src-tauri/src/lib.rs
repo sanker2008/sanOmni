@@ -66,6 +66,7 @@ pub fn run() {
             commands::gemini_watermark_removal::remove_gemini_watermark,
             commands::gemini_watermark_removal::batch_remove_gemini_watermarks,
             commands::gemini_watermark_removal::auto_remove_gemini_watermark,
+            commands::gemini_watermark_removal::advanced_remove_gemini_watermark,
             commands::classifier::classify_image,
             commands::settings::get_settings,
             commands::settings::get_sanprompt_publish_secret,

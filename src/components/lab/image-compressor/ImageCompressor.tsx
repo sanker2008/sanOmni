@@ -3,7 +3,7 @@ import { getDefaultExportPath, saveFile, openExportFolder, ensureDirectory } fro
 import { toast } from '@/hooks/useToast';
 import { useUIStore } from '@/stores';
 import { open } from '@tauri-apps/plugin-dialog';
-import { geminiWatermarkApi } from '@/services/tauri';
+import { geminiWatermarkApi, isGeminiWatermarkRemovalSuccessful } from '@/services/tauri';
 import { authorizeFsPaths, readFile } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
 import { getLabsRoot } from '@/lib/pathUtils';
@@ -155,7 +155,7 @@ export default function ImageCompressor() {
       await saveFile(tempDir, `in_${item.id}.png`, uint8Array);
       
       const result = await geminiWatermarkApi.autoRemove(inputPath, outputPath);
-      if (result.success) {
+      if (isGeminiWatermarkRemovalSuccessful(result)) {
         const outputBuffer = await readFile(outputPath);
         const outputBytes = new Uint8Array(outputBuffer);
         const outputBlob = new Blob([outputBytes.buffer], { type: 'image/png' });
