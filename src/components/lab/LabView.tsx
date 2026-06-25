@@ -35,6 +35,7 @@ const WatermarkRemover = lazy(() => import('./watermark-remover/WatermarkRemover
 const PngToSvg = lazy(() => import('./png-to-svg/PngToSvg'));
 const PoseStudio = lazy(() => import('./pose-studio/PoseStudio'));
 const GeminiWatermarkLab = lazy(() => import('./gemini-watermark-lab/GeminiWatermarkLab'));
+const ProBackgroundRemoval = lazy(() => import('./pro-background-removal/ProBackgroundRemoval'));
 
 // ─── Tool Registry ─────────────────────────────────────────
 
@@ -110,9 +111,27 @@ const LAB_TOOLS: LabTool[] = [
     ]
   },
   {
+    id: 'pro-background-removal',
+    name: '高级抠图 (Pro)',
+    description: '支持表情包文本保护与精细人像发丝的高级抠图工具',
+    icon: <Eraser className="w-4 h-4" />,
+    component: ProBackgroundRemoval,
+    available: true,
+    instructions: [
+      '1. 点击画布区域上传需要抠背景的图片。',
+      '2. 在顶部选择抠图策略：「表情包/纯色文字」适用于纯色背景的截图、网格图；「复杂人像/发丝」适用于真实人物、动物等需要精细处理边缘的照片。',
+      '3. 右侧面板提供「预设方案」，可一键应用针对不同场景（白底商品图、绿幕抠像、深色背景、发丝毛发等）优化过的参数组合。',
+      '4. 可手动拖动滑块微调参数。策略 A 支持调整透明度阈值和背景颜色（支持去除任意颜色背景）；策略 B 支持调整背景亮度阈值、羽化范围、边缘平滑半径等，点击「高级参数」可展开更多选项。',
+      '5. 所有参数修改会自动保存，下次打开时自动恢复上次的设置。点击「恢复默认参数」可一键还原。',
+      '6. 点击「开始抠图」等待处理完成。处理完成后可用鼠标滚轮缩放、拖拽平移来检查抠图细节。',
+      '7. 右侧面板底部的「画布底色」区域可切换预览背景颜色（白/黑/红/绿/蓝等或自定义颜色），方便检验抠图边缘质量。',
+      '8. 点击「保存结果」导出 PNG，点击「打开目录」可直接在文件管理器中定位到保存的文件。'
+    ]
+  },
+  {
     id: 'png-to-svg',
     name: 'PNG 转 SVG',
-    description: '将位图转换为可缩放的矢量图',
+    description: '将位图转换为矢量图，支持参数调节。',
     icon: <PenTool className="w-4 h-4" />,
     component: PngToSvg,
     available: true,

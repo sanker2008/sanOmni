@@ -48,13 +48,13 @@ export default function SettingsView() {
         try {
           const secret = await settingsApi.getSanPromptPublishSecret();
           setLocalSettings((prev) => ({ ...prev, sanPromptPublishSecret: secret }));
-          updateSetting("sanPromptPublishSecret", secret);
         } catch (e) {
           console.error("Failed to load sanPrompt publish secret:", e);
         }
       });
     }
-  }, [settingsOpen, settings, updateSetting]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen]);
 
   // 检测变更
   useEffect(() => {

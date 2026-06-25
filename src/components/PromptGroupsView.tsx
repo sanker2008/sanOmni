@@ -9,11 +9,12 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X, ChevronLeft, ChevronRight, LayoutGrid, List } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X, ChevronLeft, ChevronRight, LayoutGrid, List, AlertTriangle, Activity, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { SmartPromptRenderer } from "./SmartPromptRenderer";
-import { getPublishStatus, type PublishConfig } from "@/services/publish";
+import { getPublishStatus, type PublishConfig, testPublishConnection } from "@/services/publish";
 import { PublishModal } from "./PublishModal";
 import {
   DEFAULT_PROMPT_TEMPLATE_CATEGORY,
@@ -98,6 +99,7 @@ export function PromptGroupsView() {
   const [imageSearch, setImageSearch] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "linked" | "unlinked">("all");
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
+  const [publishConfigError, setPublishConfigError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilterMode, setGroupFilterMode] = useState<"all" | "linked" | "unlinked">("all");
   const [publishFilterMode, setPublishFilterMode] = useState<"all" | "published" | "unpublished">("all");
@@ -110,6 +112,23 @@ export function PromptGroupsView() {
   const [publishStatuses, setPublishStatuses] = useState<Map<string, PublishConfig>>(new Map());
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [publishingGroup, setPublishingGroup] = useState<PromptGroup | null>(null);
+
+  // Connection Status
+  const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+
+  const handleTestConnection = async () => {
+    setConnectionStatus("testing");
+    const result = await testPublishConnection();
+    if (result.success) {
+      setConnectionStatus("success");
+      toast({ title: "连接成功", description: "已成功连接到 sanPrompt", variant: "default" });
+      setTimeout(() => setConnectionStatus("idle"), 5000);
+    } else {
+      setConnectionStatus("error");
+      toast({ title: "连接失败", description: result.message, variant: "destructive" });
+      setTimeout(() => setConnectionStatus("idle"), 8000);
+    }
+  };
 
   const openPublishModal = (group: PromptGroup) => {
     setPublishingGroup(group);
@@ -176,24 +195,33 @@ export function PromptGroupsView() {
   const fetchPublishStatuses = async (targetGroups: PromptGroup[] = paginatedGroups) => {
     if (targetGroups.length === 0) return;
     const ids = targetGroups.map(g => g.id);
-    const statuses = await getPublishStatus(ids);
-    setPublishStatuses(current => {
-      const next = new Map(current);
-      let changed = false;
-      statuses.forEach(s => {
-        const previous = current.get(s.id);
-        if (
-          !previous ||
-          previous.price !== s.price ||
-          previous.category !== s.category ||
-          previous.is_published !== s.is_published
-        ) {
-          next.set(s.id, { price: s.price, category: s.category, is_published: s.is_published });
-          changed = true;
-        }
+    try {
+      const statuses = await getPublishStatus(ids);
+      setPublishConfigError(null);
+      setPublishStatuses(current => {
+        const next = new Map(current);
+        let changed = false;
+        statuses.forEach(s => {
+          const previous = current.get(s.id);
+          if (
+            !previous ||
+            previous.price !== s.price ||
+            previous.category !== s.category ||
+            previous.is_published !== s.is_published
+          ) {
+            next.set(s.id, { price: s.price, category: s.category, is_published: s.is_published });
+            changed = true;
+          }
+        });
+        return changed ? next : current;
       });
-      return changed ? next : current;
-    });
+    } catch (error: any) {
+      if (error.message && error.message.includes("sanPrompt publish secret is not configured")) {
+        setPublishConfigError("发布密钥未配置。请前往左下角设置中心 -> 【提示词库与同步】中配置密钥，以便正常拉取线上在售状态和发布内容。");
+      } else {
+        console.error("fetchPublishStatuses error:", error);
+      }
+    }
   };
 
   useEffect(() => {
@@ -218,7 +246,7 @@ export function PromptGroupsView() {
     }
   };
 
-  const loadGroups = async () => {
+  const loadGroups = async (showToast = false) => {
     try {
       setIsLoading(true);
       const allGroups = await promptApi.getAll();
@@ -242,8 +270,15 @@ export function PromptGroupsView() {
         })
       );
       setGroupImages(imagesMap);
-    } catch (error) {
+
+      if (showToast) {
+        toast({ title: "刷新成功", description: "数据已更新", duration: 2000 });
+      }
+    } catch (error: any) {
       console.error("加载 Prompt 失败:", error);
+      if (showToast) {
+        toast({ title: "刷新失败", description: error.message || "未知错误", variant: "destructive" });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -792,16 +827,53 @@ export function PromptGroupsView() {
             <option value="unpublished">未上架</option>
           </select>
 
-          <Button variant="outline" size="sm" onClick={() => void loadGroups()} disabled={isLoading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-            刷新
-          </Button>
-          <Button size="sm" onClick={openCreateDialog} disabled={isLoading}>
-            <Plus className="mr-2 h-4 w-4" />
-            添加 Prompt
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={handleTestConnection} disabled={connectionStatus === "testing"} className={`w-9 h-9 shrink-0 ${connectionStatus === "success" ? "border-green-500/50 text-green-600 dark:text-green-500 bg-green-500/10 hover:bg-green-500/20" : connectionStatus === "error" ? "border-destructive/50 text-destructive bg-destructive/10 hover:bg-destructive/20" : ""}`}>
+                  {connectionStatus === "testing" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Activity className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{connectionStatus === "testing" ? "测试中..." : connectionStatus === "success" ? "连接正常" : connectionStatus === "error" ? "连接失败" : "测试连接"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={() => void loadGroups(true)} disabled={isLoading} className="w-9 h-9 shrink-0">
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>刷新</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="icon" onClick={openCreateDialog} disabled={isLoading} className="w-9 h-9 shrink-0">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>添加 Prompt</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
+
+      {publishConfigError && (
+        <div className="bg-destructive/10 border-b border-destructive/20 text-destructive text-sm px-4 py-3 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <p>{publishConfigError}</p>
+        </div>
+      )}
 
       <ScrollArea className="flex-1">
         <div className={`p-4 ${viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" : "space-y-3"}`}>

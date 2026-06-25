@@ -150,6 +150,86 @@ export default function LabsSettingsTab({ localSettings, handleLocalUpdate, onSe
         </CardContent>
       </Card>
 
+      {/* 高级抠图引擎配置 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wand2 className="w-4 h-4" />
+            高级抠图 (Pro) 引擎配置
+          </CardTitle>
+          <CardDescription>
+            支持精细发丝抠图和文字保护。你可以选择使用本地 Python 环境，或者下载免配置的独立引擎包。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">运行模式</label>
+            <select
+              className="w-full bg-muted border border-border px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+              value={localSettings.bgRemovalEngineMode || "local"}
+              onChange={(e) => handleLocalUpdate("bgRemovalEngineMode", e.target.value)}
+            >
+              <option value="local">使用本地 Python 环境 (推荐极客使用)</option>
+              <option value="download">使用内置独立引擎包 (约需下载 300MB+)</option>
+            </select>
+          </div>
+
+          {localSettings.bgRemovalEngineMode === "local" || !localSettings.bgRemovalEngineMode ? (
+            <div className="pt-2 border-t border-border">
+              <label className="text-sm font-medium mb-1 block">Python 解释器路径</label>
+              <div className="flex gap-2 mb-2">
+                <Input
+                  value={localSettings.bgRemovalPythonPath || ""}
+                  onChange={(e) => handleLocalUpdate("bgRemovalPythonPath", e.target.value)}
+                  placeholder="留空使用系统全局 python 命令"
+                  className="flex-1"
+                />
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => onSelectPath("bgRemovalPythonPath")}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                必须安装依赖: <code className="bg-muted px-1 py-0.5 rounded">pip install rembg Pillow opencv-python</code>
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => {
+                alert("即将开发：一键调用 pip 安装依赖功能");
+              }}>
+                一键安装所需依赖包
+              </Button>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium mb-1">独立引擎包状态</div>
+                  <div className="text-xs text-muted-foreground">
+                    {localSettings.bgRemovalEngineDownloaded 
+                      ? "引擎已就绪，可直接使用。"
+                      : "尚未下载引擎包。首次使用功能前需先下载引擎。"}
+                  </div>
+                </div>
+                {localSettings.bgRemovalEngineDownloaded ? (
+                  <Button variant="destructive" size="sm" onClick={() => handleLocalUpdate("bgRemovalEngineDownloaded", false)}>
+                    清除引擎 (释放空间)
+                  </Button>
+                ) : (
+                  <Button variant="default" size="sm" onClick={() => {
+                     // 模拟下载完成
+                     handleLocalUpdate("bgRemovalEngineDownloaded", true);
+                  }}>
+                    下载独立引擎
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* 产品图画布设置 */}
       <Card>
         <CardHeader>

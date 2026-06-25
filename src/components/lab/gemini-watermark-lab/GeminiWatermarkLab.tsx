@@ -1,8 +1,12 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { basename, join } from '@tauri-apps/api/path';
 import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   Crosshair,
   Download,
   Eraser,
@@ -38,11 +42,22 @@ type ProfileOption = 'auto' | 'legacy_scale_0.60' | '20260520' | 'legacy';
 type PreviewTarget = 'source' | 'output';
 type ViewTransform = { scale: number; x: number; y: number };
 type Point = { x: number; y: number };
+type SelectionDragState =
+  | {
+      mode: 'create';
+      start: Point;
+    }
+  | {
+      mode: 'move';
+      start: Point;
+      origin: WatermarkRegion;
+    };
 
 const MIN_PREVIEW_SCALE = 1;
 const MAX_PREVIEW_SCALE = 8;
 const DEFAULT_VIEW: ViewTransform = { scale: 1, x: 0, y: 0 };
 const MANUAL_REGION_SIZES = [36, 48, 72, 96, 128];
+const DEFAULT_MANUAL_REGION_COLOR = '#22c55e';
 
 const PROFILE_OPTIONS: Array<{ value: ProfileOption; label: string; hint: string }> = [
   {
@@ -90,6 +105,10 @@ function clampPreviewScale(scale: number) {
   return Math.max(MIN_PREVIEW_SCALE, Math.min(MAX_PREVIEW_SCALE, scale));
 }
 
+function clampInt(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
 function timestampForFileName() {
   const now = new Date();
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -110,9 +129,12 @@ export default function GeminiWatermarkLab() {
   const [alphaScale, setAlphaScale] = useState(1);
   const [manualRegion, setManualRegion] = useState<WatermarkRegion | null>(null);
   const [manualRegionSize, setManualRegionSize] = useState(48);
+  const [manualRegionColor, setManualRegionColor] = useState(DEFAULT_MANUAL_REGION_COLOR);
   const [isSelecting, setIsSelecting] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [selectionDrag, setSelectionDrag] = useState<SelectionDragState | null>(null);
+  const [nudgeActive, setNudgeActive] = useState(false);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [sourceImageFrame, setSourceImageFrame] = useState({ width: 0, height: 0 });
   const [sourceView, setSourceView] = useState<ViewTransform>(DEFAULT_VIEW);
   const [outputView, setOutputView] = useState<ViewTransform>(DEFAULT_VIEW);
   const [panState, setPanState] = useState<{
@@ -124,9 +146,49 @@ export default function GeminiWatermarkLab() {
   } | null>(null);
 
   const imgRef = useRef<HTMLImageElement>(null);
+  const nudgeTimerRef = useRef<number | null>(null);
 
   const methodParts = useMemo(() => parseMethod(result?.method), [result?.method]);
   const selectedProfile = PROFILE_OPTIONS.find((item) => item.value === profile);
+
+  const measureSourceImageFrame = () => {
+    const img = imgRef.current;
+    if (!img) return;
+    setSourceImageFrame({
+      width: img.offsetWidth,
+      height: img.offsetHeight,
+    });
+  };
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+
+    const resizeObserver = new ResizeObserver(measureSourceImageFrame);
+    resizeObserver.observe(img);
+    measureSourceImageFrame();
+
+    return () => resizeObserver.disconnect();
+  }, [imageSrc]);
+
+  useEffect(() => {
+    return () => {
+      if (nudgeTimerRef.current) {
+        window.clearTimeout(nudgeTimerRef.current);
+      }
+    };
+  }, []);
+
+  const showNudgeFeedback = () => {
+    if (nudgeTimerRef.current) {
+      window.clearTimeout(nudgeTimerRef.current);
+    }
+    setNudgeActive(true);
+    nudgeTimerRef.current = window.setTimeout(() => {
+      setNudgeActive(false);
+      nudgeTimerRef.current = null;
+    }, 350);
+  };
 
   const chooseImage = async () => {
     const selected = await open({
@@ -154,9 +216,13 @@ export default function GeminiWatermarkLab() {
     setResult(null);
     setManualRegion(null);
     setManualRegionSize(48);
+    setManualRegionColor(DEFAULT_MANUAL_REGION_COLOR);
+    setSourceImageFrame({ width: 0, height: 0 });
     setSourceView(DEFAULT_VIEW);
     setOutputView(DEFAULT_VIEW);
     setPanState(null);
+    setSelectionDrag(null);
+    setNudgeActive(false);
   };
 
   const getPointerPosition = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -188,10 +254,11 @@ export default function GeminiWatermarkLab() {
       if (!region) return region;
       return {
         ...region,
-        x: Math.max(0, Math.min(imageSize.width - region.width, region.x + dx)),
-        y: Math.max(0, Math.min(imageSize.height - region.height, region.y + dy)),
+        x: clampInt(region.x + dx, 0, imageSize.width - region.width),
+        y: clampInt(region.y + dy, 0, imageSize.height - region.height),
       };
     });
+    showNudgeFeedback();
   };
 
   const resizeManualRegion = (size: number) => {
@@ -204,6 +271,29 @@ export default function GeminiWatermarkLab() {
       };
       return buildCenteredRegion(center, size);
     });
+  };
+
+  const updateManualRegionField = (field: 'x' | 'y' | 'size', value: number) => {
+    if (!Number.isFinite(value)) return;
+
+    if (field === 'size') {
+      resizeManualRegion(clampInt(value, 16, 160));
+      showNudgeFeedback();
+      return;
+    }
+
+    setManualRegion((region) => {
+      if (!region) return region;
+      return {
+        ...region,
+        [field]: clampInt(
+          value,
+          0,
+          field === 'x' ? imageSize.width - region.width : imageSize.height - region.height
+        ),
+      };
+    });
+    showNudgeFeedback();
   };
 
   const handleManualRegionKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -227,17 +317,46 @@ export default function GeminiWatermarkLab() {
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!isSelecting || !imageSrc) return;
+    event.preventDefault();
     event.currentTarget.focus();
+    event.currentTarget.setPointerCapture(event.pointerId);
     const pos = getPointerPosition(event);
     if (!pos) return;
-    setDragStart(pos);
+
+    if (
+      manualRegion &&
+      pos.x >= manualRegion.x &&
+      pos.x <= manualRegion.x + manualRegion.width &&
+      pos.y >= manualRegion.y &&
+      pos.y <= manualRegion.y + manualRegion.height
+    ) {
+      setSelectionDrag({ mode: 'move', start: pos, origin: manualRegion });
+      return;
+    }
+
+    setSelectionDrag({ mode: 'create', start: pos });
     setManualRegion(buildCenteredRegion(pos));
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isSelecting || !dragStart) return;
+    if (!isSelecting || !selectionDrag) return;
+    event.preventDefault();
     const pos = getPointerPosition(event);
     if (!pos) return;
+
+    if (selectionDrag.mode === 'move') {
+      const dx = pos.x - selectionDrag.start.x;
+      const dy = pos.y - selectionDrag.start.y;
+      const { origin } = selectionDrag;
+      setManualRegion({
+        ...origin,
+        x: clampInt(origin.x + dx, 0, imageSize.width - origin.width),
+        y: clampInt(origin.y + dy, 0, imageSize.height - origin.height),
+      });
+      return;
+    }
+
+    const dragStart = selectionDrag.start;
 
     const x = Math.min(dragStart.x, pos.x);
     const y = Math.min(dragStart.y, pos.y);
@@ -261,7 +380,7 @@ export default function GeminiWatermarkLab() {
   };
 
   const handlePointerUp = () => {
-    setDragStart(null);
+    setSelectionDrag(null);
     setPanState(null);
   };
 
@@ -395,6 +514,7 @@ export default function GeminiWatermarkLab() {
         toast({
           title: 'Gemini 水印处理完成',
           description: response.method,
+          variant: 'success',
         });
       }
     } catch (error: any) {
@@ -445,6 +565,7 @@ export default function GeminiWatermarkLab() {
       toast({
         title: '处理结果已保存到输出目录',
         description: targetPath,
+        variant: 'success',
       });
     } catch (error: any) {
       toast({
@@ -461,12 +582,25 @@ export default function GeminiWatermarkLab() {
   };
 
   const regionStyle = (() => {
-    if (!manualRegion || imageSize.width <= 0 || imageSize.height <= 0) return undefined;
+    if (
+      !manualRegion ||
+      imageSize.width <= 0 ||
+      imageSize.height <= 0 ||
+      sourceImageFrame.width <= 0 ||
+      sourceImageFrame.height <= 0
+    ) {
+      return undefined;
+    }
+
+    const scaleX = sourceImageFrame.width / imageSize.width;
+    const scaleY = sourceImageFrame.height / imageSize.height;
+
     return {
-      left: `${(manualRegion.x / imageSize.width) * 100}%`,
-      top: `${(manualRegion.y / imageSize.height) * 100}%`,
-      width: `${(manualRegion.width / imageSize.width) * 100}%`,
-      height: `${(manualRegion.height / imageSize.height) * 100}%`,
+      left: `${Math.round(manualRegion.x * scaleX)}px`,
+      top: `${Math.round(manualRegion.y * scaleY)}px`,
+      width: `${Math.round(manualRegion.width * scaleX)}px`,
+      height: `${Math.round(manualRegion.height * scaleY)}px`,
+      backgroundColor: `${manualRegionColor}66`,
     };
   })();
 
@@ -552,7 +686,7 @@ export default function GeminiWatermarkLab() {
                       type="button"
                       onClick={() => {
                         setIsSelecting((value) => !value);
-                        setDragStart(null);
+                        setSelectionDrag(null);
                         setPanState(null);
                       }}
                       className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium ${
@@ -566,24 +700,25 @@ export default function GeminiWatermarkLab() {
                     </button>
                   </div>
                 </div>
-                <div
-                  className={`relative flex flex-1 touch-none select-none items-center justify-center overflow-auto p-3 ${
-                    isSelecting ? 'cursor-crosshair' : sourceView.scale > 1 ? 'cursor-grab active:cursor-grabbing' : ''
-                  }`}
-                  onWheel={(event) => handlePreviewWheel('source', event)}
-                  tabIndex={0}
-                  onKeyDown={handleManualRegionKeyDown}
-                  onPointerDown={(event) => {
-                    handlePointerDown(event);
-                    handlePanPointerDown('source', event);
-                  }}
-                  onPointerMove={(event) => {
-                    handlePointerMove(event);
-                    handlePanPointerMove('source', event);
-                  }}
-                  onPointerUp={handlePointerUp}
-                  onPointerLeave={handlePointerUp}
-                >
+                <div className="relative flex flex-1 overflow-hidden">
+                  <div
+                    className={`flex h-full w-full touch-none select-none items-center justify-center overflow-auto p-3 ${
+                      isSelecting ? 'cursor-crosshair' : sourceView.scale > 1 ? 'cursor-grab active:cursor-grabbing' : ''
+                    }`}
+                    onWheel={(event) => handlePreviewWheel('source', event)}
+                    tabIndex={0}
+                    onKeyDown={handleManualRegionKeyDown}
+                    onPointerDown={(event) => {
+                      handlePointerDown(event);
+                      handlePanPointerDown('source', event);
+                    }}
+                    onPointerMove={(event) => {
+                      handlePointerMove(event);
+                      handlePanPointerMove('source', event);
+                    }}
+                    onPointerUp={handlePointerUp}
+                    onPointerLeave={handlePointerUp}
+                  >
                   <div
                     className="relative max-h-full max-w-full origin-center transition-transform duration-75"
                     style={sourceTransform}
@@ -592,26 +727,35 @@ export default function GeminiWatermarkLab() {
                       ref={imgRef}
                       src={imageSrc}
                       alt="source"
-                      className="max-h-[70vh] max-w-full select-none object-contain"
+                      className="block max-h-[70vh] max-w-full select-none object-contain"
                       draggable={false}
                       onLoad={(event) => {
                         setImageSize({
                           width: event.currentTarget.naturalWidth,
                           height: event.currentTarget.naturalHeight,
                         });
+                        requestAnimationFrame(measureSourceImageFrame);
                       }}
                     />
                     {regionStyle && (
                       <div
-                        className="pointer-events-none absolute border-2 border-primary bg-primary/10"
+                        className={`absolute ${
+                          isSelecting ? 'cursor-move' : 'pointer-events-none'
+                        } ${
+                          nudgeActive ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                        }`}
                         style={regionStyle}
-                      >
-                        <div className="absolute -top-6 left-0 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
-                          {manualRegion?.width}x{manualRegion?.height}
-                        </div>
-                      </div>
+                      />
                     )}
                   </div>
+                  </div>
+                  {manualRegion && (
+                    <div className="pointer-events-none absolute bottom-8 left-3 z-10 rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground shadow-sm">
+                      {nudgeActive
+                        ? `x=${manualRegion.x}, y=${manualRegion.y}`
+                        : `${manualRegion.width}x${manualRegion.height}`}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -714,6 +858,91 @@ export default function GeminiWatermarkLab() {
                   ? `x=${manualRegion.x}, y=${manualRegion.y}, size=${manualRegion.width}x${manualRegion.height}`
                   : '未框选'}
               </div>
+              <div className="grid grid-cols-3 gap-2">
+                <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
+                  <span>X</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={manualRegion ? imageSize.width - manualRegion.width : undefined}
+                    value={manualRegion?.x ?? ''}
+                    onChange={(event) => updateManualRegionField('x', Number(event.target.value))}
+                    disabled={!manualRegion}
+                    className="h-8 w-full rounded-md border border-border bg-background px-2 font-mono text-xs disabled:opacity-50"
+                  />
+                </label>
+                <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
+                  <span>Y</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={manualRegion ? imageSize.height - manualRegion.height : undefined}
+                    value={manualRegion?.y ?? ''}
+                    onChange={(event) => updateManualRegionField('y', Number(event.target.value))}
+                    disabled={!manualRegion}
+                    className="h-8 w-full rounded-md border border-border bg-background px-2 font-mono text-xs disabled:opacity-50"
+                  />
+                </label>
+                <label className="space-y-1 text-[11px] font-medium text-muted-foreground">
+                  <span>Size</span>
+                  <input
+                    type="number"
+                    min={16}
+                    max={160}
+                    value={manualRegion?.width ?? manualRegionSize}
+                    onChange={(event) => updateManualRegionField('size', Number(event.target.value))}
+                    disabled={!manualRegion}
+                    className="h-8 w-full rounded-md border border-border bg-background px-2 font-mono text-xs disabled:opacity-50"
+                  />
+                </label>
+              </div>
+              <div className="mx-auto grid w-fit grid-cols-3 items-center gap-1 rounded-md border border-border bg-background p-2">
+                <div className="h-7 w-7" />
+                <button
+                  type="button"
+                  onClick={() => moveManualRegion(0, -1)}
+                  disabled={!manualRegion}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-muted disabled:opacity-50"
+                  aria-label="上移 1px"
+                  title="上移 1px"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <div className="h-7 w-7" />
+                <button
+                  type="button"
+                  onClick={() => moveManualRegion(-1, 0)}
+                  disabled={!manualRegion}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-muted disabled:opacity-50"
+                  aria-label="左移 1px"
+                  title="左移 1px"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                </button>
+                <div className="text-center text-[10px] text-muted-foreground">1px</div>
+                <button
+                  type="button"
+                  onClick={() => moveManualRegion(1, 0)}
+                  disabled={!manualRegion}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-muted disabled:opacity-50"
+                  aria-label="右移 1px"
+                  title="右移 1px"
+                >
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+                <div className="h-7 w-7" />
+                <button
+                  type="button"
+                  onClick={() => moveManualRegion(0, 1)}
+                  disabled={!manualRegion}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-muted disabled:opacity-50"
+                  aria-label="下移 1px"
+                  title="下移 1px"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                </button>
+                <div className="h-7 w-7" />
+              </div>
               <div className="grid grid-cols-5 gap-1">
                 {MANUAL_REGION_SIZES.map((size) => (
                   <button
@@ -729,6 +958,26 @@ export default function GeminiWatermarkLab() {
                     {size}
                   </button>
                 ))}
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-2.5 py-2">
+                <label className="text-[11px] font-medium text-muted-foreground" htmlFor="gemini-region-color">
+                  选框颜色
+                </label>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-5 w-5 rounded-sm"
+                    style={{ backgroundColor: `${manualRegionColor}66` }}
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="gemini-region-color"
+                    type="color"
+                    value={manualRegionColor}
+                    onChange={(event) => setManualRegionColor(event.target.value)}
+                    className="h-7 w-8 cursor-pointer rounded border border-border bg-transparent p-0.5"
+                    aria-label="选框颜色"
+                  />
+                </div>
               </div>
               <p className="text-[11px] leading-4 text-muted-foreground">
                 框选模式下点击水印中心会生成标准框；方向键每次移动 1px，Shift + 方向键每次移动 10px。

@@ -147,8 +147,7 @@ export async function getPublishStatus(ids: string[]) {
   try {
     target = await getPublishTarget();
   } catch (error) {
-    console.error("Get status skipped:", error);
-    return [];
+    throw error;
   }
 
   const CHUNK_SIZE = 20;
@@ -183,4 +182,46 @@ export async function getPublishStatus(ids: string[]) {
   }
 
   return allResults;
+}
+
+export async function testPublishConnection() {
+  try {
+    let target: { apiUrl: string; secret: string };
+    try {
+      target = await getPublishTarget();
+    } catch (error: any) {
+      return { success: false, message: error.message || "Failed to load config" };
+    }
+
+    const response = await fetch(target.apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${target.secret}`
+      },
+      body: JSON.stringify({
+        action: "get_status",
+        payload: { ids: ["test-connection-id"] }
+      })
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        return { success: true, message: "Connected successfully" };
+      }
+      return { success: false, message: result.error || "Unknown error from server" };
+    } else {
+      let errorMsg = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.error) errorMsg = errorData.error;
+      } catch {
+        // Ignore json parse error
+      }
+      return { success: false, message: errorMsg };
+    }
+  } catch (error: any) {
+    return { success: false, message: error.message || "Connection failed" };
+  }
 }

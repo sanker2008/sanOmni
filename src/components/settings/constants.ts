@@ -6,12 +6,14 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   customArchivedPath: "",  // 自定义 archived 路径（留空使用默认）
   customWorksPath: "",      // 自定义作品集路径
   labsCustomRootPath: "", // sanLabs 实验室工具自定义根目录
+  bgRemovalEngineMode: "local", // "local" | "download"
+  bgRemovalPythonPath: "",      // 空表示使用全局 python
+  bgRemovalEngineDownloaded: false, // 引擎是否已下载
   canvasUndoMaxCount: 50,  // 产品图画布最大撤回次数
   showFullImage: false,  // 列表中是否显示完整图片（不裁剪）
   lightThemeColor: "#2563eb",
   darkThemeColor: "#60a5fa",
   sanPromptPublishUrl: "http://localhost:3000/api/sync",
-
   // AI P图 设置
   aiImageEditorProvider: "mock",          // 当前选择的供应商 id
   aiImageEditorProviderConfig: {},        // 供应商特定参数 (动态 key-value)

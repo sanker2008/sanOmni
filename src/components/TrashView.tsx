@@ -8,13 +8,25 @@ import { toast } from "@/hooks/useToast";
 import ConfirmDialog from "./ConfirmDialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { openPath } from "@/lib/pathUtils";
+import { getDbPath } from "@/services/tauri";
 import { exists, mkdir, readDir, remove, rename, stat } from "@/services/secureFs";
+
+interface CommandResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 
 interface TrashItem {
   filename: string;
   path: string;
   size: number;
   timestamp: number;
+}
+
+interface SimpleImageInfo {
+  filename: string;
+  absolute_path: string;
 }
 
 export default function TrashView() {
@@ -106,7 +118,12 @@ export default function TrashView() {
       const { invoke } = await import("@tauri-apps/api/core");
       
       // 通过文件名查找对应的图片记录
-      const images = await invoke<any[]>("get_all_images");
+      const dbPath = await getDbPath();
+      const result = await invoke<CommandResult<SimpleImageInfo[]>>("get_all_images", { dbPath });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to get image records");
+      }
+      const images = result.data || [];
       const targetImage = images.find(img => img.filename === originalFilename);
       
       if (!targetImage) {

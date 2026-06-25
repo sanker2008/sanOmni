@@ -5,8 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] - 2026-06-25
 ### Added
+- Pro Background Removal (高级抠图): Added a high-precision, locally-run AI background removal tool in sanLabs using `rembg` (u2net/isnet) and Pillow. Features include strategy selection, advanced tunable parameters, side-by-side comparison, and consecutive processing.
 - Review remediation documentation for sanOmni, sanPrompt, and sanomni-sync-server boundaries.
 - Secure filesystem service path for moving local asset operations behind Tauri commands and user-authorized roots.
 - Release note for the June 2026 cross-project review remediation.

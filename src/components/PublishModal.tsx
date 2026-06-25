@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { type PromptGroup } from '@/stores';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
@@ -23,8 +23,26 @@ export function PublishModal({ group, initialStatus, isOpen, onClose, onSuccess 
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [price, setPrice] = useState(initialStatus?.price?.toString() || group.price?.toString() || "4.99");
-  const [category, setCategory] = useState(initialStatus?.category || group.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY);
+  
+  const [category, setCategory] = useState(() => {
+    const rawCategory = initialStatus?.category || group.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY;
+    const isValid = PROMPT_TEMPLATE_CATEGORIES.some(c => c.value === rawCategory);
+    return isValid ? rawCategory : DEFAULT_PROMPT_TEMPLATE_CATEGORY;
+  });
+
   const [isPublished, setIsPublished] = useState(initialStatus?.is_published ?? true);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPrice(initialStatus?.price?.toString() || group.price?.toString() || "4.99");
+      
+      const rawCategory = initialStatus?.category || group.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY;
+      const isValid = PROMPT_TEMPLATE_CATEGORIES.some(c => c.value === rawCategory);
+      setCategory(isValid ? rawCategory : DEFAULT_PROMPT_TEMPLATE_CATEGORY);
+      
+      setIsPublished(initialStatus?.is_published ?? true);
+    }
+  }, [isOpen, group, initialStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
