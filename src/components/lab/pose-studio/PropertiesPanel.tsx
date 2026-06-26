@@ -657,8 +657,8 @@ export default function PropertiesPanel({
               </div>
             </div>
 
-            {/* Joints (Character Only) */}
-            {selectedObject.type === 'character' && (
+            {/* Joints (Character/Model) */}
+            {(selectedObject.type === 'character' || selectedObject.type === 'model') && (
               <>
                 <Separator />
                 <div className="space-y-4">

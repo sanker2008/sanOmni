@@ -87,6 +87,7 @@ pub mod tags;
 pub mod vendors;
 pub mod watermark;
 pub mod watermark_removal;
+pub mod engine;
 
 pub mod characters;
 pub mod classifier;

@@ -49,7 +49,7 @@ def guided_filter_gray(I_gray, p_alpha, r, eps):
     return mean_a * I_gray + mean_b
 
 def process_image(input_path, output_path, guided_radius=15, guided_eps=1e-4,
-                  bg_threshold=150.0, bg_feathering=80.0, decontam_erode=15):
+                  bg_threshold=150.0, bg_feathering=80.0, decontam_erode=15, fill_holes=0):
     """
     IS-Net + Guided Filter based background removal with edge decontamination.
 
@@ -68,7 +68,7 @@ def process_image(input_path, output_path, guided_radius=15, guided_eps=1e-4,
     """
     print(f"Processing: {input_path}")
     print(f"Parameters: guided_radius={guided_radius}, guided_eps={guided_eps}, "
-          f"bg_threshold={bg_threshold}, bg_feathering={bg_feathering}, decontam_erode={decontam_erode}")
+          f"bg_threshold={bg_threshold}, bg_feathering={bg_feathering}, decontam_erode={decontam_erode}, fill_holes={fill_holes}")
 
     # Use PIL to read the image to support WebP/AVIF and avoid OpenCV's OutOfMemory bugs with certain formats
     # and to perfectly handle non-ASCII file paths on Windows.
@@ -76,15 +76,40 @@ def process_image(input_path, output_path, guided_radius=15, guided_eps=1e-4,
     orig = cv2.cvtColor(np.array(orig_pil), cv2.COLOR_RGB2BGR)
     orig_float = orig.astype(np.float32)
     
-    session = new_session("isnet-general-use")
-    with open(input_path, 'rb') as f:
-        rembg_out = remove(f.read(), session=session)
-    rembg_img = Image.open(io.BytesIO(rembg_out))
-    raw_alpha = np.array(rembg_img.split()[3])
+    # Resize before rembg if image is too large to prevent OOM
+    MAX_DIM = 2048
+    width, height = orig_pil.size
+    scale = 1.0
+    if max(width, height) > MAX_DIM:
+        scale = MAX_DIM / float(max(width, height))
+        new_w = int(width * scale)
+        new_h = int(height * scale)
+        rembg_input_pil = orig_pil.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    else:
+        rembg_input_pil = orig_pil
+
+    img_byte_arr = io.BytesIO()
+    rembg_input_pil.save(img_byte_arr, format='PNG')
+    img_bytes = img_byte_arr.getvalue()
     
+    session = new_session("isnet-general-use")
+    # use only_mask=True to avoid PIL OOM during compositing of huge images inside rembg
+    rembg_out = remove(img_bytes, session=session, only_mask=True)
+    rembg_img = Image.open(io.BytesIO(rembg_out))
+    raw_alpha_small = np.array(rembg_img)
+    
+    if scale != 1.0:
+        raw_alpha = cv2.resize(raw_alpha_small, (width, height), interpolation=cv2.INTER_LINEAR)
+    else:
+        raw_alpha = raw_alpha_small
+        
     del session
     del rembg_out
     del rembg_img
+    del img_bytes
+    del img_byte_arr
+    if 'rembg_input_pil' in locals():
+        del rembg_input_pil
     gc.collect()
 
     print("Refining Alpha Map with Guided Filter...")
@@ -114,6 +139,18 @@ def process_image(input_path, output_path, guided_radius=15, guided_eps=1e-4,
     final_alpha_f = np.maximum(core_alpha_f, edge_alpha_f)
     final_alpha = (final_alpha_f * 255.0).astype(np.uint8)
     final_alpha = cv2.GaussianBlur(final_alpha, (3, 3), 0)
+    
+    if fill_holes == 1:
+        print("Applying Internal Hole Filling...")
+        # Threshold alpha to find solid contours
+        _, binary_alpha = cv2.threshold(final_alpha, 128, 255, cv2.THRESH_BINARY)
+        # Find all external contours
+        contours, hierarchy = cv2.findContours(binary_alpha, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        filled_alpha = np.zeros_like(final_alpha)
+        # Draw the contours filled
+        cv2.drawContours(filled_alpha, contours, -1, 255, thickness=cv2.FILLED)
+        # Only overwrite areas that were filled inside the contour, keeping the edge anti-aliasing intact where it was solid
+        final_alpha = np.maximum(final_alpha, filled_alpha)
     
     print("Performing Spatial Ambient Decontamination...")
     # 3. Spatial Ambient Decontamination
@@ -154,6 +191,8 @@ if __name__ == "__main__":
                         help="Background feathering range (20-200, default: 80). Smaller = harder edge cut")
     parser.add_argument("--decontam_erode", type=int, default=15,
                         help="Decontamination erosion kernel size (3-30, default: 15)")
+    parser.add_argument("--fill_holes", type=int, default=0,
+                        help="Fill internal transparent holes (1=True, 0=False)")
 
     args = parser.parse_args()
     process_image(args.input, args.output,
@@ -161,4 +200,5 @@ if __name__ == "__main__":
                   guided_eps=args.guided_eps,
                   bg_threshold=args.bg_threshold,
                   bg_feathering=args.bg_feathering,
-                  decontam_erode=args.decontam_erode)
+                  decontam_erode=args.decontam_erode,
+                  fill_holes=args.fill_holes)

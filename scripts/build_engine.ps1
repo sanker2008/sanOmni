@@ -12,9 +12,14 @@ Write-Host "Installing PyInstaller if needed..."
 pip install pyinstaller
 
 Write-Host "Starting PyInstaller build..."
-# 使用 --onedir 或者 --onefile，考虑到深度学习模型和 onnxruntime，
-# --onedir (默认不加 --onefile) 启动速度更快，如果只要单文件请加上 --onefile
-# 我们这里使用 --onefile 打包成单独的 exe，方便分发，但启动会稍微慢几秒因为需要解压临时文件
-pyinstaller --noconfirm --onefile --console --name "pro_bg_engine" .\pro_bg_engine.py
+# 使用 --onedir 或者 --onefile 打包
+# 这里使用 --onedir 因为 rembg 包含大量 onnx runtime 的 C++ 依赖库，打包成单文件启动极慢且容易出错。
+# --onedir 会生成一个包含 exe 和 dll 的文件夹。
 
-Write-Host "Build complete! Check the 'dist' folder for pro_bg_engine.exe" -ForegroundColor Green
+Write-Host "Building perfect_matting.exe (IS-Net Strategy B)..."
+pyinstaller --noconfirm --onedir --console --name "perfect_matting" .\perfect_matting.py
+
+Write-Host "Building pillow_matting.exe (Pillow Strategy A)..."
+pyinstaller --noconfirm --onefile --console --name "pillow_matting" .\pillow_matting.py
+
+Write-Host "Build complete! Check the 'dist' folder for perfect_matting and pillow_matting" -ForegroundColor Green

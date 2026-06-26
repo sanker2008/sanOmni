@@ -29,6 +29,8 @@ export interface StrategyBParams {
   bgFeathering: number;
   /** Decontamination erosion kernel size. Range: 3-30. Default: 15. */
   decontamErode: number;
+  /** Whether to fill internal transparent holes (1=True, 0=False). */
+  fillHoles?: boolean;
 }
 
 export const DEFAULT_STRATEGY_A_PARAMS: StrategyAParams = {
@@ -43,6 +45,7 @@ export const DEFAULT_STRATEGY_B_PARAMS: StrategyBParams = {
   bgThreshold: 150,
   bgFeathering: 80,
   decontamErode: 15,
+  fillHoles: false,
 };
 
 /** Preset configurations for common use cases. */
@@ -54,10 +57,10 @@ export const PRESETS = {
     '蓝幕抠像': { lowerThreshold: 180, upperThreshold: 240, bgColor: '0,71,187' },
   } as Record<string, StrategyAParams>,
   B: {
-    '复杂发丝/毛发': { guidedRadius: 20, guidedEps: 0.00005, bgThreshold: 150, bgFeathering: 100, decontamErode: 12 },
-    '简单物体': { guidedRadius: 10, guidedEps: 0.001, bgThreshold: 160, bgFeathering: 60, decontamErode: 18 },
-    '深色背景': { guidedRadius: 15, guidedEps: 0.0001, bgThreshold: 80, bgFeathering: 60, decontamErode: 15 },
-    '默认均衡': { guidedRadius: 15, guidedEps: 0.0001, bgThreshold: 150, bgFeathering: 80, decontamErode: 15 },
+    '复杂发丝/毛发': { guidedRadius: 20, guidedEps: 0.00005, bgThreshold: 150, bgFeathering: 100, decontamErode: 12, fillHoles: false },
+    '简单物体': { guidedRadius: 10, guidedEps: 0.001, bgThreshold: 160, bgFeathering: 60, decontamErode: 18, fillHoles: true },
+    '深色背景': { guidedRadius: 15, guidedEps: 0.0001, bgThreshold: 80, bgFeathering: 60, decontamErode: 15, fillHoles: false },
+    '默认均衡': { guidedRadius: 15, guidedEps: 0.0001, bgThreshold: 150, bgFeathering: 80, decontamErode: 15, fillHoles: false },
   } as Record<string, StrategyBParams>,
 };
 
@@ -75,16 +78,49 @@ export interface BgRemovalOptions {
  * 调用 Python 脚本进行背景移除
  */
 export async function executeBgRemoval(options: BgRemovalOptions): Promise<string> {
-  const { inputPath, strategy, pythonPath, engineMode, enginePath, params } = options;
+  const { inputPath, strategy, pythonPath, engineMode, params } = options;
 
   const outName = `bg_removed_${Date.now()}.png`;
   const tDir = await tempDir();
   const outputPath = `${tDir}\\${outName}`;
 
-  if (engineMode === 'download' && enginePath) {
-    throw new Error('独立引擎包暂未实装，请先使用本地 Python 环境模式');
+  let commandStr = '';
+  const cliArgs: string[] = [];
+
+  // Convert Tauri v2 asset URLs back to physical paths
+  let actualInputPath = inputPath;
+  const match = actualInputPath.match(/^(?:asset:\/\/localhost|https?:\/\/asset\.localhost)(.+)$/);
+  if (match) {
+    try {
+      let path = decodeURIComponent(match[1]);
+      if (path.startsWith('/') && path.length > 2 && path[2] === ':') {
+        path = path.substring(1); // Remove leading slash for Windows paths
+      }
+      actualInputPath = path;
+    } catch (e) {
+      console.error("Failed to parse asset URL:", e);
+    }
+  }
+
+  if (engineMode === 'download') {
+    const { appDataDir, join } = await import('@tauri-apps/api/path');
+    const appData = await appDataDir();
+    
+    let exeName = strategy === 'A' ? 'pillow_matting.exe' : 'perfect_matting\\perfect_matting.exe';
+    if (!window.navigator.userAgent.includes('Windows')) {
+      exeName = exeName.replace('.exe', '');
+    }
+    
+    commandStr = await join(appData, 'engine', exeName);
+    
+    const { exists } = await import('@tauri-apps/plugin-fs');
+    if (!(await exists(commandStr))) {
+      throw new Error('独立引擎包未找到，请在设置中重新下载！');
+    }
+    
+    cliArgs.push(actualInputPath, outputPath);
   } else {
-    const py = pythonPath && pythonPath.trim() !== '' ? pythonPath.trim() : 'python';
+    commandStr = pythonPath && pythonPath.trim() !== '' ? pythonPath.trim() : 'python';
     
     const scriptName = strategy === 'A' ? 'pillow_matting.py' : 'perfect_matting.py';
     const { resolveResource } = await import('@tauri-apps/api/path');
@@ -103,25 +139,10 @@ export async function executeBgRemoval(options: BgRemovalOptions): Promise<strin
       scriptPath = `../scripts/${scriptName}`;
     }
 
-    // Convert Tauri v2 asset URLs back to physical paths
-    let actualInputPath = inputPath;
-    const match = actualInputPath.match(/^(?:asset:\/\/localhost|https?:\/\/asset\.localhost)(.+)$/);
-    if (match) {
-      try {
-        let path = decodeURIComponent(match[1]);
-        if (path.startsWith('/') && path.length > 2 && path[2] === ':') {
-          path = path.substring(1); // Remove leading slash for Windows paths
-        }
-        actualInputPath = path;
-      } catch (e) {
-        console.error("Failed to parse asset URL:", e);
-      }
-    }
+    cliArgs.push(scriptPath, actualInputPath, outputPath);
+  }
 
-    // Build CLI arguments: input, output, then --key=value pairs
-    const cliArgs: string[] = [scriptPath, actualInputPath, outputPath];
-
-    if (strategy === 'A') {
+  if (strategy === 'A') {
       const p = (params as StrategyAParams) || DEFAULT_STRATEGY_A_PARAMS;
       cliArgs.push(`--lower_threshold=${p.lowerThreshold}`);
       cliArgs.push(`--upper_threshold=${p.upperThreshold}`);
@@ -133,11 +154,14 @@ export async function executeBgRemoval(options: BgRemovalOptions): Promise<strin
       cliArgs.push(`--bg_threshold=${p.bgThreshold}`);
       cliArgs.push(`--bg_feathering=${p.bgFeathering}`);
       cliArgs.push(`--decontam_erode=${p.decontamErode}`);
+      if (p.fillHoles) {
+        cliArgs.push(`--fill_holes=1`);
+      }
     }
 
-    console.log(`执行抠图: ${py} ${cliArgs.join(' ')}`);
+    console.log(`执行抠图: ${commandStr} ${cliArgs.join(' ')}`);
 
-    const command = Command.create('python', cliArgs, {
+    const command = Command.create(commandStr, cliArgs, {
       encoding: 'raw',
       env: {
         PYTHONUTF8: '1',
@@ -162,5 +186,4 @@ export async function executeBgRemoval(options: BgRemovalOptions): Promise<strin
     } catch (e: any) {
       throw new Error(`Failed to execute python process: ${e.message || e}`);
     }
-  }
 }

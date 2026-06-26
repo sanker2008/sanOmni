@@ -1,7 +1,11 @@
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, Wand2 } from "lucide-react";
+import { FolderOpen, Wand2, Download } from "lucide-react";
+import { toast } from "@/hooks/useToast";
 import { ALL_PROVIDER_METAS } from "@/components/lab/ai-image-editor/providers";
 
 interface LabsSettingsTabProps {
@@ -13,6 +17,37 @@ interface LabsSettingsTabProps {
 export default function LabsSettingsTab({ localSettings, handleLocalUpdate, onSelectPath }: LabsSettingsTabProps) {
   const currentProvider = localSettings.aiImageEditorProvider || "mock";
   const providerConfig: Record<string, any> = localSettings.aiImageEditorProviderConfig || {};
+
+  const [isDownloadingEngine, setIsDownloadingEngine] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{progress: number, status: string} | null>(null);
+
+  useEffect(() => {
+    let unlisten: () => void;
+    listen<{progress: number, status: string}>("engine-download-progress", (event) => {
+      setDownloadProgress(event.payload);
+    }).then(fn => { unlisten = fn; });
+    return () => { if (unlisten) unlisten(); };
+  }, []);
+
+  const handleDownloadEngine = async () => {
+    try {
+      setIsDownloadingEngine(true);
+      setDownloadProgress({ progress: 0, status: "Starting..." });
+      
+      const ENGINE_URL = "https://github.com/sanker2008/sanOmni/releases/download/v1.3.0/sanomni-engine-win64.zip";
+      
+      await invoke("download_and_extract_engine", { url: ENGINE_URL });
+      
+      handleLocalUpdate("bgRemovalEngineDownloaded", true);
+      toast({ title: "下载成功", description: "独立引擎包已就绪！" });
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "下载失败", description: String(e), variant: "destructive" });
+    } finally {
+      setIsDownloadingEngine(false);
+      setDownloadProgress(null);
+    }
+  };
 
   // 获取当前供应商的字段定义
   const providerMeta = ALL_PROVIDER_METAS.find((m) => m.id === currentProvider);
@@ -203,26 +238,41 @@ export default function LabsSettingsTab({ localSettings, handleLocalUpdate, onSe
             </div>
           ) : (
             <div className="pt-2 border-t border-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium mb-1">独立引擎包状态</div>
-                  <div className="text-xs text-muted-foreground">
-                    {localSettings.bgRemovalEngineDownloaded 
-                      ? "引擎已就绪，可直接使用。"
-                      : "尚未下载引擎包。首次使用功能前需先下载引擎。"}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium mb-1">独立引擎包状态</div>
+                    <div className="text-xs text-muted-foreground">
+                      {localSettings.bgRemovalEngineDownloaded 
+                        ? "引擎已就绪，可直接使用。"
+                        : "尚未下载引擎包。首次使用功能前需先下载引擎。"}
+                    </div>
                   </div>
+                  {localSettings.bgRemovalEngineDownloaded ? (
+                    <Button variant="destructive" size="sm" onClick={() => handleLocalUpdate("bgRemovalEngineDownloaded", false)}>
+                      清除引擎 (释放空间)
+                    </Button>
+                  ) : (
+                    <Button variant="default" size="sm" onClick={handleDownloadEngine} disabled={isDownloadingEngine}>
+                      <Download className="w-4 h-4 mr-1" />
+                      下载独立引擎
+                    </Button>
+                  )}
                 </div>
-                {localSettings.bgRemovalEngineDownloaded ? (
-                  <Button variant="destructive" size="sm" onClick={() => handleLocalUpdate("bgRemovalEngineDownloaded", false)}>
-                    清除引擎 (释放空间)
-                  </Button>
-                ) : (
-                  <Button variant="default" size="sm" onClick={() => {
-                     // 模拟下载完成
-                     handleLocalUpdate("bgRemovalEngineDownloaded", true);
-                  }}>
-                    下载独立引擎
-                  </Button>
+                
+                {isDownloadingEngine && downloadProgress && (
+                  <div className="bg-muted rounded p-3 text-xs space-y-2">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>{downloadProgress.status}</span>
+                      <span>{downloadProgress.progress.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-border rounded-full h-1.5 overflow-hidden">
+                      <div 
+                        className="bg-primary h-full transition-all duration-300 ease-out" 
+                        style={{ width: `${downloadProgress.progress}%` }}
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

@@ -23,15 +23,43 @@ export default function PoseStudio() {
   const [projectList, setProjectList]     = useState<ProjectEntry[]>([]);
   const sceneRef = useRef<ThreeSceneRef>(null);
 
+  // History state
+  const [history, setHistory] = useState<SceneObject[][]>([[createDefaultObject('character', '基础模型')]]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const pushHistoryRef = useRef<ReturnType<typeof setTimeout>>();
+
   const selectedObject = objects.find(o => o.id === selectedObjectId) ?? null;
   const characterColor = objects.find(o => o.type === 'character')?.color ?? '#e8e8e8';
 
   // ── Object handlers ───────────────────────────────────────────────────────
 
-  const handleAddObject = (obj: SceneObject) => setObjects(prev => [...prev, obj]);
+  const commitHistory = (newObjects: SceneObject[]) => {
+    clearTimeout(pushHistoryRef.current);
+    pushHistoryRef.current = setTimeout(() => {
+      setHistory(prev => {
+        const newHist = prev.slice(0, historyIndex + 1);
+        newHist.push(JSON.parse(JSON.stringify(newObjects))); // deep copy
+        if (newHist.length > 50) newHist.shift();
+        return newHist;
+      });
+      setHistoryIndex(prev => Math.min(prev + 1, 50));
+    }, 300);
+  };
+
+  const handleAddObject = (obj: SceneObject) => {
+    setObjects(prev => {
+      const next = [...prev, obj];
+      commitHistory(next);
+      return next;
+    });
+  };
 
   const handleRemoveObject = (id: string) => {
-    setObjects(prev => prev.filter(o => o.id !== id));
+    setObjects(prev => {
+      const next = prev.filter(o => o.id !== id);
+      commitHistory(next);
+      return next;
+    });
     if (selectedObjectId === id) {
       setSelectedObjectId(null);
       setSelectedJointName(null);
@@ -43,11 +71,42 @@ export default function PoseStudio() {
     setSelectedJointName(jointName || null);
   };
 
-  const handleUpdateObject = (id: string, updates: Partial<SceneObject>) =>
-    setObjects(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o));
+  const handleUpdateObject = (id: string, updates: Partial<SceneObject>) => {
+    setObjects(prev => {
+      const next = prev.map(o => o.id === id ? { ...o, ...updates } : o);
+      commitHistory(next);
+      return next;
+    });
+  };
 
   const handleUpdateCharacterColor = (color: string) => {
-    setObjects(prev => prev.map(o => o.type === 'character' ? { ...o, color } : o));
+    setObjects(prev => {
+      const next = prev.map(o => o.type === 'character' ? { ...o, color } : o);
+      commitHistory(next);
+      return next;
+    });
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      setHistoryIndex(prev => prev - 1);
+      setObjects(JSON.parse(JSON.stringify(history[historyIndex - 1])));
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      setHistoryIndex(prev => prev + 1);
+      setObjects(JSON.parse(JSON.stringify(history[historyIndex + 1])));
+    }
+  };
+
+  const handleClearScene = () => {
+    const next: SceneObject[] = [];
+    setObjects(next);
+    commitHistory(next);
+    setSelectedObjectId(null);
+    setSelectedJointName(null);
   };
 
   // ── Export ────────────────────────────────────────────────────────────────
@@ -128,6 +187,11 @@ export default function PoseStudio() {
           onAddObject={handleAddObject}
           onRemoveObject={handleRemoveObject}
           onUpdateObject={handleUpdateObject}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onClearScene={handleClearScene}
+          canUndo={historyIndex > 0}
+          canRedo={historyIndex < history.length - 1}
         />
 
         {/* Center — 3D canvas */}

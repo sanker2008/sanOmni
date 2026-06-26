@@ -76,12 +76,33 @@ jobs:
           merge-multiple: true
 
       - name: Build latest.json from signatures
+        id: build_latest
         env:
           VERSION: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           DOWNLOAD_BASE="https://github.com/${REPO}/releases/download/${VERSION}"
           VER="${VERSION#v}"
+
+          # Extract the section for this version from CHANGELOG.md
+          EXTRACTED_NOTES=$(awk -v ver="[${VER}]" '
+            $0 ~ "^## " ver {flag=1; next}
+            /^## \[/ {if(flag) exit}
+            flag {print}
+          ' CHANGELOG.md | awk 'NR>1 || /[^[:space:]]/')
+          
+          # Default fallback if notes are empty
+          if [ -z "$EXTRACTED_NOTES" ]; then
+            FINAL_NOTES="请在下方 Assets 区域下载安装包。\n如果您已安装旧版，可在软件内点击检查更新自动安装。"
+          else
+            FINAL_NOTES="请在下方 Assets 区域下载安装包。\n如果您已安装旧版，可在软件内点击检查更新自动安装。\n\n**本版更新日志：**\n${EXTRACTED_NOTES}"
+          fi
+          
+          # Multiline output for GitHub Actions
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "notes<<$EOF" >> $GITHUB_OUTPUT
+          echo "$FINAL_NOTES" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
 
           # Helper: read signature content from .sig file in artifacts
           read_sig() {
@@ -105,7 +126,7 @@ jobs:
 
           jq -n \
             --arg version "$VER" \
-            --arg notes "请在下方 Assets 区域下载安装包。\n如果您已安装旧版，可在软件内点击检查更新自动安装。" \
+            --arg notes "$FINAL_NOTES" \
             --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg dl "$DOWNLOAD_BASE" \
             --arg mac_sig "$MACOS_UNIVERSAL_SIG" \
@@ -145,7 +166,7 @@ jobs:
         with:
           allowUpdates: true
           name: "sanOmni ${{ github.ref_name }}"
-          body: "请在下方 Assets 区域下载安装包。\n如果您已安装旧版，可在软件内点击检查更新自动安装。"
+          body: ${{ steps.build_latest.outputs.notes }}
           token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: "all-artifacts/**/*,latest.json"
           artifactErrorsFailBuild: false

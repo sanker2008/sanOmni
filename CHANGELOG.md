@@ -5,9 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-06-26
+### Added
+- sanLabs: 增加“灵感画布 (Thought Canvas)”，基于 Excalidraw 提供一个本地化、无边框的白板，用于随时记录突发灵感和绘制流程图，支持本地存储与防丢失自动保存。
+
+### Fixed
+- 高级抠图 (Pro): 修复在处理超大分辨率图片时可能导致底层 `rembg` (IS-Net) 与 Python 产生 `MemoryError` 内存溢出的问题。优化手段包括智能降低检测尺寸阈值和绕过图片全量合成，通过纯遮罩提取结合引导滤波还原无损超清抠图。
+
 ## [1.3.0] - 2026-06-25
 ### Added
 - Pro Background Removal (高级抠图): Added a high-precision, locally-run AI background removal tool in sanLabs using `rembg` (u2net/isnet) and Pillow. Features include strategy selection, advanced tunable parameters, side-by-side comparison, and consecutive processing.
+- Pro Background Removal (高级抠图): Added intelligent internal hole filling (防误扣漏洞填补) using OpenCV morphological operations to prevent the AI model from incorrectly removing internal parts of solid objects.
+- Pro Background Removal (高级抠图): Integrated an interactive Canvas-based brush tool for manual masking repair. Features include a Restore Brush (恢复画笔) to draw back original pixels, and an Eraser (橡皮擦) to remove artifact pixels. Includes pointer-event capture for smooth edge drawing, global hotkeys (Enter/Esc), and full Undo/Redo history support.
 - Review remediation documentation for sanOmni, sanPrompt, and sanomni-sync-server boundaries.
 - Secure filesystem service path for moving local asset operations behind Tauri commands and user-authorized roots.
 - Release note for the June 2026 cross-project review remediation.

@@ -34,6 +34,16 @@
           "name": "python",
           "cmd": "python",
           "args": true
+        },
+        {
+          "name": "pillow_matting",
+          "cmd": "^.*\\\\engine\\\\pillow_matting\\.exe$",
+          "args": true
+        },
+        {
+          "name": "perfect_matting",
+          "cmd": "^.*\\\\engine\\\\perfect_matting\\\\perfect_matting\\.exe$",
+          "args": true
         }
       ]
     }

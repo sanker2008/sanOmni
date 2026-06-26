@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from '@/hooks/useToast';
-import { Upload, Eraser, Download, PlayCircle, Loader2, ZoomIn, ZoomOut, Maximize, FolderOpen, ChevronDown, ChevronRight, RotateCcw, HelpCircle } from 'lucide-react';
+import { Upload, Eraser, Download, PlayCircle, Loader2, ZoomIn, ZoomOut, Maximize, FolderOpen, ChevronDown, ChevronRight, RotateCcw, HelpCircle, Brush, Undo2, Redo2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { pickSingleFile } from '@/lib/tauriFilePicker';
 import { revealFileInFolder, openPath, getLabsRoot } from '@/lib/pathUtils';
@@ -82,6 +82,52 @@ export default function ProBackgroundRemoval() {
   const [exportDirExists, setExportDirExists] = useState(false);
   const [isModelDownloaded, setIsModelDownloaded] = useState(true);
 
+  // Brush tools state
+  const [brushMode, setBrushMode] = useState<'none' | 'eraser' | 'restore'>('none');
+  const [brushSize, setBrushSize] = useState(20);
+  const resultCanvasRef = useRef<HTMLCanvasElement>(null);
+  const originalImageObjRef = useRef<HTMLImageElement | null>(null);
+  const isDrawingRef = useRef(false);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+
+  // Drag and Drop state
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // Canvas History
+  const historyRef = useRef<ImageData[]>([]);
+  const [historyStep, setHistoryStep] = useState(-1);
+
+  const saveHistoryState = useCallback((ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const newHistory = historyRef.current.slice(0, historyStep + 1);
+    newHistory.push(data);
+    if (newHistory.length > 20) newHistory.shift();
+    historyRef.current = newHistory;
+    setHistoryStep(newHistory.length - 1);
+  }, [historyStep]);
+
+  const undo = useCallback(() => {
+    if (historyStep > 0 && resultCanvasRef.current) {
+      const canvas = resultCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(historyRef.current[historyStep - 1], 0, 0);
+        setHistoryStep(s => s - 1);
+      }
+    }
+  }, [historyStep]);
+
+  const redo = useCallback(() => {
+    if (historyStep < historyRef.current.length - 1 && resultCanvasRef.current) {
+      const canvas = resultCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.putImageData(historyRef.current[historyStep + 1], 0, 0);
+        setHistoryStep(s => s + 1);
+      }
+    }
+  }, [historyStep]);
+
   // Check if export dir exists
   useEffect(() => {
     getLabsRoot().then(root => {
@@ -106,6 +152,56 @@ export default function ProBackgroundRemoval() {
   // Persist whenever params change
   useEffect(() => { persistParams(paramsA, paramsB); }, [paramsA, paramsB]);
 
+  // Load original image obj for brush tool
+  useEffect(() => {
+    if (!image) return;
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = image.startsWith('data:') || image.startsWith('asset:') || image.startsWith('http') ? image : convertFileSrc(image);
+    img.onload = () => { originalImageObjRef.current = img; };
+  }, [image]);
+
+  // Load result image into canvas
+  useEffect(() => {
+    if (!resultImage || !resultCanvasRef.current) return;
+    const canvas = resultCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = resultImage.startsWith('data:') || resultImage.startsWith('asset:') || resultImage.startsWith('http') ? resultImage : convertFileSrc(resultImage);
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      
+      // Init history
+      historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+      setHistoryStep(0);
+    };
+  }, [resultImage]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Enter' || e.key === 'Escape') && brushMode !== 'none') {
+        setBrushMode('none');
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [brushMode, undo, redo]);
+
   // Zoom and Pan state
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -126,10 +222,71 @@ export default function ProBackgroundRemoval() {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [image]);
 
-  const handleMouseDown = (e: React.MouseEvent) => { if (!image) return; e.preventDefault(); setIsDragging(true); setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y }); };
-  const handleMouseMove = (e: React.MouseEvent) => { if (!isDragging) return; setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); };
-  const handleMouseUp = () => { setIsDragging(false); };
+  const handlePointerDown = (e: React.PointerEvent) => { if (!image) return; e.preventDefault(); setIsDragging(true); setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y }); };
+  const handlePointerMove = (e: React.PointerEvent) => { if (!isDragging) return; setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); };
+  const handlePointerUp = () => { setIsDragging(false); };
   const resetView = () => { setScale(1); setPosition({ x: 0, y: 0 }); };
+
+  // ── Canvas Brush Handlers ──────────────────────────────────────
+  const getCanvasPos = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (e.currentTarget.width / rect.width);
+    const y = (e.clientY - rect.top) * (e.currentTarget.height / rect.height);
+    return { x, y };
+  };
+
+  const handleCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (brushMode === 'none') return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isDrawingRef.current = true;
+    lastPosRef.current = getCanvasPos(e);
+  };
+
+  const handleCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (brushMode === 'none') return;
+    e.stopPropagation();
+    if (!isDrawingRef.current) return;
+    const pos = getCanvasPos(e);
+    const ctx = e.currentTarget.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.beginPath();
+    ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = brushSize;
+    
+    if (brushMode === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+      ctx.stroke();
+    } else if (brushMode === 'restore') {
+      ctx.globalCompositeOperation = 'source-over';
+      if (originalImageObjRef.current) {
+        ctx.strokeStyle = ctx.createPattern(originalImageObjRef.current, 'no-repeat') || 'transparent';
+      }
+      ctx.stroke();
+    }
+    
+    lastPosRef.current = pos;
+  };
+
+  const handleCanvasPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (brushMode === 'none') return;
+    e.stopPropagation();
+    if (isDrawingRef.current) {
+      isDrawingRef.current = false;
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
+      
+      // Save step
+      const ctx = e.currentTarget.getContext('2d');
+      if (ctx) {
+        saveHistoryState(ctx, e.currentTarget);
+      }
+    }
+  };
 
   // 从 UI Store 获取环境设置
   const settings = useUIStore((state) => state.settings);
@@ -171,6 +328,44 @@ export default function ProBackgroundRemoval() {
     } catch (error) { console.error('Failed to pick image:', error); }
   }, []);
 
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      toast({ title: '格式错误', description: '请上传图片文件', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const path = (file as any).path;
+      if (path) {
+        setImage(path);
+        setInitialImage(path);
+        setResultImage(null);
+        return;
+      }
+
+      const buffer = await file.arrayBuffer();
+      const labsRoot = await getLabsRoot();
+      const { join } = await import('@tauri-apps/api/path');
+      const tempDir = await join(labsRoot, 'bg_removal');
+      const tempPath = await join(tempDir, 'temp_drop_' + file.name);
+      
+      await mkdir(tempDir, { recursive: true }).catch(()=>{});
+      await writeFile(tempPath, new Uint8Array(buffer));
+      
+      setImage(tempPath);
+      setInitialImage(tempPath);
+      setResultImage(null);
+    } catch (err) {
+      console.error('Failed to handle dropped file:', err);
+      toast({ title: '读取失败', description: '无法加载拖拽的图片', variant: 'destructive' });
+    }
+  };
+
   const handleRunBgRemoval = async () => {
     if (!image) return;
     setIsProcessing(true);
@@ -194,9 +389,19 @@ export default function ProBackgroundRemoval() {
       const labsRoot = await getLabsRoot();
       const exportDir = await join(labsRoot, "bg_removal", "exports");
       try { await mkdir(exportDir, { recursive: true }); } catch (e: any) { if (!String(e).includes('exists') && !String(e).includes('存在')) throw e; }
-      const res = await fetch(resultImage);
-      const blob = await res.blob();
-      const buffer = await blob.arrayBuffer();
+      
+      let buffer: ArrayBuffer;
+      if (resultCanvasRef.current) {
+        const dataUrl = resultCanvasRef.current.toDataURL('image/png');
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        buffer = await blob.arrayBuffer();
+      } else {
+        const res = await fetch(resultImage);
+        const blob = await res.blob();
+        buffer = await blob.arrayBuffer();
+      }
+      
       const filename = `bg_removed_${Date.now()}.png`;
       const fullPath = await join(exportDir, filename);
       await writeFile(fullPath, new Uint8Array(buffer));
@@ -274,11 +479,17 @@ export default function ProBackgroundRemoval() {
       <div className="flex-1 flex overflow-hidden bg-slate-900/5 dark:bg-black/10">
         {!image ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 select-none">
-            <div onClick={handlePickImage} className="w-full max-w-lg aspect-[16/10] bg-card border-2 border-dashed border-border/80 hover:border-primary/50 hover:shadow-lg rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all cursor-pointer group">
-              <div className="w-16 h-16 rounded-full bg-primary/5 group-hover:bg-primary/10 text-primary/70 flex items-center justify-center transition-all mb-5 group-hover:scale-105">
+            <div 
+              onClick={handlePickImage} 
+              onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={e => { e.preventDefault(); setIsDragOver(false); }}
+              onDrop={handleDrop}
+              className={`w-full max-w-lg aspect-[16/10] bg-card border-2 border-dashed ${isDragOver ? 'border-primary shadow-lg bg-primary/5' : 'border-border/80 hover:border-primary/50 hover:shadow-lg'} rounded-xl flex flex-col items-center justify-center p-8 text-center transition-all cursor-pointer group`}
+            >
+              <div className={`w-16 h-16 rounded-full ${isDragOver ? 'bg-primary/20 scale-110' : 'bg-primary/5 group-hover:bg-primary/10 group-hover:scale-105'} text-primary/70 flex items-center justify-center transition-all mb-5`}>
                 <Upload className="w-8 h-8" />
               </div>
-              <h3 className="text-base font-bold text-foreground mb-2">上传图片开始抠图</h3>
+              <h3 className="text-base font-bold text-foreground mb-2">{isDragOver ? '松开鼠标即可上传' : '点击或拖拽图片至此开始抠图'}</h3>
               <p className="text-xs text-muted-foreground mb-4">基于 rembg 和 Pillow 的无损发丝级抠图</p>
               {engineMode === 'download' && (
                 <div className="px-3 py-1.5 bg-orange-500/10 text-orange-500 text-xs rounded border border-orange-500/20">
@@ -293,10 +504,11 @@ export default function ProBackgroundRemoval() {
             <div
               ref={containerRef}
               className="flex-1 relative grid grid-cols-2 divide-x divide-border overflow-hidden"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onPointerLeave={handlePointerUp}
             >
               {/* Zoom Controls */}
               <div className="absolute bottom-6 right-6 z-10 flex items-center gap-1 bg-background/80 backdrop-blur-md border border-border p-1 rounded-lg shadow-sm">
@@ -329,10 +541,10 @@ export default function ProBackgroundRemoval() {
                   )}
                 </div>
                 <div
-                  className="relative border border-border/50 shadow-sm rounded flex transition-transform duration-75 origin-center checkerboard-bg"
-                  style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, cursor: isDragging ? 'grabbing' : 'grab' }}
+                  className={`relative border border-border/50 shadow-sm rounded flex transition-transform duration-75 origin-center ${canvasBg ? '' : 'checkerboard-bg'}`}
+                  style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, cursor: isDragging ? 'grabbing' : 'grab', ...(canvasBg ? { backgroundColor: canvasBg } : {}) }}
                 >
-                  <img src={image.startsWith('data:') || image.startsWith('asset:') || image.startsWith('http') ? image : convertFileSrc(image)} alt="Source" className="max-h-[80vh] object-contain pointer-events-none select-none" draggable={false} />
+                  <img src={image.startsWith('data:') || image.startsWith('asset:') || image.startsWith('http') ? image : convertFileSrc(image)} alt="Source" className="max-w-full max-h-[80vh] object-contain pointer-events-none select-none" draggable={false} />
                 </div>
               </div>
 
@@ -350,12 +562,114 @@ export default function ProBackgroundRemoval() {
                     </button>
                   )}
                 </div>
+
+                {/* Brush Toolbar */}
+                {resultImage && (
+                  <div 
+                    className="absolute top-4 right-4 z-10 flex items-center gap-1.5 bg-background/90 backdrop-blur shadow-sm border border-border p-1.5 rounded-lg pointer-events-auto"
+                    onPointerDown={e => e.stopPropagation()}
+                    onPointerMove={e => e.stopPropagation()}
+                    onWheel={e => e.stopPropagation()}
+                  >
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => setBrushMode(m => m === 'restore' ? 'none' : 'restore')}
+                            className={`p-1.5 rounded transition-colors ${brushMode === 'restore' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground hover:text-foreground'}`}
+                          >
+                            <Brush className="w-4 h-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">恢复画笔 (画回原图被误扣的像素)<br/>涂抹完成后按 Enter 退出</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => setBrushMode(m => m === 'eraser' ? 'none' : 'eraser')}
+                            className={`p-1.5 rounded transition-colors ${brushMode === 'eraser' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground hover:text-foreground'}`}
+                          >
+                            <Eraser className="w-4 h-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">橡皮擦 (擦除残留的背景像素)<br/>涂抹完成后按 Enter 退出</TooltipContent>
+                      </Tooltip>
+                      {brushMode !== 'none' && (
+                        <div className="flex items-center gap-2 ml-2 px-2 border-l border-border">
+                          <span className="text-xs text-muted-foreground">笔刷大小</span>
+                          <input type="range" min={5} max={100} value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} className="w-20 accent-primary" />
+                        </div>
+                      )}
+                      <div className="w-px h-4 bg-border mx-1"></div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={undo}
+                            disabled={historyStep <= 0}
+                            className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                          >
+                            <Undo2 className="w-4 h-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">撤销 (Ctrl+Z)</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={redo}
+                            disabled={historyStep >= historyRef.current.length - 1}
+                            className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                          >
+                            <Redo2 className="w-4 h-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">重做 (Ctrl+Y)</TooltipContent>
+                      </Tooltip>
+                      <div className="w-px h-4 bg-border mx-1"></div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => {
+                              // Reset to AI result
+                              const canvas = resultCanvasRef.current;
+                              const ctx = canvas?.getContext('2d');
+                              if (!ctx || !canvas || !resultImage) return;
+                              const img = new Image();
+                              img.crossOrigin = "Anonymous";
+                              img.src = resultImage.startsWith('data:') || resultImage.startsWith('asset:') || resultImage.startsWith('http') ? resultImage : convertFileSrc(resultImage);
+                              img.onload = () => {
+                                ctx.globalCompositeOperation = 'source-over';
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                ctx.drawImage(img, 0, 0);
+                                historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+                                setHistoryStep(0);
+                              };
+                            }}
+                            className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">重置为初始 AI 抠图结果</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                )}
+
                 {resultImage ? (
                   <div
                     className={`relative border border-border/50 shadow-sm rounded flex transition-transform duration-75 origin-center ${canvasBg ? '' : 'checkerboard-bg'}`}
-                    style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, cursor: isDragging ? 'grabbing' : 'grab', ...(canvasBg ? { backgroundColor: canvasBg } : {}) }}
+                    style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`, cursor: brushMode !== 'none' ? 'crosshair' : (isDragging ? 'grabbing' : 'grab'), ...(canvasBg ? { backgroundColor: canvasBg } : {}) }}
                   >
-                    <img src={resultImage} alt="Result" className="max-h-[80vh] object-contain pointer-events-none select-none" draggable={false} />
+                    <img src={resultImage.startsWith('data:') || resultImage.startsWith('asset:') || resultImage.startsWith('http') ? resultImage : convertFileSrc(resultImage)} alt="" className="max-w-full max-h-[80vh] object-contain opacity-0 pointer-events-none select-none" draggable={false} />
+                    <canvas 
+                      ref={resultCanvasRef}
+                      onPointerDown={handleCanvasPointerDown}
+                      onPointerMove={handleCanvasPointerMove}
+                      onPointerUp={handleCanvasPointerUp}
+                      onPointerCancel={handleCanvasPointerUp}
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-auto select-none touch-none" 
+                    />
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center text-muted-foreground/50">
@@ -460,6 +774,25 @@ export default function ProBackgroundRemoval() {
                       <ParamSlider label="去色溢染力度" value={paramsB.decontamErode} min={3} max={30} step={1}
                         onChange={v => updateB({ decontamErode: v })}
                         tooltip="控制边缘颜色清理的深度范围。调大会向主体内部清理更深（去除更多背景色溢出），调小则只清理最外层边缘。适用：抠图后边缘泛白/泛绿时调大" />
+                      <div className="flex items-center justify-between pt-1">
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground">填补内部孔洞</span>
+                          <TooltipProvider delayDuration={200}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="w-3 h-3 text-muted-foreground/50 hover:text-muted-foreground cursor-help transition-colors shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[220px] text-xs leading-relaxed">
+                                强行填补模型误判抠出的内部透明洞。适用：商品内部或衣服上有大片背景色被误扣时开启；抠马克杯或甜甜圈时关闭。
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" className="sr-only peer" checked={!!paramsB.fillHoles} onChange={e => updateB({ fillHoles: e.target.checked })} />
+                          <div className="w-7 h-4 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
+                      </div>
                     </div>
                   )}
                 </div>

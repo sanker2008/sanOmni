@@ -1,7 +1,7 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { SceneObject, ObjectType, createDefaultObject } from './types';
-import { User, Box, Circle, Square, Minus, Database, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
+import { User, Box, Circle, Square, Minus, Database, Plus, Trash2, Eye, EyeOff, Undo2, Redo2, Trash } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +16,11 @@ interface ScenePanelProps {
   onAddObject: (obj: SceneObject) => void;
   onRemoveObject: (id: string) => void;
   onUpdateObject: (id: string, updates: Partial<SceneObject>) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onClearScene: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export default function ScenePanel({
@@ -24,7 +29,12 @@ export default function ScenePanel({
   onObjectSelect,
   onAddObject,
   onRemoveObject,
-  onUpdateObject
+  onUpdateObject,
+  onUndo,
+  onRedo,
+  onClearScene,
+  canUndo,
+  canRedo
 }: ScenePanelProps) {
   
   const handleAddDefault = (type: ObjectType, name: string) => {
@@ -45,19 +55,120 @@ export default function ScenePanel({
   };
 
   return (
-    <div className="w-[220px] shrink-0 border-r border-border bg-card/30 flex flex-col h-full overflow-hidden">
+    <div className="w-[220px] shrink-0 border-r border-border bg-slate-50 dark:bg-zinc-900/50 flex flex-col h-full overflow-hidden">
       <div className="p-3 border-b border-border bg-muted/20 flex items-center justify-between">
         <h3 className="font-medium text-sm">场景对象</h3>
-        <DropdownMenu>
+        <div className="flex items-center gap-0.5">
+          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onUndo} disabled={!canUndo} title="撤销">
+            <Undo2 className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onRedo} disabled={!canRedo} title="重做">
+            <Redo2 className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="w-7 h-7 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={onClearScene} title="清空场景">
+            <Trash className="w-4 h-4" />
+          </Button>
+          <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="w-7 h-7">
               <Plus className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.glb,.gltf';
+              input.onchange = (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) {
+                  const url = URL.createObjectURL(file);
+                  const obj = createDefaultObject('model', file.name);
+                  obj.modelPath = url;
+                  onAddObject(obj);
+                  onObjectSelect(obj.id);
+                }
+              };
+              input.click();
+            }}>
+               <Box className="w-4 h-4 mr-2" /> 导入本地 GLTF/GLB...
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleAddDefault('character', '人物模型')}>
                <User className="w-4 h-4 mr-2" /> 人物 (白膜)
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', 'Xbot 模型');
+              obj.modelPath = '/models/Xbot.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <User className="w-4 h-4 mr-2 text-primary" /> Xbot (高精模型)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', 'Soldier 模型');
+              obj.modelPath = '/models/Soldier.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <User className="w-4 h-4 mr-2 text-primary" /> Soldier (高精模型)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', '火烈鸟 (Flamingo)');
+              obj.modelPath = '/models/Flamingo.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <Box className="w-4 h-4 mr-2 text-primary" /> 火烈鸟 (Flamingo)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', '鹦鹉 (Parrot)');
+              obj.modelPath = '/models/Parrot.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <Box className="w-4 h-4 mr-2 text-primary" /> 鹦鹉 (Parrot)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', '马 (Horse)');
+              obj.modelPath = '/models/Horse.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <Box className="w-4 h-4 mr-2 text-primary" /> 马 (Horse)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', '东京微缩街景 (Littlest Tokyo)');
+              obj.modelPath = '/models/LittlestTokyo.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <Box className="w-4 h-4 mr-2 text-primary" /> 微缩街景 (建筑)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', '椅子 (Sheen Chair)');
+              obj.modelPath = '/models/SheenChair.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <Box className="w-4 h-4 mr-2 text-primary" /> 椅子 (居家)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', '水瓶 (Water Bottle)');
+              obj.modelPath = '/models/WaterBottle.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <Box className="w-4 h-4 mr-2 text-primary" /> 水瓶 (居家)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const obj = createDefaultObject('model', '复古相机 (Antique Camera)');
+              obj.modelPath = '/models/AntiqueCamera.glb';
+              onAddObject(obj);
+              onObjectSelect(obj.id);
+            }}>
+               <Box className="w-4 h-4 mr-2 text-primary" /> 复古相机 (居家)
+            </DropdownMenuItem>
+
             <DropdownMenuItem onClick={() => handleAddDefault('box', '立方体')}>
                <Square className="w-4 h-4 mr-2" /> 立方体 (Box)
             </DropdownMenuItem>
@@ -70,9 +181,9 @@ export default function ScenePanel({
             <DropdownMenuItem onClick={() => handleAddDefault('plane', '地面')}>
                <Minus className="w-4 h-4 mr-2" /> 平面 (Plane)
             </DropdownMenuItem>
-            {/* Model import can be added here if we implement GLTF file picking */}
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
       
       <ScrollArea className="flex-1 p-2">

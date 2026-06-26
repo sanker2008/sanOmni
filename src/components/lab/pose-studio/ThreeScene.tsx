@@ -461,19 +461,44 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({
         if (obj.type === 'character') {
           mesh = buildCharacterGroup();
 
-        } else if (obj.type === 'model' && obj.modelPath?.startsWith('blob:')) {
+        } else if (obj.type === 'model' && obj.modelPath) {
           const group = new THREE.Group();
           mesh = group;
           const loader = new GLTFLoader();
           loader.load(obj.modelPath, (gltf: any) => {
             const model: THREE.Object3D = gltf.scene;
-            // ✅ Fix: subtract AABB center to truly center the model
+
+            // Save original rotations for bones and make it a clay/white model
+            model.traverse((child: any) => {
+              if (child.isMesh) {
+                // Strip textures, force clay material
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0xffffff,
+                  roughness: 0.7,
+                  metalness: 0.1
+                });
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+              if (child.isBone || child.type === 'Bone') {
+                child.userData.originalRotation = child.rotation.clone();
+              }
+            });
+
+            // ✅ Fix: use a wrapper to correctly center and scale without origin offset issues
             const box3 = new THREE.Box3().setFromObject(model);
+            const size = box3.getSize(new THREE.Vector3()).length();
             const center = box3.getCenter(new THREE.Vector3());
-            const size   = box3.getSize(new THREE.Vector3()).length();
-            model.position.sub(center);
-            model.scale.setScalar(2 / size); // normalize to ~2 unit height
-            group.add(model);
+
+            if (size > 0 && size < Infinity) {
+              const wrapper = new THREE.Group();
+              model.position.copy(center).multiplyScalar(-1); // move model center to wrapper's 0,0,0
+              wrapper.add(model);
+              wrapper.scale.setScalar(2 / size); // scale the wrapper
+              group.add(wrapper);
+            } else {
+              group.add(model);
+            }
           });
 
         } else {
@@ -518,8 +543,8 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({
         mat.needsUpdate = true;
       }
 
-      // Material update for character
-      if (obj.type === 'character' && mesh instanceof THREE.Group) {
+      // Material update for character and imported models
+      if ((obj.type === 'character' || obj.type === 'model') && mesh instanceof THREE.Group) {
         mesh.traverse(child => {
           if (child instanceof THREE.Mesh) {
             const mat = child.material as THREE.MeshStandardMaterial;
@@ -540,6 +565,54 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({
           const jointGroup = mesh!.getObjectByName(jName);
           if (jointGroup && rot) {
             jointGroup.rotation.set(rot.x, rot.y, rot.z);
+          }
+        });
+      }
+
+      // Sync joints for imported 'model' (assuming Mixamo rig or similar bone names)
+      if (obj.type === 'model' && mesh instanceof THREE.Group) {
+        const MIXAMO_MAP: Record<JointName, string> = {
+          spine: 'mixamorigSpine',
+          neck: 'mixamorigNeck',
+          leftShoulder: 'mixamorigLeftArm',
+          leftElbow: 'mixamorigLeftForeArm',
+          leftWrist: 'mixamorigLeftHand',
+          rightShoulder: 'mixamorigRightArm',
+          rightElbow: 'mixamorigRightForeArm',
+          rightWrist: 'mixamorigRightHand',
+          leftHip: 'mixamorigLeftUpLeg',
+          leftKnee: 'mixamorigLeftLeg',
+          leftAnkle: 'mixamorigLeftFoot',
+          rightHip: 'mixamorigRightUpLeg',
+          rightKnee: 'mixamorigRightLeg',
+          rightAnkle: 'mixamorigRightFoot',
+        };
+
+        // Reset all mapped bones to original rotation first
+        CHARACTER_JOINT_NAMES.forEach((jName) => {
+          const boneName = MIXAMO_MAP[jName];
+          const bone = mesh!.getObjectByName(boneName);
+          if (bone) {
+            if (bone.userData.originalRotation) {
+              bone.rotation.copy(bone.userData.originalRotation);
+            }
+            bone.userData.jointName = jName; // map it back for raycaster selection!
+          }
+        });
+
+        // Apply custom rotations as offsets
+        Object.entries(obj.joints || {}).forEach(([jName, rot]) => {
+          const boneName = MIXAMO_MAP[jName as JointName];
+          if (!boneName) return;
+          const bone = mesh!.getObjectByName(boneName);
+          if (bone && rot) {
+            if (bone.userData.originalRotation) {
+               bone.rotation.x = bone.userData.originalRotation.x + rot.x;
+               bone.rotation.y = bone.userData.originalRotation.y + rot.y;
+               bone.rotation.z = bone.userData.originalRotation.z + rot.z;
+            } else {
+               bone.rotation.set(rot.x, rot.y, rot.z);
+            }
           }
         });
       }

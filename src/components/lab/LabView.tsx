@@ -17,6 +17,9 @@ import {
   HelpCircle,
   Sparkles,
   User,
+  ChevronLeft,
+  ChevronRight,
+  Lightbulb,
 } from 'lucide-react';
 import {
   Dialog,
@@ -36,6 +39,7 @@ const PngToSvg = lazy(() => import('./png-to-svg/PngToSvg'));
 const PoseStudio = lazy(() => import('./pose-studio/PoseStudio'));
 const GeminiWatermarkLab = lazy(() => import('./gemini-watermark-lab/GeminiWatermarkLab'));
 const ProBackgroundRemoval = lazy(() => import('./pro-background-removal/ProBackgroundRemoval'));
+const ThoughtCanvas = lazy(() => import('./thought-canvas/ThoughtCanvas'));
 
 // ─── Tool Registry ─────────────────────────────────────────
 
@@ -49,9 +53,24 @@ interface LabTool {
   component: LabToolComponent | null;
   available: boolean;
   instructions?: string[];
+  changelog?: string[];
 }
 
 const LAB_TOOLS: LabTool[] = [
+  {
+    id: 'thought-canvas',
+    name: '灵感画布',
+    description: '无限扩展的白板，随时记录突发灵感与流程图',
+    icon: <Lightbulb className="w-4 h-4" />,
+    component: ThoughtCanvas,
+    available: true,
+    instructions: [
+      '1. 这是一个无边框画布工具，点击任意位置即可开始输入文字或涂鸦。',
+      '2. 左侧边栏提供了选择、画笔、橡皮擦、形状、文本、便签等工具。',
+      '3. 画布内容会自动保存在本地浏览器中，下次打开不会丢失。',
+      '4. 使用鼠标滚轮或触控板可以缩放和平移画布。'
+    ]
+  },
   {
     id: 'pose-studio',
     name: '3D姿态参考',
@@ -120,12 +139,16 @@ const LAB_TOOLS: LabTool[] = [
     instructions: [
       '1. 点击画布区域上传需要抠背景的图片。',
       '2. 在顶部选择抠图策略：「表情包/纯色文字」适用于纯色背景的截图、网格图；「复杂人像/发丝」适用于真实人物、动物等需要精细处理边缘的照片。',
-      '3. 右侧面板提供「预设方案」，可一键应用针对不同场景（白底商品图、绿幕抠像、深色背景、发丝毛发等）优化过的参数组合。',
-      '4. 可手动拖动滑块微调参数。策略 A 支持调整透明度阈值和背景颜色（支持去除任意颜色背景）；策略 B 支持调整背景亮度阈值、羽化范围、边缘平滑半径等，点击「高级参数」可展开更多选项。',
-      '5. 所有参数修改会自动保存，下次打开时自动恢复上次的设置。点击「恢复默认参数」可一键还原。',
-      '6. 点击「开始抠图」等待处理完成。处理完成后可用鼠标滚轮缩放、拖拽平移来检查抠图细节。',
+      '3. 右侧面板提供「预设方案」，可一键应用针对不同场景优化过的参数组合。开启「填补内部孔洞」可强力修复商品内部被误扣成透明的缺陷。',
+      '4. 可手动拖动滑块微调参数。策略 A 支持调整透明度阈值和背景颜色；策略 B 支持调整背景亮度阈值、羽化范围等，点击「高级参数」可展开更多选项。',
+      '5. 点击「开始抠图」等待处理完成。处理完成后可用鼠标滚轮缩放、拖拽平移来检查抠图细节。',
+      '6. 🎨 交互式画笔修补：在处理结果区域，提供强大的【恢复画笔】(吸取原图像素补回) 与【橡皮擦】(擦除多余像素)。支持调整笔刷大小，按 Enter 或 Esc 快捷键退出画笔，支持 Ctrl+Z / Ctrl+Y 的撤销与重做。',
       '7. 右侧面板底部的「画布底色」区域可切换预览背景颜色（白/黑/红/绿/蓝等或自定义颜色），方便检验抠图边缘质量。',
-      '8. 点击「保存结果」导出 PNG，点击「打开目录」可直接在文件管理器中定位到保存的文件。'
+      '8. 满意后点击结果区或侧边栏的「保存结果」导出 PNG 透明图，点击「设为原图」可将当前结果当做原图继续循环处理。'
+    ],
+    changelog: [
+      '2026-06-26: 🚀 核心算法重构：针对表情包/纯色文字模式（策略A），引入由独立像素纯度计算驱动的色彩剥离引擎。现在即使强制使用极限阈值，也能智能消除绿幕/蓝幕带来的边缘溢色。',
+      '2026-06-26: 🐛 修复了“不透明阈值”和“全透明阈值”设置为相同数值时，因变量未定义导致的崩溃报错问题。'
     ]
   },
   {
@@ -193,6 +216,7 @@ export default function LabView() {
   // Local state — not in global store
   const [activeToolId, setActiveToolId] = useState(LAB_TOOLS[0].id);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const activeTool = LAB_TOOLS.find((t) => t.id === activeToolId);
   const ActiveComponent = activeTool?.component;
@@ -200,12 +224,20 @@ export default function LabView() {
   return (
     <div className="h-full flex">
       {/* Sidebar — tool list */}
-      <div className="w-[200px] shrink-0 border-r border-border bg-card/30 flex flex-col">
-        <div className="px-3 py-3 border-b border-border">
-          <div className="flex items-center gap-2">
-            <FlaskConical className="w-5 h-5 text-primary" />
-            <span className="text-base font-semibold">sanLabs 工具箱</span>
-          </div>
+      <div className={`shrink-0 border-r border-border bg-card/30 flex flex-col transition-all duration-300 ${
+        isSidebarCollapsed ? 'w-14' : 'w-[200px]'
+      }`}>
+        <div className="px-3 py-3 border-b border-border h-[49px] flex items-center">
+          {!isSidebarCollapsed ? (
+            <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
+              <FlaskConical className="w-5 h-5 text-primary shrink-0" />
+              <span className="text-base font-semibold truncate">sanLabs 工具箱</span>
+            </div>
+          ) : (
+            <div className="w-full flex justify-center">
+              <FlaskConical className="w-5 h-5 text-primary" />
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
@@ -215,6 +247,7 @@ export default function LabView() {
               type="button"
               onClick={() => tool.available && setActiveToolId(tool.id)}
               disabled={!tool.available}
+              title={isSidebarCollapsed ? tool.name : undefined}
               className={`w-full flex items-start gap-2.5 px-2.5 py-2 rounded-md text-left transition-colors ${
                 tool.id === activeToolId
                   ? 'bg-primary/10 text-primary'
@@ -223,38 +256,57 @@ export default function LabView() {
                     : 'text-muted-foreground/40 cursor-not-allowed'
               }`}
             >
-              <span className={`mt-0.5 shrink-0 ${
+              <span className={`shrink-0 ${
                 tool.id === activeToolId ? 'text-primary' : tool.available ? 'text-muted-foreground' : 'text-muted-foreground/40'
-              }`}>
+              } ${!isSidebarCollapsed ? 'mt-0.5' : 'mx-auto'}`}>
                 {tool.icon}
               </span>
-              <div className="min-w-0">
-                <div className="text-sm font-medium flex items-center gap-1.5">
-                  {tool.name}
-                  {!tool.available && (
-                    <span className="text-[10px] bg-muted/50 text-muted-foreground px-1 py-0.5 rounded">
-                      Soon
-                    </span>
-                  )}
+              {!isSidebarCollapsed && (
+                <div className="min-w-0 overflow-hidden">
+                  <div className="text-sm font-medium flex items-center gap-1.5 whitespace-nowrap">
+                    {tool.name}
+                    {!tool.available && (
+                      <span className="text-[10px] bg-muted/50 text-muted-foreground px-1 py-0.5 rounded">
+                        Soon
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5 leading-tight truncate">
+                    {tool.description}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5 leading-tight">
-                  {tool.description}
-                </div>
-              </div>
+              )}
             </button>
           ))}
         </div>
 
-        {/* Info button at the bottom of the sidebar */}
-        <div className="p-3 border-t border-border mt-auto">
+        {/* Info button and collapse at the bottom */}
+        <div className="p-2 border-t border-border mt-auto flex flex-col gap-1.5">
           <Button 
-            variant="outline" 
-            className="w-full justify-start text-muted-foreground hover:text-foreground"
+            variant={isSidebarCollapsed ? "ghost" : "outline"}
+            size={isSidebarCollapsed ? "icon" : "default"}
+            className={isSidebarCollapsed ? "w-full" : "w-full justify-start text-muted-foreground hover:text-foreground"}
             onClick={() => setShowInstructions(true)}
             disabled={!activeTool?.instructions}
+            title="查看操作说明"
           >
-            <HelpCircle className="w-4 h-4 mr-2" />
-            查看操作说明
+            <HelpCircle className={isSidebarCollapsed ? "w-4 h-4" : "w-4 h-4 mr-2"} />
+            {!isSidebarCollapsed && "操作说明"}
+          </Button>
+
+          <Button
+            variant="ghost"
+            size={isSidebarCollapsed ? "icon" : "default"}
+            className={isSidebarCollapsed ? "w-full" : "w-full justify-start text-muted-foreground hover:text-foreground"}
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            title={isSidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
+          >
+            {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : (
+              <>
+                <ChevronLeft className="w-4 h-4 mr-2" />
+                折叠侧边栏
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -300,6 +352,20 @@ export default function LabView() {
               </p>
             ))}
           </div>
+          {activeTool?.changelog && activeTool.changelog.length > 0 && (
+            <div className="pt-2 border-t border-border">
+              <h4 className="text-sm font-semibold mb-2 text-foreground/90 flex items-center gap-2">
+                更新日志
+              </h4>
+              <ul className="text-sm text-muted-foreground space-y-1.5 list-disc list-inside">
+                {activeTool.changelog.map((log, idx) => (
+                  <li key={idx} className="leading-relaxed">
+                    {log}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
