@@ -1,6 +1,6 @@
 import { join } from "@tauri-apps/api/path";
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
-import { mkdir, readDir, readFile, remove, stat, writeFile } from '@/services/secureFs';
+import { exists, mkdir, readDir, readFile, remove, stat, writeFile } from '@/services/secureFs';
 
 export interface TempImageEntry {
   name: string;
@@ -41,13 +41,31 @@ export async function ensureDirectory(path: string): Promise<void> {
 }
 
 /**
- * Save binary file to specified path.
+ * Save binary file to specified path without overwriting existing files.
  */
 export async function saveFile(dirPath: string, fileName: string, data: Uint8Array): Promise<string> {
   await ensureDirectory(dirPath);
-  const fullPath = await join(dirPath, fileName);
+  const fullPath = await getAvailableFilePath(dirPath, fileName);
   await writeFile(fullPath, data);
   return fullPath;
+}
+
+async function getAvailableFilePath(dirPath: string, fileName: string): Promise<string> {
+  const dotIndex = fileName.lastIndexOf('.');
+  const baseName = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+  const ext = dotIndex > 0 ? fileName.slice(dotIndex) : '';
+
+  let candidateName = fileName;
+  let candidatePath = await join(dirPath, candidateName);
+  let suffix = 1;
+
+  while (await exists(candidatePath)) {
+    candidateName = `${baseName}_${suffix}${ext}`;
+    candidatePath = await join(dirPath, candidateName);
+    suffix += 1;
+  }
+
+  return candidatePath;
 }
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);

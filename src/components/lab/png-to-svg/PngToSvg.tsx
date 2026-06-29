@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { Upload, Download, RefreshCw, FolderOpen, Image as ImageIcon, HelpCircle, Settings, PlayCircle } from 'lucide-react';
+import { useState, useCallback, useMemo, useRef, type Dispatch, type PointerEvent, type RefObject, type SetStateAction, type WheelEvent } from 'react';
+import { Upload, Download, RefreshCw, FolderOpen, Image as ImageIcon, HelpCircle, Settings, PlayCircle, X } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
@@ -13,6 +13,22 @@ export default function PngToSvg() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [originalZoom, setOriginalZoom] = useState(1);
+  const [svgZoom, setSvgZoom] = useState(1);
+  const svgPreviewUrl = useMemo(
+    () => svgContent ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent)}` : null,
+    [svgContent]
+  );
+  const originalPreviewRef = useRef<HTMLDivElement>(null);
+  const svgPreviewRef = useRef<HTMLDivElement>(null);
+  const dragStateRef = useRef<{
+    element: HTMLDivElement;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
   const { toast } = useToast();
   
   // Settings
@@ -36,6 +52,8 @@ export default function PngToSvg() {
         setSelectedFile(picked.file);
         setImageUrl(picked.dataUrl);
         setSvgContent(null);
+        setOriginalZoom(1);
+        setSvgZoom(1);
       }
     } catch (error) {
       console.error('Failed to pick image:', error);
@@ -66,7 +84,17 @@ export default function PngToSvg() {
         ImageTracer.imageToSVG(
           imageUrl,
           (svgstr: string) => {
-            setSvgContent(svgstr);
+            if (!svgstr?.trim()) {
+              setSvgContent(null);
+              toast({
+                title: '未生成结果',
+                description: '当前参数没有生成可预览的 SVG，请调整参数后重试。',
+                variant: 'destructive',
+              });
+            } else {
+              setSvgContent(svgstr);
+            }
+            setSvgZoom(1);
             setIsProcessing(false);
           },
           options
@@ -82,6 +110,87 @@ export default function PngToSvg() {
       }
     }, 100);
   };
+
+  const handlePreviewWheel = (
+    event: WheelEvent<HTMLDivElement>,
+    setZoom: Dispatch<SetStateAction<number>>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setZoom((current) => {
+      const delta = event.deltaY > 0 ? -0.15 : 0.15;
+      return Math.min(6, Math.max(1, Number((current + delta).toFixed(2))));
+    });
+  };
+
+  const handlePreviewPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const element = event.currentTarget;
+    dragStateRef.current = {
+      element,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: element.scrollLeft,
+      scrollTop: element.scrollTop,
+    };
+    element.setPointerCapture(event.pointerId);
+    element.classList.add('cursor-grabbing');
+  };
+
+  const handlePreviewPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const state = dragStateRef.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    if ((event.buttons & 1) !== 1) {
+      stopPreviewDrag(event);
+      return;
+    }
+    event.preventDefault();
+    state.element.scrollLeft = state.scrollLeft - (event.clientX - state.startX);
+    state.element.scrollTop = state.scrollTop - (event.clientY - state.startY);
+  };
+
+  const stopPreviewDrag = (event: PointerEvent<HTMLDivElement>) => {
+    const state = dragStateRef.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    if (state.element.hasPointerCapture(event.pointerId)) {
+      state.element.releasePointerCapture(event.pointerId);
+    }
+    state.element.classList.remove('cursor-grabbing');
+    dragStateRef.current = null;
+  };
+
+  const clearResult = () => {
+    setSvgContent(null);
+    setSvgZoom(1);
+    svgPreviewRef.current?.scrollTo({ left: 0, top: 0 });
+    setIsProcessing(false);
+  };
+
+  const resetPreview = (
+    previewRef: RefObject<HTMLDivElement>,
+    setZoom: Dispatch<SetStateAction<number>>
+  ) => {
+    setZoom(1);
+    previewRef.current?.scrollTo({ left: 0, top: 0 });
+  };
+
+  const renderZoomBadge = (
+    zoom: number,
+    onReset: () => void
+  ) => (
+    <button
+      type="button"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={onReset}
+      className="absolute right-2 top-2 z-10 rounded border border-border/70 bg-background/90 px-2 py-1 text-[10px] font-medium text-muted-foreground shadow-sm backdrop-blur hover:text-foreground"
+      title="恢复原位"
+      aria-label="恢复原位"
+    >
+      {Math.round(zoom * 100)}% · 恢复
+    </button>
+  );
 
   const handleSave = async () => {
     if (!svgContent || !selectedFile) return;
@@ -134,30 +243,69 @@ export default function PngToSvg() {
             <div className="flex-1 p-4 grid grid-cols-2 gap-4 h-full min-h-0">
               <div className="flex flex-col gap-2 min-h-0">
                 <h3 className="text-center font-medium text-sm text-foreground/80 shrink-0">原图预览</h3>
-                <div className="flex-1 border border-border/80 rounded-lg bg-card flex items-center justify-center p-4 relative overflow-hidden shadow-sm">
-                  <img 
-                    src={imageUrl} 
-                    alt="Original" 
-                    className="max-w-full max-h-full object-contain"
-                  />
+                <div
+                  ref={originalPreviewRef}
+                  className="flex-1 border border-border/80 rounded-lg bg-card relative overflow-hidden shadow-sm cursor-grab select-none touch-none overscroll-contain"
+                  onWheel={(event) => handlePreviewWheel(event, setOriginalZoom)}
+                  onPointerDown={handlePreviewPointerDown}
+                  onPointerMove={handlePreviewPointerMove}
+                  onPointerUp={stopPreviewDrag}
+                  onPointerCancel={stopPreviewDrag}
+                >
+                  {renderZoomBadge(originalZoom, () => resetPreview(originalPreviewRef, setOriginalZoom))}
+                  <div
+                    className="flex min-h-full min-w-full items-center justify-center p-4"
+                    style={{
+                      width: `${Math.max(100, originalZoom * 100)}%`,
+                      height: `${Math.max(100, originalZoom * 100)}%`,
+                    }}
+                  >
+                    <img
+                      src={imageUrl}
+                      alt="Original"
+                      draggable={false}
+                      onDragStart={(event) => event.preventDefault()}
+                      className="pointer-events-none max-w-full max-h-full select-none object-contain"
+                    />
+                  </div>
                 </div>
               </div>
               
               <div className="flex flex-col gap-2 min-h-0">
                 <h3 className="text-center font-medium text-sm text-foreground/80 shrink-0">矢量图 (SVG)</h3>
-                <div className="flex-1 border border-border/80 rounded-lg bg-card flex items-center justify-center p-4 relative overflow-hidden shadow-sm">
+                <div
+                  ref={svgPreviewRef}
+                  className="flex-1 border border-border/80 rounded-lg bg-card relative overflow-hidden shadow-sm cursor-grab select-none touch-none overscroll-contain"
+                  onWheel={(event) => handlePreviewWheel(event, setSvgZoom)}
+                  onPointerDown={handlePreviewPointerDown}
+                  onPointerMove={handlePreviewPointerMove}
+                  onPointerUp={stopPreviewDrag}
+                  onPointerCancel={stopPreviewDrag}
+                >
+                  {svgContent && renderZoomBadge(svgZoom, () => resetPreview(svgPreviewRef, setSvgZoom))}
                   {isProcessing ? (
-                    <div className="flex flex-col items-center text-muted-foreground">
+                    <div className="flex h-full min-h-full flex-col items-center justify-center text-muted-foreground">
                       <RefreshCw className="w-8 h-8 animate-spin mb-2 text-primary/60" />
                       <span className="text-sm">正在转换，请稍候...</span>
                     </div>
-                  ) : svgContent ? (
-                    <div 
-                      className="w-full h-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto"
-                      dangerouslySetInnerHTML={{ __html: svgContent }} 
-                    />
+                  ) : svgPreviewUrl ? (
+                    <div
+                      className="flex min-h-full min-w-full items-center justify-center p-4"
+                      style={{
+                        width: `${Math.max(100, svgZoom * 100)}%`,
+                        height: `${Math.max(100, svgZoom * 100)}%`,
+                      }}
+                    >
+                      <img
+                        src={svgPreviewUrl}
+                        alt="SVG Preview"
+                        draggable={false}
+                        onDragStart={(event) => event.preventDefault()}
+                        className="pointer-events-none max-w-full max-h-full select-none object-contain"
+                      />
+                    </div>
                   ) : (
-                    <div className="flex flex-col items-center text-muted-foreground">
+                    <div className="flex h-full min-h-full flex-col items-center justify-center text-muted-foreground">
                       <ImageIcon className="w-12 h-12 mb-2 opacity-20" />
                       <span className="text-sm">点击生成以预览 SVG</span>
                     </div>
@@ -395,6 +543,16 @@ export default function PngToSvg() {
           </div>
 
           <div className="p-4 border-t border-border bg-card/80 shrink-0">
+            {svgContent && (
+              <button
+                type="button"
+                onClick={clearResult}
+                className="mb-2 w-full py-2 bg-muted/60 hover:bg-muted text-foreground/80 text-xs font-semibold rounded-md border border-border/60 flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <X className="w-4 h-4" />
+                清空结果
+              </button>
+            )}
             <button
               type="button"
               onClick={processImage}

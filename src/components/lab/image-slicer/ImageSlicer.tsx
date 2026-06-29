@@ -640,6 +640,7 @@ export default function ImageSlicer() {
               originalWidth={originalWidth}
               originalHeight={originalHeight}
               slices={slices}
+              exportConfig={exportConfig}
               onToggleSelect={handleToggleSliceSelect}
               onSelectAll={handleSelectAllSlices}
             />

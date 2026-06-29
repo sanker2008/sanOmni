@@ -1,4 +1,4 @@
-import { SliceItem } from './types';
+import { ExportConfig, SliceItem } from './types';
 import { Check, X, CheckSquare, Square } from 'lucide-react';
 
 interface SliceGridPreviewProps {
@@ -6,6 +6,7 @@ interface SliceGridPreviewProps {
   originalWidth: number;
   originalHeight: number;
   slices: SliceItem[];
+  exportConfig: ExportConfig;
   onToggleSelect: (sliceId: string) => void;
   onSelectAll: (select: boolean) => void;
 }
@@ -15,6 +16,7 @@ export default function SliceGridPreview({
   originalWidth,
   originalHeight,
   slices,
+  exportConfig,
   onToggleSelect,
   onSelectAll,
 }: SliceGridPreviewProps) {
@@ -56,17 +58,38 @@ export default function SliceGridPreview({
         {slices.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {slices.map((slice, index) => {
-              // Calculate scaling for fit inside a 110x110 box
+              const targetW = exportConfig.width > 0 ? exportConfig.width : slice.width;
+              const targetH = exportConfig.height > 0 ? exportConfig.height : slice.height;
+
+              let outputBg = exportConfig.backgroundColor;
+              if (exportConfig.format === 'jpeg' && outputBg === 'transparent') {
+                outputBg = '#FFFFFF';
+              }
+
+              let drawW = slice.width;
+              let drawH = slice.height;
+              if (slice.width > targetW || slice.height > targetH || exportConfig.mode === 'scale-down') {
+                const drawRatio = Math.min(targetW / slice.width, targetH / slice.height);
+                drawW = slice.width * drawRatio;
+                drawH = slice.height * drawRatio;
+              }
+
               const boxSize = 110;
-              const scale = Math.min(boxSize / slice.width, boxSize / slice.height);
-              const thumbW = slice.width * scale;
-              const thumbH = slice.height * scale;
+              const previewScale = Math.min(boxSize / targetW, boxSize / targetH);
+              const canvasW = targetW * previewScale;
+              const canvasH = targetH * previewScale;
+              const thumbW = drawW * previewScale;
+              const thumbH = drawH * previewScale;
+              const thumbX = ((targetW - drawW) / 2) * previewScale;
+              const thumbY = ((targetH - drawH) / 2) * previewScale;
 
               // Generate background sprite parameters
-              const bgX = slice.x * scale;
-              const bgY = slice.y * scale;
-              const bgW = originalWidth * scale;
-              const bgH = originalHeight * scale;
+              const sourceScale = (drawW / slice.width) * previewScale;
+              const bgX = slice.x * sourceScale;
+              const bgY = slice.y * sourceScale;
+              const bgW = originalWidth * sourceScale;
+              const bgH = originalHeight * sourceScale;
+              const dimensionLabel = `${Math.round(targetW)} × ${Math.round(targetH)}`;
 
               return (
                 <button
@@ -81,18 +104,34 @@ export default function SliceGridPreview({
                 >
                   {/* Thumbnail Area */}
                   <div className="w-full h-[130px] flex items-center justify-center bg-slate-950/20 dark:bg-black/30 relative border-b border-border/40 select-none">
-                    {/* Sprite Slice */}
+                    {/* Export canvas preview */}
                     <div
-                      className="transition-transform duration-200 group-hover:scale-[1.03]"
+                      className={`relative overflow-hidden transition-transform duration-200 group-hover:scale-[1.03] ${
+                        outputBg === 'transparent' ? 'bg-[linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)] bg-[length:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0px] dark:bg-[linear-gradient(45deg,#374151_25%,transparent_25%),linear-gradient(-45deg,#374151_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#374151_75%),linear-gradient(-45deg,transparent_75%,#374151_75%)]'
+                          : ''
+                      }`}
+                      title={`Export preview ${dimensionLabel}`}
                       style={{
-                        width: thumbW,
-                        height: thumbH,
-                        backgroundImage: `url(${imageSrc})`,
-                        backgroundPosition: `-${bgX}px -${bgY}px`,
-                        backgroundSize: `${bgW}px ${bgH}px`,
-                        backgroundRepeat: 'no-repeat',
+                        width: canvasW,
+                        height: canvasH,
+                        backgroundColor: outputBg !== 'transparent' ? outputBg : undefined,
                       }}
-                    />
+                    >
+                      {/* Sprite Slice */}
+                      <div
+                        className="absolute"
+                        style={{
+                          left: thumbX,
+                          top: thumbY,
+                          width: thumbW,
+                          height: thumbH,
+                          backgroundImage: `url(${imageSrc})`,
+                          backgroundPosition: `-${bgX}px -${bgY}px`,
+                          backgroundSize: `${bgW}px ${bgH}px`,
+                          backgroundRepeat: 'no-repeat',
+                        }}
+                      />
+                    </div>
 
                     {/* Discarded Overlay Cover */}
                     {!slice.selected && (
@@ -110,6 +149,10 @@ export default function SliceGridPreview({
                         <Check className="w-3 h-3 stroke-[3px]" />
                       </div>
                     )}
+
+                    <div className="absolute top-2 left-2 bg-primary/90 text-primary-foreground font-mono text-[9px] px-1 py-0.2 rounded shadow-sm">
+                      {dimensionLabel}
+                    </div>
 
                     {/* Dimension Tag */}
                     <div className="absolute bottom-1.5 left-2 bg-black/60 text-white font-mono text-[9px] px-1 py-0.2 rounded opacity-75">

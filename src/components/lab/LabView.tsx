@@ -34,7 +34,6 @@ const ProductImageMaker = lazy(() => import('./product-image-maker/ProductImageM
 const ImageSlicer = lazy(() => import('./image-slicer/ImageSlicer'));
 const AiImageEditor = lazy(() => import('./ai-image-editor/AiImageEditor'));
 const ImageCompressor = lazy(() => import('./image-compressor/ImageCompressor'));
-const WatermarkRemover = lazy(() => import('./watermark-remover/WatermarkRemover'));
 const PngToSvg = lazy(() => import('./png-to-svg/PngToSvg'));
 const PoseStudio = lazy(() => import('./pose-studio/PoseStudio'));
 const GeminiWatermarkLab = lazy(() => import('./gemini-watermark-lab/GeminiWatermarkLab'));
@@ -98,20 +97,6 @@ const LAB_TOOLS: LabTool[] = [
       '2. 使用画笔工具，涂抹你想要修改或擦除的区域（即创建遮罩）。',
       '3. 在下方的提示词输入框中，输入你想把遮罩区域变成什么（例如：“变成一只戴墨镜的猫”）。',
       '4. 点击生成按钮，等待 AI 处理完成即可得到新的图片。'
-    ]
-  },
-  {
-    id: 'watermark-remover',
-    name: '智能去水印',
-    description: '上传图片，涂抹水印区域，AI 一键无痕去除',
-    icon: <Eraser className="w-4 h-4" />,
-    component: WatermarkRemover,
-    available: true,
-    instructions: [
-      '1. 导入带有水印或瑕疵的图片。',
-      '2. 在右侧面板调整画笔大小。',
-      '3. 仔细涂抹覆盖所有的水印或不需要的元素。',
-      '4. 点击“去除”按钮，AI 会根据周围的像素自动推断并填补背景。'
     ]
   },
   {

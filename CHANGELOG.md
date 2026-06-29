@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-06-29
+### Changed
+- sanLabs: removed the duplicated "智能去水印" entry from the lab sidebar; watermark repair remains available through the Gemini watermark lab flow.
+- Image Slicer: slice previews now reflect the configured export canvas size and background behavior, including automatic background fill for non-transparent formats.
+- PNG to SVG: preview panes now support mouse-wheel zoom, left-button drag panning, hidden scrollbars, and a one-click "恢复原位" reset for both source and SVG previews.
+
+### Fixed
+- Image Slicer: repeated exports from the same source image no longer overwrite previous slice files; new files receive numeric suffixes when needed.
+- PNG to SVG: generated SVG previews are rendered through an SVG data URL to avoid blank preview results, and results can be cleared without changing the selected source image.
+
 ## [1.3.1] - 2026-06-26
 ### Added
 - sanLabs: 增加“灵感画布 (Thought Canvas)”，基于 Excalidraw 提供一个本地化、无边框的白板，用于随时记录突发灵感和绘制流程图，支持本地存储与防丢失自动保存。
