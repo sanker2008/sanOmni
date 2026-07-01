@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Lightbulb,
+  Film,
 } from 'lucide-react';
 import {
   Dialog,
@@ -39,6 +40,7 @@ const PoseStudio = lazy(() => import('./pose-studio/PoseStudio'));
 const GeminiWatermarkLab = lazy(() => import('./gemini-watermark-lab/GeminiWatermarkLab'));
 const ProBackgroundRemoval = lazy(() => import('./pro-background-removal/ProBackgroundRemoval'));
 const ThoughtCanvas = lazy(() => import('./thought-canvas/ThoughtCanvas'));
+const GifDecomposer = lazy(() => import('./gif-decomposer/GifDecomposer'));
 
 // ─── Tool Registry ─────────────────────────────────────────
 
@@ -56,6 +58,22 @@ interface LabTool {
 }
 
 const LAB_TOOLS: LabTool[] = [
+  {
+    id: 'gif-decomposer',
+    name: '动图拆帧',
+    description: '拆解 GIF/APNG 动图，逐帧预览和导出',
+    icon: <Film className="w-4 h-4" />,
+    component: GifDecomposer,
+    available: true,
+    instructions: [
+      '1. 拖拽或点击导入一个 GIF 或 APNG 动图文件。',
+      '2. 工具会自动解析出所有帧，右侧面板以网格缩略图展示每一帧。',
+      '3. 中央区域可以播放动图，支持暂停、单帧步进、速度调节。',
+      '4. 点击右侧任意帧缩略图可跳转到该帧并放大预览。',
+      '5. 在右侧帧列表中勾选需要导出的帧，或使用"按间隔选择"功能（如每隔 3 帧取 1 帧）快速选取关键帧。',
+      '6. 设置好导出格式和目录后，点击导出即可批量保存为 PNG 图片。'
+    ]
+  },
   {
     id: 'thought-canvas',
     name: '灵感画布',
