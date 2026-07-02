@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "sanOmni",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "identifier": "com.sanomni.app",
   "build": {
     "beforeDevCommand": "node ./scripts/ensure-vite-for-tauri.mjs",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node ./scripts/build-for-tauri.mjs",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
@@ -44,7 +44,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../scripts"
+      "../scripts/pillow_matting.py",
+      "../scripts/perfect_matting.py"
     ],
     "createUpdaterArtifacts": true
   },

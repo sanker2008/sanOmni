@@ -126,16 +126,21 @@ export async function executeBgRemoval(options: BgRemovalOptions): Promise<strin
     const { resolveResource } = await import('@tauri-apps/api/path');
     const { exists } = await import('@tauri-apps/plugin-fs');
     
-    let scriptPath = await resolveResource(`scripts/${scriptName}`);
-    
-    let isExist = false;
-    try {
-      isExist = await exists(scriptPath);
-    } catch (e) {
-      console.warn("fs.exists check failed (likely scope error):", e);
+    let scriptPath = '';
+    const resourceCandidates = [`scripts/${scriptName}`, scriptName];
+    for (const candidate of resourceCandidates) {
+      const resolved = await resolveResource(candidate);
+      try {
+        if (await exists(resolved)) {
+          scriptPath = resolved;
+          break;
+        }
+      } catch (e) {
+        console.warn("fs.exists check failed (likely scope error):", e);
+      }
     }
-    
-    if (!isExist) {
+
+    if (!scriptPath) {
       scriptPath = `../scripts/${scriptName}`;
     }
 

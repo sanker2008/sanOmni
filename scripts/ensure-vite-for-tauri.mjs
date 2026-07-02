@@ -28,7 +28,12 @@ if (alreadyRunning) {
   process.exit(0);
 }
 
-const child = spawn("npm run dev:raw", {
+const userAgent = process.env.npm_config_user_agent || "";
+const pm = userAgent.includes("pnpm") ? "pnpm" :
+           userAgent.includes("yarn") ? "yarn" :
+           userAgent.includes("bun") ? "bun" : "npm";
+
+const child = spawn(`${pm} run dev:raw`, {
   stdio: "inherit",
   shell: true,
 });

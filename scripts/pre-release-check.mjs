@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 
 /**
- * Pre-release check script
- * Run before tagging to catch common issues that cause CI build failures.
+ * Pre-release check script.
  *
  * Usage:
  *   npm run release:check
- *   npm run release:check -- --tag    (also creates the git tag after checks pass)
+ *   npm run release:check -- --tag
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { execSync } from 'child_process';
-import { resolve, dirname } from 'path';
+import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -20,12 +19,39 @@ const ROOT = resolve(__dirname, '..');
 let hasError = false;
 let hasWarning = false;
 
-function ok(msg) { console.log(`  ✅ ${msg}`); }
-function warn(msg) { console.log(`  ⚠️  ${msg}`); hasWarning = true; }
-function fail(msg) { console.log(`  ❌ ${msg}`); hasError = true; }
-function header(msg) { console.log(`\n── ${msg} ──`); }
+function ok(msg) {
+  console.log(`  OK ${msg}`);
+}
 
-// ── 1. Read versions from all three files ──
+function warn(msg) {
+  console.log(`  WARN ${msg}`);
+  hasWarning = true;
+}
+
+function fail(msg) {
+  console.log(`  FAIL ${msg}`);
+  hasError = true;
+}
+
+function header(msg) {
+  console.log(`\n-- ${msg} --`);
+}
+
+function dirSize(path) {
+  if (!existsSync(path)) return 0;
+
+  let total = 0;
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    const child = resolve(path, entry.name);
+    total += entry.isDirectory() ? dirSize(child) : statSync(child).size;
+  }
+  return total;
+}
+
+function formatMB(bytes) {
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
 header('Version Consistency');
 
 const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf-8'));
@@ -47,19 +73,18 @@ if (uniqueVersions.size === 1) {
   ok(`All versions match: ${pkg.version}`);
 } else {
   fail('Version mismatch detected:');
-  for (const [file, ver] of Object.entries(versions)) {
-    console.log(`       ${file}: ${ver}`);
+  for (const [file, version] of Object.entries(versions)) {
+    console.log(`       ${file}: ${version}`);
   }
 }
 
-// ── 2. Check git status ──
 header('Git Status');
 
 try {
   const status = execSync('git status --porcelain', { cwd: ROOT, encoding: 'utf-8' }).trim();
   if (status) {
     warn('Uncommitted changes detected:');
-    status.split('\n').slice(0, 10).forEach(line => console.log(`       ${line}`));
+    status.split('\n').slice(0, 10).forEach((line) => console.log(`       ${line}`));
     if (status.split('\n').length > 10) console.log('       ... and more');
   } else {
     ok('Working directory is clean');
@@ -68,15 +93,14 @@ try {
   warn('Could not check git status');
 }
 
-// ── 3. Check if tag already exists ──
 header('Tag Check');
 
 const tagName = `v${pkg.version}`;
 
 try {
   const existingTags = execSync('git tag --list', { cwd: ROOT, encoding: 'utf-8' });
-  if (existingTags.split('\n').map(t => t.trim()).includes(tagName)) {
-    fail(`Tag ${tagName} already exists! Bump version or delete the old tag.`);
+  if (existingTags.split('\n').map((tag) => tag.trim()).includes(tagName)) {
+    fail(`Tag ${tagName} already exists. Bump version or delete the old tag.`);
   } else {
     ok(`Tag ${tagName} is available`);
   }
@@ -84,67 +108,97 @@ try {
   warn('Could not check existing tags');
 }
 
-// ── 4. Check node_modules exists ──
 header('Dependencies');
 
 if (existsSync(resolve(ROOT, 'node_modules'))) {
   ok('node_modules exists');
 } else {
-  fail('node_modules missing — run npm install first');
+  fail('node_modules missing. Run npm install first.');
 }
 
-// ── 5. Check TypeScript compilation ──
+header('Bundle Size Guards');
+
+const resources = tauriConf.bundle?.resources ?? [];
+if (resources.includes('../scripts') || resources.includes('..\\scripts')) {
+  fail('bundle.resources includes the whole scripts directory. List only runtime files instead.');
+} else {
+  ok('bundle.resources does not include the whole scripts directory');
+}
+
+try {
+  const trackedArtifacts = execSync('git ls-files scripts/build scripts/dist public/models', {
+    cwd: ROOT,
+    encoding: 'utf-8',
+  }).trim();
+
+  if (trackedArtifacts) {
+    fail('Large generated artifacts are tracked by git:');
+    trackedArtifacts.split('\n').slice(0, 10).forEach((line) => console.log(`       ${line}`));
+    if (trackedArtifacts.split('\n').length > 10) console.log('       ... and more');
+  } else {
+    ok('No tracked PyInstaller build artifacts');
+  }
+} catch {
+  warn('Could not check tracked PyInstaller artifacts');
+}
+
+for (const artifactDir of ['scripts/build', 'scripts/dist']) {
+  const size = dirSize(resolve(ROOT, artifactDir));
+  if (size > 0) {
+    warn(`${artifactDir} exists locally (${formatMB(size)}). It is ignored and must not be bundled.`);
+  }
+}
+
 header('TypeScript Check');
 
 try {
   execSync('npx tsc --noEmit', { cwd: ROOT, encoding: 'utf-8', stdio: 'pipe' });
   ok('TypeScript compilation passed');
-} catch (e) {
+} catch (error) {
   fail('TypeScript compilation errors:');
-  const output = (e.stdout || '') + (e.stderr || '');
-  output.split('\n').slice(0, 15).forEach(line => console.log(`       ${line}`));
+  const output = (error.stdout || '') + (error.stderr || '');
+  output.split('\n').slice(0, 15).forEach((line) => console.log(`       ${line}`));
 }
 
-// ── 6. Check Rust compilation ──
 header('Rust Check (cargo check)');
 
 try {
   execSync('cargo check', { cwd: resolve(ROOT, 'src-tauri'), encoding: 'utf-8', stdio: 'pipe' });
   ok('Rust cargo check passed');
-} catch (e) {
+} catch (error) {
   fail('Rust compilation errors:');
-  const output = (e.stdout || '') + (e.stderr || '');
-  output.split('\n').filter(l => l.includes('error')).slice(0, 15).forEach(line => console.log(`       ${line}`));
+  const output = (error.stdout || '') + (error.stderr || '');
+  output
+    .split('\n')
+    .filter((line) => line.includes('error'))
+    .slice(0, 15)
+    .forEach((line) => console.log(`       ${line}`));
 }
 
-// ── Summary ──
 header('Summary');
 
 if (hasError) {
-  console.log('\n  🚫 Pre-release checks FAILED. Fix the issues above before tagging.\n');
+  console.log('\n  Pre-release checks FAILED. Fix the issues above before tagging.\n');
   process.exit(1);
-} else if (hasWarning) {
-  console.log(`\n  ⚠️  Checks passed with warnings. You can proceed to tag.`);
+}
+
+if (hasWarning) {
+  console.log('\n  Checks passed with warnings. You can proceed to tag after reviewing them.');
   console.log(`  Run: git tag ${tagName} && git push origin ${tagName}\n`);
 } else {
-  console.log(`\n  🎉 All checks passed!`);
+  console.log('\n  All checks passed.');
   console.log(`  Run: git tag ${tagName} && git push origin ${tagName}\n`);
 }
 
-// ── Optional: auto-tag ──
 if (process.argv.includes('--tag')) {
-  if (hasError) {
-    console.log('  Skipping auto-tag due to errors.\n');
-  } else {
-    try {
-      console.log(`  Creating tag ${tagName}...`);
-      execSync(`git tag ${tagName}`, { cwd: ROOT, encoding: 'utf-8' });
-      console.log(`  Pushing tag ${tagName}...`);
-      execSync(`git push origin ${tagName}`, { cwd: ROOT, encoding: 'utf-8' });
-      console.log(`  ✅ Tag ${tagName} pushed successfully!\n`);
-    } catch (e) {
-      console.log(`  ❌ Failed to create/push tag: ${e.message}\n`);
-      process.exit(1);
-    }
+  try {
+    console.log(`  Creating tag ${tagName}...`);
+    execSync(`git tag ${tagName}`, { cwd: ROOT, encoding: 'utf-8' });
+    console.log(`  Pushing tag ${tagName}...`);
+    execSync(`git push origin ${tagName}`, { cwd: ROOT, encoding: 'utf-8' });
+    console.log(`  Tag ${tagName} pushed successfully.\n`);
+  } catch (error) {
+    console.log(`  Failed to create/push tag: ${error.message}\n`);
+    process.exit(1);
   }
 }

@@ -7,6 +7,12 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+scripts/build/
+scripts/dist/
+scripts/*.zip
+scripts/*.tar.gz
+scripts/*.exe
+public/models/
 
 # Tauri build outputs
 src-tauri/target/

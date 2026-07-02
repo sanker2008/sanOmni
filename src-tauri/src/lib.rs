@@ -3,10 +3,48 @@ pub mod database;
 pub mod models;
 pub mod sync;
 
-use tauri::Manager;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, WindowEvent,
+};
+
+const CLOSE_TO_TRAY_SETTING_KEY: &str = "closeToTray";
+const TRAY_SHOW_MENU_ID: &str = "tray_show";
+const TRAY_QUIT_MENU_ID: &str = "tray_quit";
+
+fn should_close_to_tray(db_path: &std::path::Path) -> bool {
+    let Ok(conn) = rusqlite::Connection::open(db_path) else {
+        return false;
+    };
+
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = ?1",
+        rusqlite::params![CLOSE_TO_TRAY_SETTING_KEY],
+        |row| row.get::<_, String>(0),
+    )
+    .map(|value| value == "true" || value == "1")
+    .unwrap_or(true)
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let is_quitting = Arc::new(AtomicBool::new(false));
+    let close_event_is_quitting = Arc::clone(&is_quitting);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -29,7 +67,59 @@ pub fn run() {
             database::init_database(&db_path)
                 .map_err(|e| format!("Failed to init database: {}", e))?;
 
+            let show_item =
+                MenuItem::with_id(app, TRAY_SHOW_MENU_ID, "显示 sanOmni", true, None::<&str>)?;
+            let quit_item =
+                MenuItem::with_id(app, TRAY_QUIT_MENU_ID, "退出 sanOmni", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            let mut tray_builder = TrayIconBuilder::new()
+                .menu(&tray_menu)
+                .tooltip("sanOmni")
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| match event {
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    }
+                    | TrayIconEvent::DoubleClick {
+                        button: MouseButton::Left,
+                        ..
+                    } => show_main_window(tray.app_handle()),
+                    _ => {}
+                });
+
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+
+            tray_builder.build(app)?;
+
             Ok(())
+        })
+        .on_menu_event(move |app, event| match event.id().as_ref() {
+            TRAY_SHOW_MENU_ID => show_main_window(app),
+            TRAY_QUIT_MENU_ID => {
+                is_quitting.store(true, Ordering::SeqCst);
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_window_event(move |window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if close_event_is_quitting.load(Ordering::SeqCst) {
+                    return;
+                }
+
+                let Ok(app_data_dir) = window.app_handle().path().app_data_dir() else {
+                    return;
+                };
+                let db_path = app_data_dir.join("data").join("database.sqlite");
+                if should_close_to_tray(&db_path) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::images::import_image,
@@ -162,6 +252,7 @@ pub fn run() {
             commands::sync_commands::sync_reconcile_snapshot,
             commands::sync_commands::sync_force_repush,
             commands::engine::download_and_extract_engine,
+            commands::engine::ensure_pose_model,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Record<string, any> = {
   bgRemovalEngineDownloaded: false, // 引擎是否已下载
   canvasUndoMaxCount: 50,  // 产品图画布最大撤回次数
   showFullImage: false,  // 列表中是否显示完整图片（不裁剪）
+  closeToTray: true,
   lightThemeColor: "#2563eb",
   darkThemeColor: "#60a5fa",
   sanPromptPublishUrl: "http://localhost:3000/api/sync",

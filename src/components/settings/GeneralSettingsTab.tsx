@@ -178,6 +178,29 @@ export default function GeneralSettingsTab({ localSettings, handleLocalUpdate, o
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">窗口关闭行为</CardTitle>
+          <CardDescription>
+            控制点击窗口关闭按钮时，是直接退出应用，还是隐藏到系统托盘继续运行。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">关闭时最小化到托盘</p>
+              <p className="text-xs text-muted-foreground">
+                关闭后可通过托盘图标恢复窗口；关闭此选项则点击关闭按钮会真正退出。
+              </p>
+            </div>
+            <Switch
+              checked={localSettings.closeToTray ?? false}
+              onCheckedChange={(checked) => handleLocalUpdate("closeToTray", checked)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Database className="w-4 h-4" />
             数据诊断与修复
