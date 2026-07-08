@@ -129,5 +129,5 @@ cd src-tauri
 cargo test gemini_watermark_removal
 cargo test
 cd ..
-npm run build
+pnpm run build
 ```

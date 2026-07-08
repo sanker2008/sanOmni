@@ -29,7 +29,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: 'npm'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -37,12 +42,12 @@ jobs:
           targets: ${{ matrix.rust_target }}
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build the app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-        run: npm run tauri build -- ${{ matrix.args }}
+        run: pnpm run tauri build -- ${{ matrix.args }}
 
       - name: Upload Release Artifacts
         uses: actions/upload-artifact@v4

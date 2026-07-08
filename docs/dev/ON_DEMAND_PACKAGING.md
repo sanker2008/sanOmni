@@ -35,20 +35,20 @@
 适合全量发布，包含所有功能。
 ```bash
 # 开发环境运行
-npm run tauri:dev
+pnpm run tauri:dev
 
 # 打包全功能安装包
-npm run tauri:build
+pnpm run tauri:build
 ```
 
 ### Prompt 专属版
 适合专门分发给只做 AI 绘画 Prompt 管理的用户。
 ```bash
 # 专属版开发环境预览（仅验证界面裁剪效果）
-npm run dev:prompt
+pnpm run dev:prompt
 
 # 一键打包 Prompt 专属安装包
-npm run tauri:build:prompt
+pnpm run tauri:build:prompt
 ```
 
 ## 未来扩展

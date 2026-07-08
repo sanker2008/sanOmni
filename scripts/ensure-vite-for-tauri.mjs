@@ -31,7 +31,7 @@ if (alreadyRunning) {
 const userAgent = process.env.npm_config_user_agent || "";
 const pm = userAgent.includes("pnpm") ? "pnpm" :
            userAgent.includes("yarn") ? "yarn" :
-           userAgent.includes("bun") ? "bun" : "npm";
+           userAgent.includes("bun") ? "bun" : "pnpm";
 
 const child = spawn(`${pm} run dev:raw`, {
   stdio: "inherit",

@@ -6,13 +6,13 @@
 
 ```bash
 cd d:\dev\san\sanOmni
-npm run tauri:build
+pnpm run tauri:build
 ```
 
 或者运行开发模式：
 
 ```bash
-npm run tauri:dev
+pnpm run tauri:dev
 ```
 
 ### 2. 测试水印检测

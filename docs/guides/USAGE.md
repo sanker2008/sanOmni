@@ -9,7 +9,7 @@
 - **MSVC Build Tools 2019+**（Windows）或 **Xcode Command Line Tools**（macOS）— C/C++ 编译工具链
   - Windows：安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)，勾选"使用 C++ 的桌面开发"工作负载
   - macOS：运行 `xcode-select --install`
-- **npm** 或 **pnpm** — 包管理器（Node.js 安装时自带 npm）
+- **pnpm** — 包管理器
 
 ## 二、安装与启动
 
@@ -18,13 +18,13 @@
 cd ai-image-manager
 
 # 2. 安装依赖
-npm install
+pnpm install
 
 # 3. 安装额外的 UI 组件依赖
-npm install @radix-ui/react-switch @radix-ui/react-slider
+pnpm add @radix-ui/react-switch @radix-ui/react-slider
 
 # 4. 启动开发服务器
-npm run tauri:dev
+pnpm run tauri:dev
 ```
 
 > **注意：** 首次构建时，Rust 需要下载并编译所有依赖，通常需要 3-5 分钟。后续启动会快很多，因为依赖已缓存。
@@ -112,7 +112,7 @@ AI 图片管理系统提供以下核心功能：
 - **MSVC Build Tools 2019+**（Windows）或 **Xcode Command Line Tools**（macOS）— C/C++ 编译工具链
   - Windows：安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)，勾选"使用 C++ 的桌面开发"工作负载
   - macOS：运行 `xcode-select --install`
-- **npm** 或 **pnpm** — 包管理器（Node.js 安装时自带 npm）
+- **pnpm** — 包管理器
 
 ## 二、安装与启动
 
@@ -121,13 +121,13 @@ AI 图片管理系统提供以下核心功能：
 cd ai-image-manager
 
 # 2. 安装依赖
-npm install
+pnpm install
 
 # 3. 安装额外的 UI 组件依赖
-npm install @radix-ui/react-switch @radix-ui/react-slider
+pnpm add @radix-ui/react-switch @radix-ui/react-slider
 
 # 4. 启动开发服务器
-npm run tauri:dev
+pnpm run tauri:dev
 ```
 
 > **注意：** 首次构建时，Rust 需要下载并编译所有依赖，通常需要 3-5 分钟。后续启动会快很多，因为依赖已缓存。

@@ -1819,7 +1819,7 @@ export default function IpArchivedView() {
                   <div className="flex flex-col gap-1">
                     {/* 虚拟分类: 全部表情 */}
                     <div
-                      onClick={() => setSelectedPackId("__ALL__")}
+                      onClick={() => { setSelectedPackId("__ALL__"); setSelectedEmojis([]); }}
                       className={`flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer transition-all duration-150 text-sm ${
                         selectedPackId === "__ALL__" ? "bg-secondary font-medium" : "hover:bg-accent/50"
                       }`}
@@ -1829,7 +1829,7 @@ export default function IpArchivedView() {
                     </div>
                     {/* 虚拟分类: 未分组表情 */}
                     <div
-                      onClick={() => setSelectedPackId("__UNGROUPED__")}
+                      onClick={() => { setSelectedPackId("__UNGROUPED__"); setSelectedEmojis([]); }}
                       className={`flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer transition-all duration-150 text-sm ${
                         selectedPackId === "__UNGROUPED__" ? "bg-secondary font-medium" : "hover:bg-accent/50"
                       }`}
@@ -1846,7 +1846,7 @@ export default function IpArchivedView() {
                           return (
                             <div
                               key={pack.id}
-                              onClick={() => setSelectedPackId(pack.id)}
+                              onClick={() => { setSelectedPackId(pack.id); setSelectedEmojis([]); }}
                               className={`flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer transition-all duration-150 group/item text-sm ${
                                 isSelected ? "bg-secondary font-medium" : "hover:bg-accent/50"
                               }`}
@@ -2111,16 +2111,6 @@ export default function IpArchivedView() {
                                       ))}
                                     </DropdownMenuContent>
                                   </DropdownMenu>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
-                                    onClick={() => handleCopyEmoji(emoji.image_path)}
-                                    title="复制到剪贴板"
-                                  >
-                                    <Copy className="w-3.5 h-3.5" />
-                                  </Button>
-
                                   <Button
                                     size="icon"
                                     variant="ghost"

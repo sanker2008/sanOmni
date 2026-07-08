@@ -141,8 +141,8 @@ function toast({ ...props }: Toast) {
   if (
     (!props.variant || props.variant === "default") &&
     (
-      (typeof props.title === "string" && (props.title.includes("成功") || props.title.includes("✓"))) ||
-      (typeof props.description === "string" && (props.description.includes("成功") || props.description.includes("✓")))
+      (typeof props.title === "string" && (props.title.includes("成功") || props.title.includes("✓") || props.title.toLowerCase().includes("success"))) ||
+      (typeof props.description === "string" && (props.description.includes("成功") || props.description.includes("✓") || props.description.toLowerCase().includes("success")))
     )
   ) {
     props.variant = "success"

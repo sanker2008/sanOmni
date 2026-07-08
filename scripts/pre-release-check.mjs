@@ -4,8 +4,8 @@
  * Pre-release check script.
  *
  * Usage:
- *   npm run release:check
- *   npm run release:check -- --tag
+ *   pnpm run release:check
+ *   pnpm run release:check -- --tag
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
@@ -113,7 +113,7 @@ header('Dependencies');
 if (existsSync(resolve(ROOT, 'node_modules'))) {
   ok('node_modules exists');
 } else {
-  fail('node_modules missing. Run npm install first.');
+  fail('node_modules missing. Run pnpm install first.');
 }
 
 header('Bundle Size Guards');
@@ -152,7 +152,7 @@ for (const artifactDir of ['scripts/build', 'scripts/dist']) {
 header('TypeScript Check');
 
 try {
-  execSync('npx tsc --noEmit', { cwd: ROOT, encoding: 'utf-8', stdio: 'pipe' });
+  execSync('pnpm exec tsc --noEmit', { cwd: ROOT, encoding: 'utf-8', stdio: 'pipe' });
   ok('TypeScript compilation passed');
 } catch (error) {
   fail('TypeScript compilation errors:');

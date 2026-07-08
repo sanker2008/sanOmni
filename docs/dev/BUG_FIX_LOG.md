@@ -1,4 +1,4 @@
-﻿# SanOmni 修复与调试记录 (Bug Fix & Debug Log)
+# SanOmni 修复与调试记录 (Bug Fix & Debug Log)
 
 本文档专门用于记录开发过程中遇到的 Bug 及其修复过程。每次的 debug 记录都会详细说明问题表现、根本原因、排查过程以及最终的解决方案，以便后续追溯。
 
@@ -41,7 +41,7 @@
 ### 3. 验证
 - `cargo test gemini_watermark_removal` 通过。
 - `cargo test` 通过，23 个测试全绿。
-- `npm run build` 通过，仅有既有 Vite chunk 警告。
+- `pnpm run build` 通过，仅有既有 Vite chunk 警告。
 
 ### 4. 约定
 - 后续新增 Gemini 去水印入口时，不能只判断 `result.success`。
@@ -161,7 +161,7 @@
   - `D:\sanomnidata\data\database_before_emoji_path_repair_20260615_140235.sqlite`
 - 验证命令：
   - `cargo check` 通过。
-  - `npm run build` 通过，只有既有 Vite chunk / dynamic import 警告。
+  - `pnpm run build` 通过，只有既有 Vite chunk / dynamic import 警告。
 - 当前本地状态：
   - `ip_assets = 6`
   - `ip_emojis = 96`

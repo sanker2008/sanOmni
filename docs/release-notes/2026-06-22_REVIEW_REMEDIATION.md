@@ -50,12 +50,12 @@ This note summarizes the cross-project review remediation that affects
 
 `sanOmni` verification on 2026-06-22:
 
-- `npm run build` passed.
+- `pnpm run build` passed.
 - `cd src-tauri && cargo check` passed.
 
 Cross-project verification recorded during remediation:
 
-- `sanPrompt`: `npm run build` passed after publish contract and Next/Serwist
+- `sanPrompt`: `pnpm run build` passed after publish contract and Next/Serwist
   changes.
 - `sanomni-sync-server`: `cargo test` passed with sync protocol boundary tests.
 

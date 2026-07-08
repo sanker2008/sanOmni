@@ -232,9 +232,9 @@ sanOmni/
 
 ```bash
 cd ai-image-manager
-npm install
-npm install @radix-ui/react-switch @radix-ui/react-slider
-npm run tauri:dev
+pnpm install
+pnpm add @radix-ui/react-switch @radix-ui/react-slider
+pnpm run tauri:dev
 ```
 
 ### 注意事项

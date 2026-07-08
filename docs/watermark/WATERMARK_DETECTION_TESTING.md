@@ -26,7 +26,7 @@
 ### 1. 启动开发服务器
 
 ```bash
-npm run tauri:dev
+pnpm run tauri:dev
 ```
 
 ### 2. 准备测试图片

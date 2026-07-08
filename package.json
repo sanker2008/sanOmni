@@ -3,7 +3,9 @@
   "private": true,
   "version": "1.4.1",
   "type": "module",
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
+    "preinstall": "node -e \"const ua=process.env.npm_config_user_agent||''; if(!ua.includes('pnpm')){console.warn('Warning: this repository uses pnpm (recommended). Run: pnpm install');}\"",
     "dev": "vite",
     "dev:raw": "vite",
     "build": "tsc && vite build",

@@ -153,11 +153,11 @@ Use these commands before considering this remediation complete:
 
 ```bash
 # sanOmni
-npm run build
+pnpm run build
 cd src-tauri && cargo check
 
 # sanPrompt
-npm run build
+pnpm run build
 
 # sanomni-sync-server
 cargo test
@@ -165,7 +165,7 @@ cargo test
 
 Latest verification from `sanOmni` on 2026-06-22:
 
-- `npm run build` passed.
+- `pnpm run build` passed.
 - `cd src-tauri && cargo check` passed.
 - No direct `@tauri-apps/plugin-fs` imports remain under `src/` or `src-tauri/`.
 - No `tauri_plugin_fs`, `fs:allow-*`, or `fs:scope` permission remains under

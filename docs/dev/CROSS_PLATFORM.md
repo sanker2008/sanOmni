@@ -89,17 +89,17 @@ xcode-select --install
 ```bash
 git clone <repository-url>
 cd sanOmni
-npm install
+pnpm install
 ```
 
 ### 3. 开发模式运行
 ```bash
-npm run tauri:dev
+pnpm run tauri:dev
 ```
 
 ### 4. 构建 macOS 应用
 ```bash
-npm run tauri:build
+pnpm run tauri:build
 ```
 
 构建产物位置：
@@ -163,9 +163,9 @@ nvm install node
 
 ### 3. 运行和构建
 ```bash
-npm install
-npm run tauri:dev    # 开发模式
-npm run tauri:build  # 构建
+pnpm install
+pnpm run tauri:dev    # 开发模式
+pnpm run tauri:build  # 构建
 ```
 
 构建产物位置：
