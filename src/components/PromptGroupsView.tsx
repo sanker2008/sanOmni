@@ -83,7 +83,7 @@ const formatPromptPrice = (price?: number) => {
 };
 
 export function PromptGroupsView() {
-  const { settings } = useUIStore();
+  const { settings, openImageViewer } = useUIStore();
   const showFullImage = settings.showFullImage ?? false;
   const { inboxImages, archivedImages, setInboxImages, setArchivedImages } = useImageStore();
   const allImages = useMemo(() => [...inboxImages, ...archivedImages], [inboxImages, archivedImages]);
@@ -967,7 +967,14 @@ export function PromptGroupsView() {
                     {groupImages.get(group.id) && groupImages.get(group.id)!.length > 0 && (
                       <div className="flex gap-2">
                         {groupImages.get(group.id)!.map((img) => (
-                          <div key={img.id} className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center">
+                          <div 
+                            key={img.id} 
+                            className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openImageViewer(img.id);
+                            }}
+                          >
                             <img
                                src={convertFileSrc(img.absolute_path)}
                               alt=""
@@ -1138,7 +1145,14 @@ export function PromptGroupsView() {
 
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                       {images.map((image) => (
-                        <Card key={image.id} className="overflow-hidden">
+                        <Card 
+                          key={image.id} 
+                          className="overflow-hidden cursor-pointer hover:border-primary/50 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openImageViewer(image.id, images as any);
+                          }}
+                        >
                           <div className="relative aspect-square bg-muted/40 flex items-center justify-center">
                             <img
                               src={convertFileSrc(image.absolute_path)}

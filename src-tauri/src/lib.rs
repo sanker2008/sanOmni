@@ -206,6 +206,7 @@ pub fn run() {
             commands::ip_assets::delete_ip_emojis,
             commands::ip_assets::remove_ip_emojis_keep_image,
             commands::ip_assets::move_ip_emojis_to_pack,
+            commands::ip_assets::update_ip_emojis_sort,
             commands::works::create_work,
             commands::works::get_works,
             commands::works::get_work_by_id,

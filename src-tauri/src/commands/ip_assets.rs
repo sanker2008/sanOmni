@@ -67,14 +67,7 @@ fn copy_to_ip_archived(
     let src_path = Path::new(src_file_path);
     if src_path.exists() {
         if let Ok(src_abs) = std::fs::canonicalize(src_path) {
-            // 检查文件是否已经在 ip_archived/{ip_path}/ 目录树下（包括子目录）
-            let ip_dir_abs = std::fs::canonicalize(&ip_dir).ok();
-            if let Some(ip_dir_canonical) = ip_dir_abs {
-                if src_abs.starts_with(&ip_dir_canonical) {
-                    // 文件已在 IP 目录树下，直接返回原路径
-                    return Ok(src_file_path.to_string());
-                }
-            }
+
 
             // 兼容旧逻辑：检查文件是否在目标目录的直接子文件
             if let Ok(dest_abs) = std::fs::canonicalize(&dest_dir) {
@@ -1797,17 +1790,121 @@ pub fn move_ip_emojis_to_pack(
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
 
+    // 获取 customIpArchivedPath
+    let custom_path: Option<String> = conn.query_row(
+        "SELECT value FROM settings WHERE key = 'customIpArchivedPath'",
+        [],
+        |row| row.get(0),
+    ).ok();
+
+    let db_path_obj = Path::new(&db_path);
+    let library_path = if let Some(data_dir) = db_path_obj.parent() {
+        if let Some(base_app_data_dir) = data_dir.parent() {
+            let app_data_dir = crate::commands::get_app_root(&conn, base_app_data_dir);
+            if let Some(ref path_str) = custom_path {
+                if !path_str.trim().is_empty() {
+                    Path::new(path_str).to_path_buf()
+                } else {
+                    app_data_dir.to_path_buf()
+                }
+            } else {
+                app_data_dir.to_path_buf()
+            }
+        } else {
+            return CommandResult::err("Invalid db path".to_string());
+        }
+    } else {
+        return CommandResult::err("Invalid db path".to_string());
+    };
+
+    let pack_path: Option<String> = if let Some(ref pid) = pack_id {
+        conn.query_row(
+            "SELECT path FROM ip_sticker_packs WHERE id = ?",
+            params![pid],
+            |row| row.get(0),
+        )
+        .ok()
+    } else {
+        None
+    };
+
     let tx = match conn.transaction() {
         Ok(t) => t,
         Err(e) => return CommandResult::err(format!("开启事务失败: {}", e)),
     };
 
     for id in emoji_ids {
-        if let Err(e) = tx.execute(
-            "UPDATE ip_emojis SET pack_id = ? WHERE id = ?",
-            params![pack_id, id],
+        let mut old_image_path = String::new();
+        let mut ip_id = String::new();
+        
+        let query_res = tx.query_row(
+            "SELECT image_path, ip_id FROM ip_emojis WHERE id = ?",
+            params![id],
+            |row| {
+                old_image_path = row.get(0)?;
+                ip_id = row.get(1)?;
+                Ok(())
+            }
+        );
+        
+        if query_res.is_err() {
+            continue;
+        }
+        
+        let ip_path: String = match tx.query_row(
+            "SELECT path FROM ip_assets WHERE id = ?",
+            params![ip_id],
+            |row| row.get(0),
         ) {
-            return CommandResult::err(format!("移动表情套件记录失败: {}", e));
+            Ok(p) => p,
+            Err(_) => return CommandResult::err("未找到关联的 IP 形象".to_string()),
+        };
+
+        let old_path_buf = Path::new(&old_image_path);
+        let filename = old_path_buf.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
+        if filename.is_empty() {
+            continue;
+        }
+
+        let relative_path = if let Some(ref pp) = pack_path {
+            Path::new("ip_archived")
+                .join(&ip_path)
+                .join("emojis")
+                .join(pp)
+                .join(&filename)
+        } else {
+            Path::new("ip_archived")
+                .join(&ip_path)
+                .join("emojis")
+                .join(&filename)
+        };
+        
+        let new_absolute_path = library_path.join(&relative_path);
+        let new_abs_str = new_absolute_path.to_str().unwrap().to_string();
+        let rel_str = relative_path.to_str().unwrap().replace("\\", "/");
+
+        if old_image_path != new_abs_str {
+            if let Some(parent) = new_absolute_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            
+            if Path::new(&old_image_path).exists() {
+                if let Err(e) = std::fs::rename(&old_image_path, &new_absolute_path) {
+                    return CommandResult::err(format!("移动文件失败: {}", e));
+                }
+            }
+
+            let _ = tx.execute(
+                "UPDATE ip_images SET absolute_path = ?, relative_path = ? WHERE absolute_path = ?",
+                params![new_abs_str, rel_str, old_image_path],
+            );
+        }
+
+        if let Err(e) = tx.execute(
+            "UPDATE ip_emojis SET pack_id = ?, image_path = ? WHERE id = ?",
+            params![pack_id, new_abs_str, id],
+        ) {
+            return CommandResult::err(format!("更新表情记录失败: {}", e));
         }
     }
 
@@ -1818,3 +1915,33 @@ pub fn move_ip_emojis_to_pack(
 }
 
 // ==================== IP Image Relations ====================
+
+#[tauri::command]
+pub fn update_ip_emojis_sort(
+    db_path: String,
+    emoji_ids: Vec<String>,
+) -> CommandResult<bool> {
+    let mut conn = match Connection::open(Path::new(&db_path)) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
+    };
+
+    let tx = match conn.transaction() {
+        Ok(t) => t,
+        Err(e) => return CommandResult::err(format!("开启事务失败: {}", e)),
+    };
+
+    for (index, id) in emoji_ids.iter().enumerate() {
+        if let Err(e) = tx.execute(
+            "UPDATE ip_emojis SET sort_order = ? WHERE id = ?",
+            params![index as i64, id],
+        ) {
+            return CommandResult::err(format!("更新表情排序失败: {}", e));
+        }
+    }
+
+    match tx.commit() {
+        Ok(_) => CommandResult::ok(true),
+        Err(e) => CommandResult::err(format!("提交事务失败: {}", e)),
+    }
+}

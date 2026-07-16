@@ -1,4 +1,21 @@
 import { useEffect, useState, useMemo, useRef } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useIpImageStore, useUIStore, type IpAssetDetail, type IpStickerPack, type IpAsset } from "@/stores";
 import { ipImageApi, ipApi } from "@/services/tauri";
 import { authorizeFsPaths, copyFile, exists, mkdir, rename, stat } from "@/services/secureFs";
@@ -159,6 +176,27 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
     console.error("自动归档头像失败:", error);
   }
 };
+
+function SortableEmojiCard({ id, children }: { id: string, children: React.ReactNode }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
+}
 
 export default function IpArchivedView() {
   const { 
@@ -398,6 +436,50 @@ export default function IpArchivedView() {
     if (selectedPackId === "__UNGROUPED__") return ipDetail.emojis.filter((e) => !e.pack_id);
     return ipDetail.emojis.filter((e) => e.pack_id === selectedPackId);
   }, [ipDetail, selectedPackId]);
+
+  const [displayEmojis, setDisplayEmojis] = useState(currentEmojis);
+
+  useEffect(() => {
+    setDisplayEmojis(currentEmojis);
+  }, [currentEmojis]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setDisplayEmojis((items) => {
+        const oldIndex = items.findIndex(item => item.id === active.id);
+        const newIndex = items.findIndex(item => item.id === over.id);
+        
+        const newItems = arrayMove(items, oldIndex, newIndex);
+        
+        const newIds = newItems.map(item => item.id);
+        ipApi.updateEmojisSort(newIds).then(() => {
+            loadIpDetail(selectedIpId!); 
+        }).catch(err => {
+            console.error("更新排序失败", err);
+            toast({
+                title: "失败",
+                description: "更新排序失败：" + err.message,
+                variant: "destructive",
+            });
+        });
+        
+        return newItems;
+      });
+    }
+  };
 
   // 表情/关系 API 处理器
   const handleImportEmojis = async () => {
@@ -2004,13 +2086,22 @@ export default function IpArchivedView() {
                         <span className="text-xs">此分组下暂无表情图片，请点击右下角“+”按钮导入</span>
                       </div>
                     ) : (
-                      <div className="p-4 pb-28 grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                        {currentEmojis.map((emoji, index) => {
-                          return (
-                            <div
-                              key={emoji.id}
-                              className="group relative rounded-md border bg-card p-1 flex flex-col gap-1.5 hover:shadow-md transition-all duration-300"
-                            >
+                      <DndContext 
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext 
+                          items={displayEmojis.map(e => e.id)}
+                          strategy={rectSortingStrategy}
+                        >
+                          <div className="p-4 pb-28 grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                            {displayEmojis.map((emoji, index) => {
+                              return (
+                                <SortableEmojiCard key={emoji.id} id={emoji.id}>
+                                  <div
+                                    className="group relative rounded-md border bg-card p-1 flex flex-col gap-1.5 hover:shadow-md transition-all duration-300"
+                                  >
                               <div className="aspect-square rounded overflow-hidden bg-muted relative cursor-pointer">
                                 {/* Emoji Selection Checkbox */}
                                 <div
@@ -2035,7 +2126,7 @@ export default function IpArchivedView() {
                                   alt="表情"
                                   className={`w-full h-full ${showFullImage ? "object-contain bg-background" : "object-cover"}`}
                                   onClick={() => {
-                                    const paths = currentEmojis.map(e => e.image_path);
+                                    const paths = displayEmojis.map(e => e.image_path);
                                     setPreviewImages(paths);
                                     setPreviewIndex(index);
                                   }}
@@ -2047,7 +2138,7 @@ export default function IpArchivedView() {
                                     variant="ghost"
                                     className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
                                     onClick={() => {
-                                      const paths = currentEmojis.map(e => e.image_path);
+                                      const paths = displayEmojis.map(e => e.image_path);
                                       setPreviewImages(paths);
                                       setPreviewIndex(index);
                                     }}
@@ -2144,10 +2235,13 @@ export default function IpArchivedView() {
                                 />
 
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                  </div>
+                                </SortableEmojiCard>
+                              );
+                            })}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
                     )}
                   </ScrollArea>
                 </div>

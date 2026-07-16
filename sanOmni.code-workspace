@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../sanPrompt"
+		},
+		{
+			"path": "../sanomni-web"
 		}
 	],
 	"settings": {}

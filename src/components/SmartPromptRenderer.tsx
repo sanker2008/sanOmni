@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Copy, Dices } from "lucide-react";
+import { Copy, Dices, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -125,15 +125,36 @@ export function SmartPromptRenderer({ templateSchemaStr, basePrompt }: SmartProm
     setValues(newValues);
   };
 
+  const handleReset = () => {
+    if (!schema || !schema.variables) return;
+    const initialValues: Record<string, string> = {};
+    schema.variables.forEach((v: Variable) => {
+      if (v.default !== undefined) {
+        initialValues[v.key] = v.default;
+      } else if (v.options && v.options.length > 0) {
+        // Fallback to first option if no default is provided
+        initialValues[v.key] = v.options[0].value;
+      } else {
+        initialValues[v.key] = "";
+      }
+    });
+    setValues(initialValues);
+  };
+
   return (
     <div className="space-y-6">
       {/* 智能表单区域 */}
       <div className="rounded-md border p-4 bg-card shadow-sm space-y-4">
         <h3 className="text-sm font-semibold flex items-center justify-between border-b pb-2">
           <span>🪄 智能填词面板</span>
-          <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={handleRandomize}>
-            <Dices className="mr-1 h-3.5 w-3.5" /> 随机组合
-          </Button>
+          <div className="flex gap-2 items-center">
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={handleReset}>
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> 恢复默认值
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={handleRandomize}>
+              <Dices className="mr-1 h-3.5 w-3.5" /> 随机组合
+            </Button>
+          </div>
         </h3>
         <div className="grid gap-4 md:grid-cols-2">
           {schema.variables.map(v => (

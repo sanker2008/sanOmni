@@ -1143,6 +1143,18 @@ export const ipApi = {
     }
     return result.data || false;
   },
+
+  async updateEmojisSort(emojiIds: string[]): Promise<boolean> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<boolean>>("update_ip_emojis_sort", {
+      dbPath,
+      emojiIds,
+    });
+    if (!result.success) {
+      throw new Error(result.error || "更新表情排序失败");
+    }
+    return result.data || false;
+  },
 };
 
 // ==================== IP Image API ====================
