@@ -56,7 +56,7 @@ function App() {
         <UpdateChecker />
 
         {/* Header */}
-        <header className="border-b px-4 py-3 flex items-center justify-between bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 shadow-sm">
+        <header className="border-b px-4 py-3 flex items-center justify-between bg-card/95 dark:bg-black backdrop-blur supports-[backdrop-filter]:bg-card/60 shadow-sm">
           <div className="flex items-center gap-6">
             <h1 className="flex items-center gap-2 text-xl font-semibold">
               <img

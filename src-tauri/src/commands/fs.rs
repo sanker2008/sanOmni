@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -559,6 +560,31 @@ pub fn secure_fs_write_file(
             Ok(_) => CommandResult::ok(true),
             Err(e) => CommandResult::err(format!("Failed to write file: {}", e)),
         },
+        Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_append_file(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+    data: Vec<u8>,
+) -> CommandResult<bool> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => {
+            let mut file = match fs::OpenOptions::new().create(true).append(true).open(path) {
+                Ok(file) => file,
+                Err(e) => {
+                    return CommandResult::err(format!("Failed to open file for append: {}", e))
+                }
+            };
+
+            match file.write_all(&data) {
+                Ok(_) => CommandResult::ok(true),
+                Err(e) => CommandResult::err(format!("Failed to append file: {}", e)),
+            }
+        }
         Err(e) => CommandResult::err(e),
     }
 }

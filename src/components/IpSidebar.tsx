@@ -242,7 +242,7 @@ export default function IpSidebar({ onIpSelect, selectedIpId, imageCounts, total
   );
 
   return (
-    <div className={cn("w-80 border-r flex flex-col bg-background md:bg-muted/40 h-full overflow-hidden shrink-0", className)}>
+    <div className={cn("w-80 border-r flex flex-col bg-zinc-50 dark:bg-zinc-900 md:bg-zinc-50 dark:md:bg-zinc-900 h-full overflow-hidden shrink-0", className)}>
       <div className="p-4 border-b flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

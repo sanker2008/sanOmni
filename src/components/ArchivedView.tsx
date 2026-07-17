@@ -58,6 +58,7 @@ export default function ArchivedView() {
 
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
   const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
+  const [isConvertingWebp, setIsConvertingWebp] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [unarchiveResult, setUnarchiveResult] = useState<string | null>(null);
@@ -506,6 +507,65 @@ export default function ArchivedView() {
     }
   };
 
+    const handleBatchConvertFormat = async (format: 'webp' | 'png') => {
+    if (selectedImages.length === 0) return;
+    setIsConvertingWebp(true);
+    let successCount = 0;
+    let failCount = 0;
+    let skippedCount = 0;
+
+    const formatName = format === 'webp' ? 'WebP' : 'PNG';
+    const loadingToast = toast({
+      title: `正在批量转为 ${formatName}`,
+      description: "图片压缩优化中...",
+      duration: 100000,
+    });
+
+    try {
+      const { convertImageToWebp, convertImageToPng } = await import("@/lib/webpConverter");
+      
+      const currentImages = archivedImages;
+
+      for (const imageId of selectedImages) {
+        const image = currentImages.find((img) => img.id === imageId);
+        if (!image) continue;
+        
+        if (image.format?.toLowerCase() === format) {
+          skippedCount++;
+          continue;
+        }
+
+        try {
+          if (format === 'webp') {
+            await convertImageToWebp(image as any);
+          } else {
+            await convertImageToPng(image as any);
+          }
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to convert ${imageId} to ${format}:`, error);
+          failCount++;
+        }
+      }
+
+      toast({
+        title: successCount > 0 ? "✓ 转换完成" : "转换结果",
+        description: `成功: ${successCount} | 跳过: ${skippedCount} | 失败: ${failCount}`,
+        variant: failCount > 0 ? "destructive" : "default",
+      });
+    } catch (error) {
+      toast({
+        title: "✗ 批量转换失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsConvertingWebp(false);
+      loadingToast.dismiss();
+      clearSelection();
+    }
+  };
+
   const handleBatchDelete = () => {
     if (selectedImages.length === 0) return;
     setBatchDeleteStep(1);
@@ -885,6 +945,28 @@ export default function ArchivedView() {
                     )}
                     撤销归档
                   </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 h-7"
+                        disabled={isConvertingWebp}
+                      >
+                        {isConvertingWebp ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <ImageIcon className="w-3 h-3" />
+                        )}
+                        批量图片优化
+                        <ChevronDown className="w-3 h-3 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem onClick={() => handleBatchConvertFormat('webp')}>转为 WebP</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBatchConvertFormat('png')}>转为 PNG-24</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Button
                     variant="ghost"
                     size="sm"

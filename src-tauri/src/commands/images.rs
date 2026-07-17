@@ -29,6 +29,16 @@ pub struct UpdateImageRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateImageFileRequest {
+    pub image_id: String,
+    pub new_filename: String,
+    pub new_relative_path: String,
+    pub new_absolute_path: String,
+    pub new_format: String,
+    pub new_file_size: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ArchiveRequest {
     pub image_ids: Vec<String>,
     pub naming_template: Option<String>,
@@ -1373,3 +1383,47 @@ pub fn get_all_images(db_path: String) -> CommandResult<Vec<SimpleImageInfo>> {
 
     CommandResult::ok(all_images)
 }
+
+#[tauri::command]
+pub async fn update_image_file(
+    db_path: String,
+    request: UpdateImageFileRequest,
+) -> CommandResult<ImageResponse> {
+    let conn = match Connection::open(&db_path) {
+        Ok(conn) => conn,
+        Err(e) => return CommandResult::err(format!("Failed to open database: {}", e)),
+    };
+
+    if let Err(e) = conn.execute(
+        "UPDATE images SET 
+            filename = ?, relative_path = ?, absolute_path = ?, format = ?, file_size = ?
+        WHERE id = ?",
+        rusqlite::params![
+            &request.new_filename,
+            &request.new_relative_path,
+            &request.new_absolute_path,
+            &request.new_format,
+            request.new_file_size,
+            &request.image_id
+        ],
+    ) {
+        return CommandResult::err(format!("Failed to update database: {}", e));
+    }
+
+    let image = match fetch_image_by_id(&conn, &request.image_id) {
+        Some(img) => img,
+        None => return CommandResult::err("Failed to fetch updated image".to_string()),
+    };
+
+    let models = fetch_image_models(&conn, &request.image_id).unwrap_or_default();
+    let tags = fetch_image_tags(&conn, &request.image_id).unwrap_or_default();
+    let prompt_groups = fetch_image_prompt_groups(&conn, &request.image_id).unwrap_or_default();
+
+    CommandResult::ok(ImageResponse {
+        image,
+        models,
+        tags,
+        prompt_groups,
+    })
+}
+

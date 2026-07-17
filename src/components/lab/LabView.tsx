@@ -38,6 +38,7 @@ const ImageCompressor = lazy(() => import('./image-compressor/ImageCompressor'))
 const PngToSvg = lazy(() => import('./png-to-svg/PngToSvg'));
 const PoseStudio = lazy(() => import('./pose-studio/PoseStudio'));
 const GeminiWatermarkLab = lazy(() => import('./gemini-watermark-lab/GeminiWatermarkLab'));
+const GeminiVideoWatermarkLab = lazy(() => import('./gemini-video-watermark/GeminiVideoWatermarkLab'));
 const ProBackgroundRemoval = lazy(() => import('./pro-background-removal/ProBackgroundRemoval'));
 const ThoughtCanvas = lazy(() => import('./thought-canvas/ThoughtCanvas'));
 const GifDecomposer = lazy(() => import('./gif-decomposer/GifDecomposer'));
@@ -131,6 +132,21 @@ const LAB_TOOLS: LabTool[] = [
       '4. 白色水印没有消干净时可把 Alpha 强度略微调高；处理后发黑、变深或亮边明显时调低。每次建议只调整 5%-10%。',
       '5. 结果可靠时会显示 success && watermark_detected。只成功写出文件但 watermark_detected=false 时，不应替换正式原图，应继续手动框选或切换 profile。'
     ]
+  },
+  {
+    id: 'gemini-video-watermark',
+    name: 'Gemini 视频水印修复',
+    description: '本地逐帧修复 Gemini 视频中的可见星形水印',
+    icon: <Film className="w-4 h-4" />,
+    component: GeminiVideoWatermarkLab,
+    available: true,
+    instructions: [
+      '1. 选择 Gemini 生成的 MP4 视频。工具会先检查尺寸、解码和 H.264 编码兼容性。',
+      '2. 当前支持 1280×720、720×1280、1920×1080 和 1080×1920。点击【开始处理】后，会用前 5 帧自动校准水印位置与透明度。',
+      '3. 工具在本机逐帧执行反向 Alpha 混合，再重新编码 H.264；AAC 音频会直接复制，不上传第三方服务器。',
+      '4. 如果结果仍偏白，可小幅提高 Alpha；如果出现黑边或变深，可降低 Alpha。位置略偏时使用 X/Y 微调后重新处理。',
+      '5. 先在结果播放器中对比检查，确认后点击【保存结果】。可见水印会被修复，但隐藏 SynthID 仍然存在。',
+    ],
   },
   {
     id: 'pro-background-removal',
@@ -227,7 +243,7 @@ export default function LabView() {
   return (
     <div className="h-full flex">
       {/* Sidebar — tool list */}
-      <div className={`shrink-0 border-r border-border bg-card/30 flex flex-col transition-all duration-300 ${
+      <div className={`shrink-0 border-r border-border bg-zinc-50 dark:bg-zinc-900 flex flex-col transition-all duration-300 ${
         isSidebarCollapsed ? 'w-14' : 'w-[200px]'
       }`}>
         <div className="px-3 py-3 border-b border-border h-[49px] flex items-center">

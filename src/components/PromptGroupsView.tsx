@@ -89,7 +89,7 @@ export function PromptGroupsView() {
   const allImages = useMemo(() => [...inboxImages, ...archivedImages], [inboxImages, archivedImages]);
 
   const [groups, setGroups] = useState<PromptGroup[]>([]);
-  const [groupImages, setGroupImages] = useState<Map<string, Array<{ id: string; absolute_path: string }>>>(new Map());
+  const [groupImages, setGroupImages] = useState<Map<string, any[]>>(new Map());
   const [selectedGroup, setSelectedGroup] = useState<PromptGroupWithImages | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -259,11 +259,8 @@ export function PromptGroupsView() {
         allGroups.map(async (group) => {
           try {
             const detail = await promptApi.getOne(group.id);
-            // 只取前 4 张图片
-            imagesMap.set(group.id, detail.images.slice(0, 4).map(img => ({
-              id: img.id,
-              absolute_path: img.absolute_path
-            })));
+            // 存储完整图片数据以支持大图浏览
+            imagesMap.set(group.id, detail.images);
           } catch (error) {
             console.error(`加载组 ${group.id} 的图片失败:`, error);
           }
@@ -600,6 +597,53 @@ export function PromptGroupsView() {
         <label className="text-sm font-medium">关联图片</label>
         <span className="text-xs text-muted-foreground">已选 {form.imageIds.length} 张</span>
       </div>
+
+      {/* 已经绑定的图片展示区域 */}
+      {form.imageIds.length > 0 && (
+        <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+          <label className="text-xs font-semibold text-muted-foreground">已绑定的图片 ({form.imageIds.length})</label>
+          <div className="flex flex-wrap gap-2">
+            {form.imageIds.map(id => {
+              const image = allImages.find(img => img.id === id);
+              if (!image) return null;
+              return (
+                <div key={id} className="relative group rounded-md overflow-hidden h-24 w-24 border bg-muted flex-shrink-0">
+                  <img
+                    src={convertFileSrc(image.absolute_path)}
+                    alt={image.filename}
+                    className={`h-full w-full ${showFullImage ? "object-contain" : "object-cover"}`}
+                  />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const boundImages = form.imageIds.map(imgId => allImages.find(i => i.id === imgId)).filter(Boolean);
+                        openImageViewer(id, boundImages as any);
+                      }}
+                      className="text-white hover:text-primary bg-black/40 hover:bg-black/60 rounded-full p-2 transition-colors"
+                      title="查看大图"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleImage(id);
+                      }}
+                      className="text-white hover:text-destructive bg-black/40 hover:bg-black/60 rounded-full p-2 transition-colors"
+                      title="移除关联"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       
       {/* 筛选按钮 */}
       <div className="flex gap-2">
@@ -966,13 +1010,15 @@ export function PromptGroupsView() {
                     {/* 图片缩略图 */}
                     {groupImages.get(group.id) && groupImages.get(group.id)!.length > 0 && (
                       <div className="flex gap-2">
-                        {groupImages.get(group.id)!.map((img) => (
+                        {groupImages.get(group.id)!.slice(0, 4).map((img) => (
                           <div 
                             key={img.id} 
                             className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
                             onClick={(e) => {
                               e.stopPropagation();
-                              openImageViewer(img.id);
+                              const groupImgs = groupImages.get(group.id) || [];
+                              const fullImages = groupImgs.map(img => allImages.find(i => i.id === img.id) || img);
+                              openImageViewer(img.id, fullImages as any);
                             }}
                           >
                             <img
@@ -1150,7 +1196,8 @@ export function PromptGroupsView() {
                           className="overflow-hidden cursor-pointer hover:border-primary/50 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
-                            openImageViewer(image.id, images as any);
+                            const fullImages = selectedGroup.images.map(img => allImages.find(i => i.id === img.id) || img);
+                            openImageViewer(image.id, fullImages as any);
                           }}
                         >
                           <div className="relative aspect-square bg-muted/40 flex items-center justify-center">

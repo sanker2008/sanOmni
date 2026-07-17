@@ -85,6 +85,14 @@ export async function writeFile(path: string, data: Uint8Array): Promise<void> {
   unwrap(result, "Failed to write file");
 }
 
+export async function appendFile(path: string, data: Uint8Array): Promise<void> {
+  const result = await invoke<CommandResult<boolean>>("secure_fs_append_file", {
+    path,
+    data: Array.from(data),
+  });
+  unwrap(result, "Failed to append file");
+}
+
 export async function writeTextFile(path: string, data: string): Promise<void> {
   await writeFile(path, new TextEncoder().encode(data));
 }

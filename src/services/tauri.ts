@@ -23,6 +23,15 @@ interface UpdateImageRequest {
   watermark_platform?: string;
 }
 
+export interface UpdateImageFileRequest {
+  image_id: string;
+  new_filename: string;
+  new_relative_path: string;
+  new_absolute_path: string;
+  new_format: string;
+  new_file_size: number;
+}
+
 interface ArchiveRequest {
   image_ids: string[];
   naming_template?: string;
@@ -84,6 +93,13 @@ export const imageApi = {
     if (!result.success || !result.data) {
       throw new Error(result.error || "Failed to import image");
     }
+    return result.data;
+  },
+
+  async updateFile(request: UpdateImageFileRequest): Promise<ImageWithRelations> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<ImageWithRelations>>('update_image_file', { dbPath, request });
+    if (!result.success || !result.data) throw new Error(result.error || '更新图片文件失败');
     return result.data;
   },
 

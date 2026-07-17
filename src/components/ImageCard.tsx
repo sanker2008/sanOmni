@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi, ipApi, isGeminiWatermarkRemovalSuccessful } from "@/services/tauri";
-import { convertIpImageToWebp, convertIpImageToPng } from "@/lib/webpConverter";
+import { convertIpImageToWebp, convertIpImageToPng, convertImageToWebp, convertImageToPng } from "@/lib/webpConverter";
 import { revealFileInFolder } from "@/lib/pathUtils";
 import { exists, mkdir, rename } from "@/services/secureFs";
 
@@ -59,7 +59,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
 
   const handleConvertFormat = async (e: React.MouseEvent, format: 'webp' | 'png') => {
     e.stopPropagation();
-    if (convertingToWebp || isPrompt) return;
+    if (convertingToWebp) return;
     setConvertingToWebp(true);
     const loadingToast = toast({
       title: `正在转为 ${format.toUpperCase()}`,
@@ -68,9 +68,17 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
     });
     try {
       if (format === 'webp') {
-        await convertIpImageToWebp(image as import("@/stores").IpImageWithRelations);
+        if (isPrompt) {
+          await convertImageToWebp(image as import("@/stores").ImageWithRelations);
+        } else {
+          await convertIpImageToWebp(image as import("@/stores").IpImageWithRelations);
+        }
       } else {
-        await convertIpImageToPng(image as import("@/stores").IpImageWithRelations);
+        if (isPrompt) {
+          await convertImageToPng(image as import("@/stores").ImageWithRelations);
+        } else {
+          await convertIpImageToPng(image as import("@/stores").IpImageWithRelations);
+        }
       }
       setImageTimestamp(Date.now());
       toast({ title: "✓ 转换成功", description: `已成功转为 ${format.toUpperCase()} 格式` });
@@ -631,7 +639,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {!isPrompt && image.format?.toLowerCase() !== 'webp' && (
+            {image.format?.toLowerCase() !== 'webp' && (
               <TooltipProvider delayDuration={200}>
                 <DropdownMenu>
                   <Tooltip>
@@ -993,7 +1001,7 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
 
           {/* 下组：管理操作 */}
           <div className="flex gap-1 bg-background/95 dark:bg-background/95 rounded-md shadow-lg border p-1 backdrop-blur-sm">
-            {!isPrompt && image.format?.toLowerCase() !== 'webp' && (
+            {image.format?.toLowerCase() !== 'webp' && (
               <TooltipProvider delayDuration={200}>
                 <DropdownMenu>
                   <Tooltip>

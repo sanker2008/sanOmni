@@ -829,7 +829,7 @@ export default function GeminiWatermarkLab() {
             <div className="mt-1 text-xs text-muted-foreground">自动优先，手动兜底。</div>
           </div>
 
-          <div className="flex-1 space-y-5 overflow-y-auto p-4">
+          <div className="border-b border-border p-4 shadow-sm z-10">
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -850,6 +850,9 @@ export default function GeminiWatermarkLab() {
                 手动处理
               </button>
             </div>
+          </div>
+
+          <div className="flex-1 space-y-5 overflow-y-auto p-4 pt-5">
 
             <div className="space-y-2">
               <label className="text-xs font-semibold">手动区域</label>
@@ -1012,7 +1015,20 @@ export default function GeminiWatermarkLab() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold">Alpha 强度</label>
-                <span className="font-mono text-xs text-primary">{Math.round(alphaScale * 100)}%</span>
+                <div className="flex items-center gap-2">
+                  {alphaScale !== 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setAlphaScale(1)}
+                      className="inline-flex items-center text-[10px] text-muted-foreground hover:text-foreground"
+                      title="恢复默认值 (100%)"
+                    >
+                      <RotateCcw className="mr-1 h-3 w-3" />
+                      默认
+                    </button>
+                  )}
+                  <span className="font-mono text-xs text-primary">{Math.round(alphaScale * 100)}%</span>
+                </div>
               </div>
               <input
                 type="range"
