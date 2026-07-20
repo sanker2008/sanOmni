@@ -30,6 +30,9 @@ import {
   Settings,
   X,
   Plus,
+  Menu,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from "lucide-react";
 import ImageCard from "./ImageCard";
 import BatchEditModal from "./BatchEditModal";
@@ -38,8 +41,11 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import VendorsView from "./VendorsView";
+import { useAutoGridColumns } from "@/hooks/useAutoGridColumns";
 
 export default function ArchivedView() {
+  const { containerRef: gridRef, columns: gridCols } = useAutoGridColumns(200, 16, 32);
+
   const { 
     archivedImages, 
     selectedImages, 
@@ -69,6 +75,8 @@ export default function ArchivedView() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [isVendorsDialogOpen, setIsVendorsDialogOpen] = useState(false);
   const [isQuickImporting, setIsQuickImporting] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     void loadVendors();
@@ -604,9 +612,14 @@ export default function ArchivedView() {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative">
       {/* Sidebar - Vendor Tree */}
-      <div className="w-56 border-r bg-muted/50 flex flex-col z-10 shadow-[1px_0_2px_rgba(0,0,0,0.02)]">
+      <div className={cn(
+        "absolute inset-y-0 left-0 z-50 transform transition-all duration-300 md:relative md:transform-none overflow-hidden bg-muted/50 border-r shadow-[1px_0_2px_rgba(0,0,0,0.02)]",
+        isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
+        isSidebarCollapsed ? "md:w-0 md:opacity-0 border-0" : "md:w-56 md:opacity-100"
+      )}>
+        <div className="w-56 h-full flex flex-col">
         <div className="p-3 border-b flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FolderTree className="w-4 h-4" />
@@ -694,15 +707,30 @@ export default function ArchivedView() {
             })}
           </div>
         </ScrollArea>
+        </div>
       </div>
 
+      {/* Mobile overlay */}
+      {isMobileSidebarOpen && (
+        <div 
+          className="absolute inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="border-b px-4 py-3 flex items-center justify-between bg-card shadow-sm z-10">
           <div className="flex items-center gap-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Archive className="w-5 h-5" />
+            <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ml-2" onClick={() => setIsMobileSidebarOpen(true)}>
+              <Menu className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="hidden md:flex shrink-0 -ml-2 text-muted-foreground hover:text-foreground" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} title={isSidebarCollapsed ? "展开左侧栏" : "收起左侧栏"}>
+              {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+            </Button>
+            <h2 className="text-lg font-semibold flex items-center gap-2 whitespace-nowrap shrink-0">
+              <Archive className="w-5 h-5 shrink-0" />
               {headerTitle}
             </h2>
             <Badge variant="secondary">{filteredImages.length} 张图片</Badge>
@@ -985,9 +1013,12 @@ export default function ArchivedView() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden" ref={gridRef}>
           {isLoading ? (
-            <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div 
+              className="p-4 grid gap-4"
+              style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+            >
               {Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="space-y-2">
                   <Skeleton className="aspect-square rounded-lg" />
@@ -1010,7 +1041,10 @@ export default function ArchivedView() {
           ) : (
             <ScrollArea className="h-full">
               {viewMode === "grid" ? (
-                <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                <div 
+                  className="p-4 grid gap-4"
+                  style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+                >
                   {sortedImages.map((image) => (
                     <ImageCard 
                       key={image.id} 

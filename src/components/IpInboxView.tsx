@@ -32,8 +32,11 @@ import DropZone from "./DropZone";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BatchEditModal from "./BatchEditModal";
 import ConfirmDialog from "./ConfirmDialog";
+import { useAutoGridColumns } from "@/hooks/useAutoGridColumns";
 
 export default function IpInboxView() {
+  const { containerRef: gridRef, columns: gridCols } = useAutoGridColumns(200, 16, 32);
+
   const { 
     inboxImages, 
     selectedImages, 
@@ -707,9 +710,12 @@ export default function IpInboxView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden" ref={gridRef}>
         {isLoading ? (
-          <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div 
+            className="p-4 grid gap-4"
+            style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+          >
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="space-y-2">
                 <Skeleton className="aspect-square rounded-lg" />
@@ -723,7 +729,10 @@ export default function IpInboxView() {
         ) : (
           <ScrollArea className="h-full">
             {viewMode === "grid" ? (
-              <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div 
+                className="p-4 grid gap-4"
+                style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+              >
                 {sortedImages.map((image) => (
                   <ImageCard 
                     key={image.id} 

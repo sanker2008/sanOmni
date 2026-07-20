@@ -80,6 +80,7 @@ import { IpAssociateCharacterModal } from "./IpAssociateCharacterModal";
 import IpSidebar from "./IpSidebar";
 import { useWorksStore, type CharacterWithRelations } from "@/stores";
 import { cn } from "@/lib/utils";
+import { useAutoGridColumns } from "@/hooks/useAutoGridColumns";
 
 // 自动拷贝并归档头像到当前 IP 形象
 const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
@@ -231,6 +232,10 @@ export default function IpArchivedView() {
   const [isAssociateModalOpen, setIsAssociateModalOpen] = useState(false);
 
   const [sidebarKey, setSidebarKey] = useState(0);
+
+  // Auto grid columns: measure container & compute column count
+  const { containerRef: emojiGridRef, columns: emojiGridCols } = useAutoGridColumns(200, 16, 32);
+  const { containerRef: archivedGridRef, columns: archivedGridCols } = useAutoGridColumns(200, 16, 32);
 
   // IP 编辑/删除 状态
   const [isIpModalOpen, setIsIpModalOpen] = useState(false);
@@ -1768,7 +1773,7 @@ export default function IpArchivedView() {
               {/* Content */}
               <div className="flex-1 overflow-hidden">
                 {isLoading ? (
-                  <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  <div className="p-4 grid gap-4" style={{ gridTemplateColumns: `repeat(${archivedGridCols}, 1fr)` }}>
                     {Array.from({ length: 10 }).map((_, i) => (
                       <div key={i} className="space-y-2">
                         <Skeleton className="aspect-square rounded-lg" />
@@ -1790,9 +1795,9 @@ export default function IpArchivedView() {
                   </div>
                 ) : (
                   <div className="flex flex-col h-full">
-                    <ScrollArea className="flex-1">
+                    <ScrollArea ref={archivedGridRef} className="flex-1">
                       {viewMode === "grid" ? (
-                        <div className="p-4 pb-28 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        <div className="p-4 pb-28 grid gap-4" style={{ gridTemplateColumns: `repeat(${archivedGridCols}, 1fr)` }}>
                           {paginatedImages.map((image) => (
                             <ImageCard 
                               key={image.id} 
@@ -2079,7 +2084,7 @@ export default function IpArchivedView() {
                     </div>
                   )}
 
-                  <ScrollArea className="flex-1 border rounded-md py-3 px-0 bg-background/40">
+                  <ScrollArea ref={emojiGridRef} className="flex-1 border rounded-md py-3 px-0 bg-background/40">
                     {currentEmojis.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
                         <Smile className="w-10 h-10 opacity-30" />
@@ -2095,7 +2100,7 @@ export default function IpArchivedView() {
                           items={displayEmojis.map(e => e.id)}
                           strategy={rectSortingStrategy}
                         >
-                          <div className="p-4 pb-28 grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                          <div className="p-4 pb-28 grid gap-4" style={{ gridTemplateColumns: `repeat(${emojiGridCols}, 1fr)` }}>
                             {displayEmojis.map((emoji, index) => {
                               return (
                                 <SortableEmojiCard key={emoji.id} id={emoji.id}>

@@ -715,18 +715,37 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             .get("original_filename")
                                             .and_then(|v| v.as_str())
                                             .map(String::from);
+                                        let relative_path = json
+                                            .get("relative_path")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let mut absolute_path = json
+                                            .get("absolute_path")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default()
+                                            .to_string();
+
+                                        let custom_path: Option<String> = tx.query_row(
+                                            "SELECT value FROM settings WHERE key = 'custom_library_path'",
+                                            [],
+                                            |row| row.get(0),
+                                        ).ok();
+                                        let library_path = if let Some(ref path_str) = custom_path {
+                                            if !path_str.trim().is_empty() {
+                                                std::path::PathBuf::from(path_str)
+                                            } else {
+                                                app_root.clone()
+                                            }
+                                        } else {
+                                            app_root.clone()
+                                        };
+                                        if !relative_path.is_empty() {
+                                            absolute_path = library_path.join(relative_path).to_string_lossy().to_string();
+                                        }
                                         let ip_id = json
                                             .get("ip_id")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or_default();
-                                        let relative_path: Option<String> = json
-                                            .get("relative_path")
-                                            .and_then(|v| v.as_str())
-                                            .map(String::from);
-                                        let absolute_path: Option<String> = json
-                                            .get("absolute_path")
-                                            .and_then(|v| v.as_str())
-                                            .map(String::from);
                                         let status = json
                                             .get("status")
                                             .and_then(|v| v.as_str())
@@ -862,7 +881,21 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                         let id = json.get("id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let pack_id = json.get("pack_id").and_then(|v| v.as_str()).map(String::from);
-                                        let image_path = json.get("image_path").and_then(|v| v.as_str()).unwrap_or_default();
+                                        let mut image_path = json.get("image_path").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                                        
+                                        let custom_path: Option<String> = tx.query_row(
+                                            "SELECT value FROM settings WHERE key = 'custom_library_path'",
+                                            [],
+                                            |row| row.get(0),
+                                        ).ok();
+                                        let library_path = if let Some(ref path_str) = custom_path {
+                                            if !path_str.trim().is_empty() { std::path::PathBuf::from(path_str) } else { app_root.clone() }
+                                        } else { app_root.clone() };
+                                        
+                                        if let Some(idx) = image_path.find("ip_archived") {
+                                            let rel = &image_path[idx..];
+                                            image_path = library_path.join(rel).to_string_lossy().to_string();
+                                        }
                                         let trigger_word = json.get("trigger_word").and_then(|v| v.as_str()).map(String::from);
                                         let sort_order = json.get("sort_order").and_then(|v| v.as_i64()).unwrap_or(0);
                                         let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();

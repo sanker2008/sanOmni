@@ -37,7 +37,11 @@ const SORT_OPTIONS = [
   { value: "name", label: "作品名称" },
 ];
 
+import { useAutoGridColumns } from "@/hooks/useAutoGridColumns";
+
 export function WorksView() {
+  const { containerRef: gridRef, columns: gridCols } = useAutoGridColumns(250, 24, 48);
+  
   const { works, loading, setFilters, fetchWorks } = useWorksStore();
   const { tags: allTags, setTags } = useTagStore();
   
@@ -251,10 +255,13 @@ export function WorksView() {
 
       {/* Main Works List area */}
       <ScrollArea className="flex-1">
-        <div className="p-6 h-full min-h-[300px]">
+        <div className="p-6 h-full min-h-[300px]" ref={gridRef}>
           {loading ? (
             /* Premium loading grid Skeletons */
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            <div 
+              className="grid gap-6"
+              style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+            >
               {[...Array(8)].map((_, i) => (
                 <div key={i} className="flex flex-col gap-3 rounded-lg border p-4 bg-card">
                   <Skeleton className="aspect-video w-full rounded animate-pulse" />
@@ -292,7 +299,10 @@ export function WorksView() {
             </div>
           ) : (
             /* Works Grid */
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            <div 
+              className="grid gap-6"
+              style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+            >
               {works.map((work) => (
                 <WorkCard
                   key={work.id}

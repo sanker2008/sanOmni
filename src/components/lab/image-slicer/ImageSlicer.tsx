@@ -21,6 +21,7 @@ import {
   Eraser,
   Loader2,
   Plus,
+  Minus,
   ArrowRight,
   Sparkles,
   FileImage,
@@ -674,23 +675,55 @@ export default function ImageSlicer() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <span className="text-[10px] text-muted-foreground block mb-1">垂直等分 (列数)</span>
-                      <input
-                        type="number"
-                        min={1}
-                        value={cols}
-                        onChange={(e) => setCols(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full text-xs px-2.5 py-1.5 bg-muted/40 border border-border/80 rounded-md focus:outline-none focus:border-primary/50 text-foreground font-mono"
-                      />
+                      <div className="flex items-stretch h-[30px] rounded-md border border-border/80 overflow-hidden bg-muted/40 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-shadow">
+                        <button
+                          type="button"
+                          onClick={() => setCols((c) => Math.max(1, c - 1))}
+                          className="flex items-center justify-center w-8 hover:bg-muted/80 text-foreground/80 transition-colors shrink-0 border-r border-border/80"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          value={cols}
+                          onChange={(e) => setCols(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="flex-1 w-0 text-center text-xs px-1 bg-transparent focus:outline-none text-foreground font-mono [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 p-0"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCols((c) => c + 1)}
+                          className="flex items-center justify-center w-8 hover:bg-muted/80 text-foreground/80 transition-colors shrink-0 border-l border-border/80"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <span className="text-[10px] text-muted-foreground block mb-1">水平等分 (行数)</span>
-                      <input
-                        type="number"
-                        min={1}
-                        value={rows}
-                        onChange={(e) => setRows(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full text-xs px-2.5 py-1.5 bg-muted/40 border border-border/80 rounded-md focus:outline-none focus:border-primary/50 text-foreground font-mono"
-                      />
+                      <div className="flex items-stretch h-[30px] rounded-md border border-border/80 overflow-hidden bg-muted/40 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-shadow">
+                        <button
+                          type="button"
+                          onClick={() => setRows((r) => Math.max(1, r - 1))}
+                          className="flex items-center justify-center w-8 hover:bg-muted/80 text-foreground/80 transition-colors shrink-0 border-r border-border/80"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          value={rows}
+                          onChange={(e) => setRows(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="flex-1 w-0 text-center text-xs px-1 bg-transparent focus:outline-none text-foreground font-mono [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none m-0 p-0"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setRows((r) => r + 1)}
+                          className="flex items-center justify-center w-8 hover:bg-muted/80 text-foreground/80 transition-colors shrink-0 border-l border-border/80"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
