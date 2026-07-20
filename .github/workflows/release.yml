@@ -15,10 +15,8 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target universal-apple-darwin'
-            rust_target: 'aarch64-apple-darwin,x86_64-apple-darwin'
           - platform: 'windows-latest'
             args: ''
-            rust_target: 'x86_64-pc-windows-msvc'
     runs-on: ${{ matrix.platform }}
 
     steps:
@@ -38,20 +36,16 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust_target }}
-
-      - name: Add macOS universal build targets
-        if: matrix.platform == 'macos-latest'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build the app
+        uses: tauri-apps/tauri-action@v0
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-        run: pnpm run tauri build -- ${{ matrix.args }}
+        with:
+          args: ${{ matrix.args }}
 
       - name: Upload Release Artifacts
         uses: actions/upload-artifact@v4
