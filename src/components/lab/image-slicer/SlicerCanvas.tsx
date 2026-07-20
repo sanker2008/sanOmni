@@ -181,8 +181,11 @@ export default function SlicerCanvas({
     setTimeout(updateDisplayedSize, 50);
   };
 
-  const scaleX = originalWidth > 0 ? displayedSize.width / originalWidth : 1;
-  const scaleY = originalHeight > 0 ? displayedSize.height / originalHeight : 1;
+  const currentWidth = zoom !== 1.0 ? baseSize.width * zoom : displayedSize.width;
+  const currentHeight = zoom !== 1.0 ? baseSize.height * zoom : displayedSize.height;
+
+  const scaleX = originalWidth > 0 ? currentWidth / originalWidth : 1;
+  const scaleY = originalHeight > 0 ? currentHeight / originalHeight : 1;
 
   // Handle guideline drag events
   const handleMouseDown = (e: React.MouseEvent, guide: Guideline) => {
@@ -322,10 +325,10 @@ export default function SlicerCanvas({
             />
 
             {/* Guidelines and Overlay Containers */}
-            {displayedSize.width > 0 && displayedSize.height > 0 && (
+            {currentWidth > 0 && currentHeight > 0 && (
               <div
                 className="absolute inset-0 overflow-hidden pointer-events-none"
-                style={{ width: displayedSize.width, height: displayedSize.height }}
+                style={{ width: currentWidth, height: currentHeight }}
               >
                 {/* 1. Gutter Overlay Indicators (Discarded Spaces) */}
                 {gutterOverlays.map((gutter) => {
