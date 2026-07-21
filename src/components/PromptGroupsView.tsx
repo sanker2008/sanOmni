@@ -71,11 +71,36 @@ const EMPTY_FORM: PromptFormState = {
   imageIds: [],
 };
 
-const splitPromptTags = (tags?: string) =>
-  (tags || "")
+const splitPromptTags = (tags?: string): string[] => {
+  if (!tags) return [];
+  const trimmed = tags.trim();
+  if (!trimmed) return [];
+
+  // Try parsing as JSON array
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map(t => String(t).trim()).filter(Boolean);
+      }
+    } catch (e) {
+      // If parsing fails (e.g. invalid JSON due to single quotes like python list representation: ['a', 'b'])
+      // Clean up brackets, split by comma, and remove outer quotes.
+      const content = trimmed.slice(1, -1).trim();
+      if (!content) return [];
+      return content
+        .split(/[,，]/)
+        .map(tag => tag.trim().replace(/^['"]|['"]$/g, "").trim())
+        .filter(Boolean);
+    }
+  }
+
+  // Fallback to comma-separated string
+  return trimmed
     .split(/[,，]/)
-    .map((tag) => tag.trim())
+    .map(tag => tag.trim())
     .filter(Boolean);
+};
 
 const formatPromptPrice = (price?: number) => {
   if (price === undefined || price === null || Number.isNaN(price)) return "";
@@ -313,7 +338,7 @@ export function PromptGroupsView() {
         description: result.group.description || "",
         template_schema: result.group.template_schema || "",
         category: result.group.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY,
-        tags: result.group.tags || "",
+        tags: splitPromptTags(result.group.tags).join(", "),
         price: result.group.price?.toString() || "",
         imageIds: result.images.map((image) => image.id),
       });
@@ -381,7 +406,11 @@ export function PromptGroupsView() {
     let description = form.description.trim();
     const templateSchema = form.template_schema.trim() || undefined;
     const category = form.category || DEFAULT_PROMPT_TEMPLATE_CATEGORY;
-    const tags = form.tags.trim();
+    
+    // Parse form input (comma-separated) to a JSON array string for DB storage
+    const parsedTags = form.tags.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+    const tags = JSON.stringify(parsedTags);
+
     const parsedPrice = Number.parseFloat(form.price);
     const price = Number.isFinite(parsedPrice) ? parsedPrice : undefined;
 
