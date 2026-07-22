@@ -179,6 +179,18 @@ pub async fn get_works(
             query.push_str(" AND status = ?");
             params.push(Box::new(status));
         }
+        if let Some(tag_ids) = f.tag_ids {
+            if !tag_ids.is_empty() {
+                let placeholders = vec!["?"; tag_ids.len()].join(",");
+                query.push_str(&format!(
+                    " AND id IN (SELECT work_id FROM work_tags WHERE tag_id IN ({}))",
+                    placeholders
+                ));
+                for tid in tag_ids {
+                    params.push(Box::new(tid));
+                }
+            }
+        }
 
         // Sorting
         query.push_str(work_sort_clause(

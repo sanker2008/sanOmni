@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-07-22
+### Changed
+- sanLabs: Gemini 水印高级修复顶栏中的“打开输出目录”按钮调整为始终显示，方便随时快速访问导出文件夹。
+- sanIP (表情包管理): 表情包分组简介文本添加单行截断 (`line-clamp-1`) 与 Hover Tooltip 完整提示，防止长文本占据过高页面布局。
+
+### Fixed
+- sanIP (作品集): 新增标签全量自动去重函数 `groupAndDeduplicateTags`，合并同名重复标签（如“风景”、“人像”），并在标签筛选区域支持展开/收起切换 (默认展示 16 个)，避免多行标签铺满页面。
+- Backend: 补充 Rust `get_works` 命令中的 `tag_ids` SQL 筛选实现。
+
 ## [1.3.2] - 2026-06-29
 ### Changed
 - sanLabs: removed the duplicated "智能去水印" entry from the lab sidebar; watermark repair remains available through the Gemini watermark lab flow.

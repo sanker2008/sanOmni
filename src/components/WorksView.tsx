@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Plus, Film, Search, Filter, SortDesc, SortAsc, X, Check } from "lucide-react";
+import { Plus, Film, Search, Filter, SortDesc, SortAsc, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { useWorksStore, useTagStore, type WorkWithRelations } from "@/stores";
+import { useWorksStore, useTagStore, groupAndDeduplicateTags, type WorkWithRelations, type UniqueTagGroup } from "@/stores";
 import { tagApi } from "@/services/tauri";
 import { Skeleton } from "@/components/ui/skeleton";
 import WorkCard from "./WorkCard";
@@ -49,12 +49,23 @@ export function WorksView() {
   const [selectedType, setSelectedType] = useState<string>("__ALL__");
   const [selectedStatus, setSelectedStatus] = useState<string>("__ALL__");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [isTagsExpanded, setIsTagsExpanded] = useState(false);
   
   const [sortBy, setSortBy] = useState<string>("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingWork, setEditingWork] = useState<WorkWithRelations | null>(null);
+
+  // Group & deduplicate system tags
+  const uniqueTagGroups = groupAndDeduplicateTags(allTags);
+  const MAX_COLLAPSED_TAGS = 16;
+  const visibleTagGroups = isTagsExpanded
+    ? uniqueTagGroups
+    : uniqueTagGroups.filter((group, index) => {
+        const isSelected = group.ids.some((id) => selectedTagIds.includes(id));
+        return index < MAX_COLLAPSED_TAGS || isSelected;
+      });
 
   // Load tags and works on mount
   useEffect(() => {
@@ -104,9 +115,12 @@ export function WorksView() {
     setIsEditOpen(true);
   };
 
-  const handleToggleTag = (tagId: string) => {
+  const handleToggleTagGroup = (group: UniqueTagGroup) => {
+    const isSelected = group.ids.some((id) => selectedTagIds.includes(id));
     setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+      isSelected
+        ? prev.filter((id) => !group.ids.includes(id))
+        : Array.from(new Set([...prev, ...group.ids]))
     );
   };
 
@@ -212,32 +226,51 @@ export function WorksView() {
         </div>
 
         {/* Second Row: Tags filtering and clear actions */}
-        <div className="flex flex-wrap gap-2 items-center text-xs pt-1 border-t border-dashed">
-          <div className="flex items-center gap-1.5 text-muted-foreground mr-1.5 font-medium shrink-0">
+        <div className="flex flex-wrap gap-2 items-start text-xs pt-1 border-t border-dashed">
+          <div className="flex items-center gap-1.5 text-muted-foreground mr-1.5 font-medium shrink-0 pt-0.5">
             <Filter className="w-3.5 h-3.5" />
             <span>按标签筛选：</span>
           </div>
 
-          <div className="flex flex-wrap gap-1.5 flex-1 min-w-[200px]">
-            {allTags.map((tag) => {
-              const isSelected = selectedTagIds.includes(tag.id);
+          <div className="flex flex-wrap gap-1.5 flex-1 min-w-[200px] transition-all">
+            {visibleTagGroups.map((group) => {
+              const isSelected = group.ids.some((id) => selectedTagIds.includes(id));
               return (
                 <Badge
-                  key={tag.id}
+                  key={group.name}
                   variant={isSelected ? "default" : "outline"}
-                  onClick={() => handleToggleTag(tag.id)}
+                  onClick={() => handleToggleTagGroup(group)}
                   className="cursor-pointer text-[10px] font-normal transition-all py-0.5 px-2 select-none"
                   style={{
-                    backgroundColor: isSelected && tag.color ? tag.color : undefined,
-                    borderColor: !isSelected && tag.color ? `${tag.color}40` : undefined,
-                    color: !isSelected && tag.color ? tag.color : undefined,
+                    backgroundColor: isSelected && group.color ? group.color : undefined,
+                    borderColor: !isSelected && group.color ? `${group.color}40` : undefined,
+                    color: !isSelected && group.color ? group.color : undefined,
                   }}
                 >
-                  {tag.name}
+                  {group.name}
                   {isSelected && <Check className="w-2.5 h-2.5 ml-0.5" />}
                 </Badge>
               );
             })}
+
+            {uniqueTagGroups.length > 16 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsTagsExpanded(!isTagsExpanded)}
+                className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-2 gap-1 font-normal"
+              >
+                {isTagsExpanded ? (
+                  <>
+                    收起 <ChevronUp className="w-3 h-3" />
+                  </>
+                ) : (
+                  <>
+                    展开 ({uniqueTagGroups.length}) <ChevronDown className="w-3 h-3" />
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
           {activeFiltersCount > 0 && (
@@ -245,7 +278,7 @@ export function WorksView() {
               variant="ghost"
               size="sm"
               onClick={handleClearAllFilters}
-              className="h-7 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted font-normal px-2.5"
+              className="h-7 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted font-normal px-2.5 shrink-0"
             >
               清除全部筛选 ({activeFiltersCount})
             </Button>

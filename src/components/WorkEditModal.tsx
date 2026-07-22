@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type WorkWithRelations, useWorksStore, useTagStore, useUIStore } from "@/stores";
+import { type WorkWithRelations, useWorksStore, useTagStore, useUIStore, groupAndDeduplicateTags, type UniqueTagGroup } from "@/stores";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,8 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
+  const uniqueTagGroups = groupAndDeduplicateTags(allTags);
+
   // Load all system tags if not loaded
   useEffect(() => {
     if (open) {
@@ -108,6 +110,15 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
     }
   }, [open, work]);
 
+  const handleToggleTagGroup = (group: UniqueTagGroup) => {
+    const isSelected = group.ids.some((id) => selectedTagIds.includes(id));
+    setSelectedTagIds((prev) =>
+      isSelected
+        ? prev.filter((id) => !group.ids.includes(id))
+        : Array.from(new Set([...prev, ...group.ids]))
+    );
+  };
+
   const triggerFileSelect = async () => {
     try {
       const picked = await pickSingleFile({
@@ -123,11 +134,7 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
     }
   };
 
-  const handleToggleTag = (tagId: string) => {
-    setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-    );
-  };
+
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -376,24 +383,24 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
         <div className="flex flex-col gap-2 py-2">
           <label className="text-xs font-semibold text-muted-foreground">作品标签关联</label>
           <div className="flex flex-wrap gap-1.5 border rounded-lg p-3 bg-muted/20 min-h-[60px] max-h-[140px] overflow-y-auto">
-            {allTags.length === 0 ? (
+            {uniqueTagGroups.length === 0 ? (
               <span className="text-xs text-muted-foreground italic">暂无系统预设标签</span>
             ) : (
-              allTags.map((tag) => {
-                const isSelected = selectedTagIds.includes(tag.id);
+              uniqueTagGroups.map((group) => {
+                const isSelected = group.ids.some((id) => selectedTagIds.includes(id));
                 return (
                   <Badge
-                    key={tag.id}
+                    key={group.name}
                     variant={isSelected ? "default" : "outline"}
-                    className="cursor-pointer transition-all hover:scale-105 active:scale-95 flex items-center gap-1 select-none"
+                    className="cursor-pointer transition-all hover:scale-105 active:scale-95 flex items-center gap-1 select-none text-xs"
                     style={{
-                      backgroundColor: isSelected && tag.color ? tag.color : undefined,
-                      borderColor: !isSelected && tag.color ? `${tag.color}60` : undefined,
-                      color: !isSelected && tag.color ? tag.color : undefined,
+                      backgroundColor: isSelected && group.color ? group.color : undefined,
+                      borderColor: !isSelected && group.color ? `${group.color}60` : undefined,
+                      color: !isSelected && group.color ? group.color : undefined,
                     }}
-                    onClick={() => handleToggleTag(tag.id)}
+                    onClick={() => handleToggleTagGroup(group)}
                   >
-                    {tag.name}
+                    {group.name}
                     {isSelected && <Check className="w-3 h-3 ml-0.5" />}
                   </Badge>
                 );

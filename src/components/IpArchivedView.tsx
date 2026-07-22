@@ -1965,16 +1965,25 @@ export default function IpArchivedView() {
               {/* 表情包网格 (中间大网格) */}
               <div className="flex-1 border rounded-lg p-4 flex flex-col gap-3 bg-card/20 overflow-hidden min-w-0">
                 <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-sm truncate">
                         {selectedPackId === "__ALL__"
                           ? "全部表情"
                           : selectedPackId === "__UNGROUPED__"
                           ? "未分组表情"
                           : ipDetail.sticker_packs.find((p) => p.id === selectedPackId)?.name}
                       </h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p
+                        className="text-xs text-muted-foreground mt-0.5 line-clamp-1"
+                        title={
+                          selectedPackId === "__ALL__"
+                            ? "当前 IP 形象下的所有表情包图片"
+                            : selectedPackId === "__UNGROUPED__"
+                            ? "尚未归类到任何表情包套件的表情"
+                            : ipDetail.sticker_packs.find((p) => p.id === selectedPackId)?.description || "无套件描述"
+                        }
+                      >
                         {selectedPackId === "__ALL__"
                           ? "当前 IP 形象下的所有表情包图片"
                           : selectedPackId === "__UNGROUPED__"
@@ -1983,7 +1992,7 @@ export default function IpArchivedView() {
                       </p>
                     </div>
                     {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && (
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"

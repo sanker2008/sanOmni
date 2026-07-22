@@ -632,16 +632,14 @@ export default function GeminiWatermarkLab() {
             <ImagePlus className="h-3.5 w-3.5" />
             选择图片
           </button>
-          {outputPath && (
-            <button
-              type="button"
-              onClick={openExportFolder}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/15"
-            >
-              <FolderOpen className="h-3.5 w-3.5" />
-              打开输出目录
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={openExportFolder}
+            className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/15"
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            打开输出目录
+          </button>
         </div>
       </div>
 

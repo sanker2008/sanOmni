@@ -933,3 +933,34 @@ export const useCharactersStore = create<CharactersStore>((set) => ({
   setLoading: (loading) => set({ loading }),
 }));
 
+// Tag Deduplication Helper
+export interface UniqueTagGroup {
+  name: string;
+  ids: string[];
+  color?: string;
+}
+
+export function groupAndDeduplicateTags(tags: Tag[]): UniqueTagGroup[] {
+  const map = new Map<string, UniqueTagGroup>();
+  for (const tag of tags) {
+    if (!tag || !tag.name) continue;
+    const key = tag.name.trim().toLowerCase();
+    if (!key) continue;
+    const existing = map.get(key);
+    if (existing) {
+      if (!existing.ids.includes(tag.id)) {
+        existing.ids.push(tag.id);
+      }
+      if (!existing.color && tag.color) {
+        existing.color = tag.color;
+      }
+    } else {
+      map.set(key, {
+        name: tag.name.trim(),
+        ids: [tag.id],
+        color: tag.color || undefined,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
