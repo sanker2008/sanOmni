@@ -111,7 +111,7 @@ function App() {
                   <ThemeIcon className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent side="bottom">
                 <p>{THEME_LABELS[theme]}</p>
               </TooltipContent>
             </Tooltip>
@@ -121,7 +121,7 @@ function App() {
                   <Settings className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent side="bottom" align="end">
                 <p>设置 (Ctrl+,)</p>
               </TooltipContent>
             </Tooltip>
