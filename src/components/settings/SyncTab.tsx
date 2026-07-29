@@ -252,7 +252,7 @@ export default function SyncTab() {
         <div className="space-y-2">
           <label className="text-sm font-medium">服务端 URL</label>
           <Input 
-            placeholder="http://192.168.1.100:3000" 
+            placeholder="http://192.168.1.100:3080"
             value={serverUrl} 
             onChange={e => setServerUrl(e.target.value)} 
           />
@@ -268,10 +268,10 @@ export default function SyncTab() {
         </div>
         
         <div className="flex gap-2">
-          <Button onClick={handleTest} disabled={testing || !serverUrl} variant="secondary">
+          <Button onClick={handleTest} disabled={testing || !serverUrl.trim() || !apiKey.trim()} variant="secondary">
             {testing ? "测试中..." : "测试连接"}
           </Button>
-          <Button onClick={handleSave} disabled={loading || !serverUrl}>
+          <Button onClick={handleSave} disabled={loading || !serverUrl.trim() || !apiKey.trim()}>
             保存配置
           </Button>
         </div>

@@ -110,6 +110,41 @@ END;
 CREATE TRIGGER IF NOT EXISTS sync_ip_emojis_delete AFTER DELETE ON ip_emojis BEGIN
     INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_emojis', OLD.id, 'DELETE', json_object('id', OLD.id));
 END;
+
+-- ip_character_sheets
+CREATE TRIGGER IF NOT EXISTS sync_ip_character_sheets_insert AFTER INSERT ON ip_character_sheets BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_character_sheets', NEW.id, 'INSERT', json_object('id', NEW.id, 'ip_id', NEW.ip_id, 'image_path', NEW.image_path, 'sheet_type', NEW.sheet_type, 'sort_order', NEW.sort_order, 'created_at', NEW.created_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_character_sheets_update AFTER UPDATE ON ip_character_sheets BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_character_sheets', NEW.id, 'UPDATE', json_object('id', NEW.id, 'ip_id', NEW.ip_id, 'image_path', NEW.image_path, 'sheet_type', NEW.sheet_type, 'sort_order', NEW.sort_order, 'created_at', NEW.created_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_character_sheets_delete AFTER DELETE ON ip_character_sheets BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_character_sheets', OLD.id, 'DELETE', json_object('id', OLD.id, 'ip_id', OLD.ip_id, 'image_path', OLD.image_path));
+END;
+
+-- ip_creations. A path change modifies the composite key, so represent it as
+-- DELETE + INSERT rather than an UPDATE that cannot identify the old row.
+CREATE TRIGGER IF NOT EXISTS sync_ip_creations_insert AFTER INSERT ON ip_creations BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_creations', NEW.ip_id || '|' || NEW.image_path, 'INSERT', json_object('ip_id', NEW.ip_id, 'image_path', NEW.image_path, 'creation_name', NEW.creation_name, 'created_at', NEW.created_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_creations_update AFTER UPDATE ON ip_creations BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_creations', OLD.ip_id || '|' || OLD.image_path, 'DELETE', json_object('ip_id', OLD.ip_id, 'image_path', OLD.image_path));
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_creations', NEW.ip_id || '|' || NEW.image_path, 'INSERT', json_object('ip_id', NEW.ip_id, 'image_path', NEW.image_path, 'creation_name', NEW.creation_name, 'created_at', NEW.created_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_creations_delete AFTER DELETE ON ip_creations BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_creations', OLD.ip_id || '|' || OLD.image_path, 'DELETE', json_object('ip_id', OLD.ip_id, 'image_path', OLD.image_path));
+END;
+
+-- ip_relations
+CREATE TRIGGER IF NOT EXISTS sync_ip_relations_insert AFTER INSERT ON ip_relations BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_relations', NEW.ip_a_id || '|' || NEW.ip_b_id || '|' || NEW.relation_type, 'INSERT', json_object('ip_a_id', NEW.ip_a_id, 'ip_b_id', NEW.ip_b_id, 'relation_type', NEW.relation_type, 'description', NEW.description, 'created_at', NEW.created_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_relations_update AFTER UPDATE ON ip_relations BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_relations', NEW.ip_a_id || '|' || NEW.ip_b_id || '|' || NEW.relation_type, 'UPDATE', json_object('ip_a_id', NEW.ip_a_id, 'ip_b_id', NEW.ip_b_id, 'relation_type', NEW.relation_type, 'description', NEW.description, 'created_at', NEW.created_at));
+END;
+CREATE TRIGGER IF NOT EXISTS sync_ip_relations_delete AFTER DELETE ON ip_relations BEGIN
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_relations', OLD.ip_a_id || '|' || OLD.ip_b_id || '|' || OLD.relation_type, 'DELETE', json_object('ip_a_id', OLD.ip_a_id, 'ip_b_id', OLD.ip_b_id, 'relation_type', OLD.relation_type));
+END;
 "#;
 
 pub const DROP_TRIGGERS: &str = r#"
@@ -136,4 +171,39 @@ DROP TRIGGER IF EXISTS sync_ip_sticker_pack_platforms_delete;
 DROP TRIGGER IF EXISTS sync_ip_emojis_insert;
 DROP TRIGGER IF EXISTS sync_ip_emojis_update;
 DROP TRIGGER IF EXISTS sync_ip_emojis_delete;
+DROP TRIGGER IF EXISTS sync_ip_character_sheets_insert;
+DROP TRIGGER IF EXISTS sync_ip_character_sheets_update;
+DROP TRIGGER IF EXISTS sync_ip_character_sheets_delete;
+DROP TRIGGER IF EXISTS sync_ip_creations_insert;
+DROP TRIGGER IF EXISTS sync_ip_creations_update;
+DROP TRIGGER IF EXISTS sync_ip_creations_delete;
+DROP TRIGGER IF EXISTS sync_ip_relations_insert;
+DROP TRIGGER IF EXISTS sync_ip_relations_update;
+DROP TRIGGER IF EXISTS sync_ip_relations_delete;
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sync_triggers_cover_all_mutable_sanip_child_tables() {
+        for table in ["ip_character_sheets", "ip_creations", "ip_relations"] {
+            assert!(
+                SYNC_TRIGGERS.contains(&format!("sync_{}_insert", table)),
+                "missing INSERT trigger for {}",
+                table
+            );
+            assert!(
+                SYNC_TRIGGERS.contains(&format!("sync_{}_delete", table)),
+                "missing DELETE trigger for {}",
+                table
+            );
+            assert!(
+                DROP_TRIGGERS.contains(&format!("sync_{}_insert", table)),
+                "missing DROP statement for {}",
+                table
+            );
+        }
+    }
+}

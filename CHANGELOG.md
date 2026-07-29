@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-07-29
+
+### Added
+- sanIP 云同步现已覆盖角色设定图、创作图片和 IP 关系，包括本地变更触发器、拉取应用、关联文件下载以及强制全量重推。
+- 新增[同步正确性约束](docs/architecture/SYNC_CORRECTNESS.md)，记录游标、事务、记录身份和文件失败处理的不变量。
+
+### Changed
+- Pull 游标只在整批远端数据库变更成功提交后推进；Push 返回的服务端版本不再被当作已消费的 Pull 游标。
+- 创作图片使用 `ip_id|文件名` 作为跨设备记录身份，并兼容 Windows 与 Linux 路径分隔符。
+- 连接测试与实际同步统一复用 URL、API Key 和客户端校验行为；公网地址必须使用 HTTPS，HTTP 仅允许回环或私网地址。
+
+### Fixed
+- 修复同一轮先 Push 后 Pull 时可能跳过其他设备较早变更的问题。
+- 修复部分 Pull 仍提交并推进游标、导致失败记录之后无法通过增量同步恢复的问题；任一数据库变更无法应用时整批回滚。
+- 修复角色设定图、创作图片和 IP 关系未被完整记录或拉取的问题。
+- 修复创作图片因设备绝对路径不同而重复、无法更新或无法删除的问题。
+- 修复待上传文件读取失败仍继续同步，以及下载、读取或哈希校验失败未可靠进入重试队列的问题。
+- 修复空 URL、空 API Key、错误端口及系统密钥链异常在连接测试与真实同步之间表现不一致的问题。
+
+### Notes
+- 强制全量重推不是安全合并或覆盖恢复。执行前必须备份，并确认本机是数据最完整的来源。
+
 ## [1.4.1] - 2026-07-22
 ### Changed
 - sanLabs: Gemini 水印高级修复顶栏中的“打开输出目录”按钮调整为始终显示，方便随时快速访问导出文件夹。

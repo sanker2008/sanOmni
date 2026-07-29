@@ -7,6 +7,10 @@ use std::path::Path;
 use tauri::Emitter;
 use uuid::Uuid;
 
+use crate::sync::identity::{
+    creation_record_id, portable_file_name, split_creation_record_id,
+};
+
 fn escape_legacy_backslashes(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     let mut chars = input.chars().peekable();
@@ -44,6 +48,47 @@ fn escape_legacy_backslashes(input: &str) -> String {
 fn parse_sync_json(data_str: &str) -> Result<serde_json::Value, serde_json::Error> {
     serde_json::from_str::<serde_json::Value>(data_str)
         .or_else(|_| serde_json::from_str::<serde_json::Value>(&escape_legacy_backslashes(data_str)))
+}
+
+fn change_pair(change: &SyncChange, first: &str, second: &str) -> Option<(String, String)> {
+    change
+        .data
+        .as_deref()
+        .and_then(|data| parse_sync_json(data).ok())
+        .and_then(|json| {
+            Some((
+                json.get(first)?.as_str()?.to_string(),
+                json.get(second)?.as_str()?.to_string(),
+            ))
+        })
+        .or_else(|| {
+            change
+                .record_id
+                .split_once('|')
+                .or_else(|| change.record_id.split_once('_'))
+                .map(|(left, right)| (left.to_string(), right.to_string()))
+        })
+}
+
+fn queue_pending_download(
+    db_path: &str,
+    file_hash: &str,
+    local_path: &std::path::Path,
+    change: &SyncChange,
+    path_key: &str,
+) {
+    if let Ok(conn) = Connection::open(Path::new(db_path)) {
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO sync_pending_downloads (file_hash, local_path, table_name, record_id, path_key) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params![
+                file_hash,
+                local_path.to_string_lossy(),
+                change.table,
+                change.record_id,
+                path_key
+            ],
+        );
+    }
 }
 
 pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
@@ -123,7 +168,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
         )
     }; // <--- conn 在这里被 Drop，不再跨越 .await
 
-    let client = SyncClient::new(server_url, api_key);
+    let client = SyncClient::new(server_url, api_key)?;
 
     // 2. Push 到服务器
     let mut pushed_count = 0;
@@ -139,7 +184,29 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
     if should_push {
 
     for (i, change) in changes.iter_mut().enumerate() {
-        if (change.table == "ip_assets" || change.table == "ip_images" || change.table == "ip_sticker_packs" || change.table == "ip_emojis") && change.operation != "DELETE" {
+        if change.table == "ip_creations" {
+            if let Some(data_str) = &change.data {
+                if let Ok(json) = parse_sync_json(data_str) {
+                    if let (Some(ip_id), Some(image_path)) = (
+                        json.get("ip_id").and_then(|v| v.as_str()),
+                        json.get("image_path").and_then(|v| v.as_str()),
+                    ) {
+                        change.record_id = creation_record_id(ip_id, image_path);
+                    }
+                }
+            }
+        }
+
+        if matches!(
+            change.table.as_str(),
+            "ip_assets"
+                | "ip_images"
+                | "ip_sticker_packs"
+                | "ip_emojis"
+                | "ip_character_sheets"
+                | "ip_creations"
+        ) && change.operation != "DELETE"
+        {
             if let Some(data_str) = &change.data {
                 if let Ok(mut json) = parse_sync_json(data_str) {
                     let path_hash_keys = if change.table == "ip_assets" {
@@ -147,6 +214,10 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                     } else if change.table == "ip_images" {
                         vec![("absolute_path", "file_hash")]
                     } else if change.table == "ip_emojis" {
+                        vec![("image_path", "file_hash")]
+                    } else if change.table == "ip_character_sheets"
+                        || change.table == "ip_creations"
+                    {
                         vec![("image_path", "file_hash")]
                     } else if change.table == "ip_sticker_packs" {
                         vec![
@@ -164,21 +235,22 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                     for (path_key, hash_key) in path_hash_keys {
                         if let Some(abs_path) = json.get(path_key).and_then(|v| v.as_str()).map(String::from) {
                             if !abs_path.is_empty() {
-                                if let Ok(data) = tokio::fs::read(&abs_path).await {
-                                    let mut hasher = Sha256::new();
-                                    hasher.update(&data);
-                                    let hash = format!("{:x}", hasher.finalize());
+                                let data = tokio::fs::read(&abs_path).await.map_err(|e| {
+                                    format!("读取待同步文件失败 {}: {}", abs_path, e)
+                                })?;
+                                let mut hasher = Sha256::new();
+                                hasher.update(&data);
+                                let hash = format!("{:x}", hasher.finalize());
 
-                                    file_hashes_to_check.push(hash.clone());
-                                    files_to_upload.push((hash.clone(), abs_path, i));
+                                file_hashes_to_check.push(hash.clone());
+                                files_to_upload.push((hash.clone(), abs_path, i));
 
-                                    if let Some(obj) = json.as_object_mut() {
-                                        obj.insert(
-                                            hash_key.to_string(),
-                                            serde_json::Value::String(hash.clone()),
-                                        );
-                                        updated = true;
-                                    }
+                                if let Some(obj) = json.as_object_mut() {
+                                    obj.insert(
+                                        hash_key.to_string(),
+                                        serde_json::Value::String(hash.clone()),
+                                    );
+                                    updated = true;
                                 }
                             }
                         }
@@ -247,7 +319,6 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                     );
                 }
                 let _ = tx.commit();
-                let _ = conn.execute("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('last_sync_version', ?)", rusqlite::params![new_server_version.to_string()]);
             }
             Err(e) => return Err(format!("推送失败: {}", e)),
         }
@@ -258,19 +329,12 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
     let mut pulled_count = 0;
 
     if should_pull {
-    // 每次重新查一次最新版本号，以防刚才 Push 修改了它
-    let current_version = {
-        let conn = Connection::open(Path::new(db_path)).unwrap();
-        conn.query_row(
-            "SELECT value FROM sync_config WHERE key = 'last_sync_version'",
-            [],
-            |row| {
-                let v: String = row.get(0)?;
-                Ok(v.parse::<i64>().unwrap_or(0))
-            },
-        )
-        .unwrap_or(new_server_version)
-    };
+    // Push 只代表服务端接收了本地变更，并不代表本机已经消费了此前的远端版本。
+    // 拉取必须继续使用上一次成功 Pull 的游标，否则会跳过其他设备先写入的变更。
+    let current_version = crate::sync::cursor::pull_start_after_push(
+        last_sync_version,
+        new_server_version,
+    );
 
     let app_root = {
         let conn = Connection::open(Path::new(db_path)).unwrap();
@@ -315,21 +379,63 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                 hasher.update(&data);
                 let dl_hash = format!("{:x}", hasher.finalize());
                 if dl_hash == *file_hash {
-                    let update_sql = match table_name.as_str() {
-                        "ip_assets" => format!("UPDATE ip_assets SET {} = ? WHERE id = ?", path_key),
-                        "ip_images" => format!("UPDATE ip_images SET {} = ? WHERE id = ?", path_key),
-                        "ip_sticker_packs" => format!("UPDATE ip_sticker_packs SET {} = ? WHERE id = ?", path_key),
-                        "ip_emojis" => format!("UPDATE ip_emojis SET {} = ? WHERE id = ?", path_key),
-                        _ => String::new(),
-                    };
                     let upd_conn = Connection::open(Path::new(db_path)).unwrap();
-                    if !update_sql.is_empty() {
-                        let _ = upd_conn.execute_batch(crate::sync::triggers::DROP_TRIGGERS);
-                        let _ = upd_conn.execute(&update_sql, rusqlite::params![local_path, record_id]);
-                        let _ = upd_conn.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
+                    let _ = upd_conn.execute_batch(crate::sync::triggers::DROP_TRIGGERS);
+                    let update_result = match table_name.as_str() {
+                        "ip_assets" | "ip_images" | "ip_sticker_packs" | "ip_emojis"
+                        | "ip_character_sheets" => {
+                            let update_sql = format!(
+                                "UPDATE {} SET {} = ? WHERE id = ?",
+                                table_name, path_key
+                            );
+                            upd_conn.execute(
+                                &update_sql,
+                                rusqlite::params![local_path, record_id],
+                            )
+                        }
+                        "ip_creations" => {
+                            if let Some((ip_id, file_name)) =
+                                split_creation_record_id(record_id)
+                            {
+                                let existing_path = upd_conn
+                                    .prepare(
+                                        "SELECT image_path FROM ip_creations WHERE ip_id = ?",
+                                    )
+                                    .and_then(|mut stmt| {
+                                        let paths = stmt.query_map(
+                                            rusqlite::params![ip_id],
+                                            |row| row.get::<_, String>(0),
+                                        )?;
+                                        for path in paths {
+                                            let path = path?;
+                                            if portable_file_name(&path) == file_name {
+                                                return Ok(Some(path));
+                                            }
+                                        }
+                                        Ok(None)
+                                    });
+                                match existing_path {
+                                    Ok(Some(existing_path)) => upd_conn.execute(
+                                        "UPDATE ip_creations SET image_path = ? WHERE ip_id = ? AND image_path = ?",
+                                        rusqlite::params![local_path, ip_id, existing_path],
+                                    ),
+                                    Ok(None) => Ok(0),
+                                    Err(e) => Err(e),
+                                }
+                            } else {
+                                Ok(0)
+                            }
+                        }
+                        _ => Ok(0),
+                    };
+                    let _ = upd_conn.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
+                    if matches!(update_result, Ok(count) if count > 0) {
+                        let _ = upd_conn.execute(
+                            "DELETE FROM sync_pending_downloads WHERE id = ?",
+                            rusqlite::params![id],
+                        );
+                        eprintln!("[Sync] Retry download succeeded: {}", local_path);
                     }
-                    let _ = upd_conn.execute("DELETE FROM sync_pending_downloads WHERE id = ?", rusqlite::params![id]);
-                    eprintln!("[Sync] Retry download succeeded: {}", local_path);
                 }
             }
         }
@@ -339,20 +445,6 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
         // <--- 又一个 .await 点
         Ok(mut resp) => {
             if !resp.changes.is_empty() {
-                let mut deleted_records = std::collections::HashSet::new();
-                for change in &resp.changes {
-                    if change.operation == "DELETE" {
-                        deleted_records.insert(change.record_id.clone());
-                    }
-                }
-                resp.changes.retain(|change| {
-                    if change.operation != "DELETE" && deleted_records.contains(&change.record_id) {
-                        false
-                    } else {
-                        true
-                    }
-                });
-
                 let mut pulled_ip_paths = std::collections::HashMap::<String, String>::new();
                 let mut pulled_pack_paths = std::collections::HashMap::<String, String>::new();
                 for change in &resp.changes {
@@ -393,10 +485,15 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                 // 下载文件并修正本地文件路径
                 let db_conn = Connection::open(Path::new(db_path)).unwrap();
                 for change in &mut resp.changes {
-                    if (change.table == "ip_assets"
-                        || change.table == "ip_images"
-                        || change.table == "ip_sticker_packs"
-                        || change.table == "ip_emojis")
+                    if matches!(
+                        change.table.as_str(),
+                        "ip_assets"
+                            | "ip_images"
+                            | "ip_sticker_packs"
+                            | "ip_emojis"
+                            | "ip_character_sheets"
+                            | "ip_creations"
+                    )
                         && change.operation != "DELETE"
                     {
                         if let Some(data_str) = &change.data {
@@ -417,6 +514,10 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                     ]
                                 } else if change.table == "ip_emojis" {
                                     vec![("image_path", "file_hash")]
+                                } else if change.table == "ip_character_sheets"
+                                    || change.table == "ip_creations"
+                                {
+                                    vec![("image_path", "file_hash")]
                                 } else {
                                     vec![]
                                 };
@@ -432,7 +533,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             let ip_path = json.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
                                             let filename = json.get(path_key)
                                                 .and_then(|v| v.as_str())
-                                                .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().into_owned());
+                                                .map(|p| portable_file_name(p).to_string());
                                             filename.map(|f| format!("ip_archived/{}/{}", ip_path, f))
                                         } else if change.table == "ip_sticker_packs" {
                                             let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
@@ -446,7 +547,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             let pack_path = json.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
                                             let filename = json.get(path_key)
                                                 .and_then(|v| v.as_str())
-                                                .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().into_owned());
+                                                .map(|p| portable_file_name(p).to_string());
                                             filename.map(|f| format!("ip_archived/{}/packs/{}/{}", ip_path, pack_path, f))
                                         } else if change.table == "ip_emojis" {
                                             let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
@@ -468,7 +569,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             } else { None };
                                             let filename = json.get(path_key)
                                                 .and_then(|v| v.as_str())
-                                                .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().into_owned());
+                                                .map(|p| portable_file_name(p).to_string());
                                             
                                             filename.map(|f| {
                                                 if let Some(pp) = pack_path_opt {
@@ -476,6 +577,33 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                                 } else {
                                                     format!("ip_archived/{}/emojis/{}", ip_path, f)
                                                 }
+                                            })
+                                        } else if change.table == "ip_character_sheets"
+                                            || change.table == "ip_creations"
+                                        {
+                                            let ip_id = json
+                                                .get("ip_id")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or_default();
+                                            let ip_path = pulled_ip_paths
+                                                .get(ip_id)
+                                                .cloned()
+                                                .or_else(|| {
+                                                    db_conn
+                                                        .query_row(
+                                                            "SELECT path FROM ip_assets WHERE id = ?",
+                                                            rusqlite::params![ip_id],
+                                                            |row| row.get(0),
+                                                        )
+                                                        .ok()
+                                                })
+                                                .unwrap_or_else(|| ip_id.to_string());
+                                            let filename = json
+                                                .get(path_key)
+                                                .and_then(|v| v.as_str())
+                                                .map(|p| portable_file_name(p).to_string());
+                                            filename.map(|name| {
+                                                format!("ip_archived/{}/{}", ip_path, name)
                                             })
                                         } else {
                                             None
@@ -525,13 +653,13 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                                         local_abs_path.display(),
                                                         e
                                                     );
-                                                    // Record for retry on next sync
-                                                    if let Ok(pconn) = Connection::open(Path::new(db_path)) {
-                                                        let _ = pconn.execute(
-                                                            "INSERT OR IGNORE INTO sync_pending_downloads (file_hash, local_path, table_name, record_id, path_key) VALUES (?, ?, ?, ?, ?)",
-                                                            rusqlite::params![hash, local_abs_path.to_string_lossy(), change.table, change.record_id, path_key],
-                                                        );
-                                                    }
+                                                    queue_pending_download(
+                                                        db_path,
+                                                        &hash,
+                                                        &local_abs_path,
+                                                        change,
+                                                        path_key,
+                                                    );
                                                     continue;
                                                 }
                                             }
@@ -543,6 +671,13 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                                         "[Sync] Read downloaded file skipped {}: {}",
                                                         local_abs_path.display(),
                                                         e
+                                                    );
+                                                    queue_pending_download(
+                                                        db_path,
+                                                        &hash,
+                                                        &local_abs_path,
+                                                        change,
+                                                        path_key,
                                                     );
                                                     continue;
                                                 }
@@ -556,6 +691,13 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                                     local_abs_path.display(),
                                                     hash,
                                                     downloaded_hash
+                                                );
+                                                queue_pending_download(
+                                                    db_path,
+                                                    &hash,
+                                                    &local_abs_path,
+                                                    change,
+                                                    path_key,
                                                 );
                                                 continue;
                                             }
@@ -631,7 +773,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             .and_then(|v| v.as_str())
                                             .unwrap_or_default();
                                         let res = tx.execute(
-                                            "INSERT OR REPLACE INTO ip_assets (id, name, path, avatar_path, inspiration, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                            "INSERT INTO ip_assets (id, name, path, avatar_path, inspiration, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, path = excluded.path, avatar_path = excluded.avatar_path, inspiration = excluded.inspiration, description = excluded.description, created_at = excluded.created_at, updated_at = excluded.updated_at",
                                             rusqlite::params![id, name, path, avatar_path, inspiration, description, created_at, updated_at],
                                         );
                                         if let Err(ref e) = res {
@@ -797,7 +939,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                             .and_then(|v| v.as_str())
                                             .map(String::from);
                                         let res = tx.execute(
-                                            "INSERT OR REPLACE INTO ip_images (id, filename, original_filename, ip_id, relative_path, absolute_path, status, file_size, width, height, file_hash, format, has_watermark, watermark_platform, watermark_detected, watermark_removed, created_at, imported_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                            "INSERT INTO ip_images (id, filename, original_filename, ip_id, relative_path, absolute_path, status, file_size, width, height, file_hash, format, has_watermark, watermark_platform, watermark_detected, watermark_removed, created_at, imported_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET filename = excluded.filename, original_filename = excluded.original_filename, ip_id = excluded.ip_id, relative_path = excluded.relative_path, absolute_path = excluded.absolute_path, status = excluded.status, file_size = excluded.file_size, width = excluded.width, height = excluded.height, file_hash = excluded.file_hash, format = excluded.format, has_watermark = excluded.has_watermark, watermark_platform = excluded.watermark_platform, watermark_detected = excluded.watermark_detected, watermark_removed = excluded.watermark_removed, created_at = excluded.created_at, imported_at = excluded.imported_at, archived_at = excluded.archived_at",
                                             rusqlite::params![id, filename, original_filename, ip_id, relative_path, absolute_path, status, file_size, width, height, file_hash, format, has_watermark, watermark_platform, watermark_detected, watermark_removed, created_at, imported_at, archived_at],
                                         );
                                         if let Err(ref e) = res {
@@ -828,6 +970,155 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                         )
                                         .ok()
                                     }
+                            ("ip_character_sheets", "INSERT")
+                            | ("ip_character_sheets", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = parse_sync_json(data_str) {
+                                        let id = json
+                                            .get("id")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let ip_id = json
+                                            .get("ip_id")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let image_path = json
+                                            .get("image_path")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let sheet_type = json
+                                            .get("sheet_type")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let sort_order = json
+                                            .get("sort_order")
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or(0);
+                                        let created_at = json
+                                            .get("created_at")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        tx.execute(
+                                            "INSERT INTO ip_character_sheets (id, ip_id, image_path, sheet_type, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ip_id = excluded.ip_id, image_path = excluded.image_path, sheet_type = excluded.sheet_type, sort_order = excluded.sort_order, created_at = excluded.created_at",
+                                            rusqlite::params![id, ip_id, image_path, sheet_type, sort_order, created_at],
+                                        )
+                                        .ok()
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
+                            ("ip_character_sheets", "DELETE") => {
+                                let path = tx
+                                    .query_row(
+                                        "SELECT image_path FROM ip_character_sheets WHERE id = ?",
+                                        rusqlite::params![change.record_id],
+                                        |row| row.get::<_, String>(0),
+                                    )
+                                    .ok();
+                                if let Some(path) = path {
+                                    if path.contains("ip_archived") {
+                                        let _ = std::fs::remove_file(path);
+                                    }
+                                }
+                                tx.execute(
+                                    "DELETE FROM ip_character_sheets WHERE id = ?",
+                                    rusqlite::params![change.record_id],
+                                )
+                                .ok()
+                            }
+                            ("ip_creations", "INSERT") | ("ip_creations", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = parse_sync_json(data_str) {
+                                        let ip_id = json
+                                            .get("ip_id")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let image_path = json
+                                            .get("image_path")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let creation_name = json
+                                            .get("creation_name")
+                                            .and_then(|v| v.as_str())
+                                            .map(String::from);
+                                        let created_at = json
+                                            .get("created_at")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        tx.execute(
+                                            "INSERT INTO ip_creations (ip_id, image_path, creation_name, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(ip_id, image_path) DO UPDATE SET creation_name = excluded.creation_name, created_at = excluded.created_at",
+                                            rusqlite::params![ip_id, image_path, creation_name, created_at],
+                                        )
+                                        .ok()
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
+                            ("ip_creations", "DELETE") => {
+                                let keys = change
+                                    .data
+                                    .as_deref()
+                                    .and_then(|data| parse_sync_json(data).ok())
+                                    .and_then(|json| {
+                                        Some((
+                                            json.get("ip_id")?.as_str()?.to_string(),
+                                            portable_file_name(
+                                                json.get("image_path")?.as_str()?,
+                                            )
+                                            .to_string(),
+                                        ))
+                                    })
+                                    .or_else(|| {
+                                        split_creation_record_id(&change.record_id).map(
+                                            |(ip_id, file_name)| {
+                                                (ip_id.to_string(), file_name.to_string())
+                                            },
+                                        )
+                                    });
+                                if let Some((ip_id, file_name)) = keys {
+                                    let existing_path = tx
+                                        .prepare(
+                                            "SELECT image_path FROM ip_creations WHERE ip_id = ?",
+                                        )
+                                        .and_then(|mut stmt| {
+                                            let paths = stmt.query_map(
+                                                rusqlite::params![ip_id],
+                                                |row| row.get::<_, String>(0),
+                                            )?;
+                                            for path in paths {
+                                                let path = path?;
+                                                if portable_file_name(&path) == file_name {
+                                                    return Ok(Some(path));
+                                                }
+                                            }
+                                            Ok(None)
+                                        })
+                                        .ok()
+                                        .flatten();
+                                    if let Some(image_path) = existing_path {
+                                        let result = tx
+                                            .execute(
+                                                "DELETE FROM ip_creations WHERE ip_id = ? AND image_path = ?",
+                                                rusqlite::params![ip_id, image_path],
+                                            )
+                                            .ok();
+                                        if image_path.contains("ip_archived") {
+                                            let _ = std::fs::remove_file(&image_path);
+                                        }
+                                        result
+                                    } else {
+                                        Some(0)
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
                             ("ip_sticker_packs", "INSERT") | ("ip_sticker_packs", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
                                     if let Ok(json) = parse_sync_json(data_str) {
@@ -844,7 +1135,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                         let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
                                         let updated_at = json.get("updated_at").and_then(|v| v.as_str()).unwrap_or_default();
                                         tx.execute(
-                                            "INSERT OR REPLACE INTO ip_sticker_packs (id, ip_id, name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                            "INSERT INTO ip_sticker_packs (id, ip_id, name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ip_id = excluded.ip_id, name = excluded.name, path = excluded.path, description = excluded.description, cover_path = excluded.cover_path, banner_path = excluded.banner_path, icon_path = excluded.icon_path, reward_guide_path = excluded.reward_guide_path, reward_thanks_path = excluded.reward_thanks_path, created_at = excluded.created_at, updated_at = excluded.updated_at",
                                             rusqlite::params![id, ip_id, name, path, description, cover_path, banner_path, icon_path, reward_guide_path, reward_thanks_path, created_at, updated_at],
                                         ).ok()
                                     } else { None }
@@ -915,6 +1206,71 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                 }
                                 tx.execute("DELETE FROM ip_emojis WHERE id = ?", rusqlite::params![change.record_id]).ok()
                             }
+                            ("ip_relations", "INSERT") | ("ip_relations", "UPDATE") => {
+                                if let Some(data_str) = &change.data {
+                                    if let Ok(json) = parse_sync_json(data_str) {
+                                        let ip_a_id = json
+                                            .get("ip_a_id")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let ip_b_id = json
+                                            .get("ip_b_id")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let relation_type = json
+                                            .get("relation_type")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        let description = json
+                                            .get("description")
+                                            .and_then(|v| v.as_str())
+                                            .map(String::from);
+                                        let created_at = json
+                                            .get("created_at")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default();
+                                        tx.execute(
+                                            "INSERT INTO ip_relations (ip_a_id, ip_b_id, relation_type, description, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(ip_a_id, ip_b_id, relation_type) DO UPDATE SET description = excluded.description, created_at = excluded.created_at",
+                                            rusqlite::params![ip_a_id, ip_b_id, relation_type, description, created_at],
+                                        )
+                                        .ok()
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
+                            ("ip_relations", "DELETE") => {
+                                let keys = change
+                                    .data
+                                    .as_deref()
+                                    .and_then(|data| parse_sync_json(data).ok())
+                                    .and_then(|json| {
+                                        Some((
+                                            json.get("ip_a_id")?.as_str()?.to_string(),
+                                            json.get("ip_b_id")?.as_str()?.to_string(),
+                                            json.get("relation_type")?.as_str()?.to_string(),
+                                        ))
+                                    })
+                                    .or_else(|| {
+                                        let mut parts = change.record_id.splitn(3, '|');
+                                        Some((
+                                            parts.next()?.to_string(),
+                                            parts.next()?.to_string(),
+                                            parts.next()?.to_string(),
+                                        ))
+                                    });
+                                if let Some((ip_a_id, ip_b_id, relation_type)) = keys {
+                                    tx.execute(
+                                        "DELETE FROM ip_relations WHERE ip_a_id = ? AND ip_b_id = ? AND relation_type = ?",
+                                        rusqlite::params![ip_a_id, ip_b_id, relation_type],
+                                    )
+                                    .ok()
+                                } else {
+                                    None
+                                }
+                            }
                             ("ip_image_relations", "INSERT") | ("ip_image_relations", "UPDATE") => {
                                 if let Some(data_str) = &change.data {
                                     if let Ok(json) = parse_sync_json(data_str) {
@@ -922,18 +1278,19 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                         let ip_id = json.get("ip_id").and_then(|v| v.as_str()).unwrap_or_default();
                                         let is_primary = json.get("is_primary").and_then(|v| v.as_i64()).unwrap_or(0);
                                         tx.execute(
-                                            "INSERT OR IGNORE INTO ip_image_relations (ip_image_id, ip_id, is_primary) VALUES (?, ?, ?)",
+                                            "INSERT INTO ip_image_relations (ip_image_id, ip_id, is_primary) VALUES (?, ?, ?) ON CONFLICT(ip_image_id, ip_id) DO UPDATE SET is_primary = excluded.is_primary",
                                             rusqlite::params![ip_image_id, ip_id, is_primary],
                                         ).ok()
                                     } else { None }
                                 } else { None }
                             }
                             ("ip_image_relations", "DELETE") => {
-                                let parts: Vec<&str> = change.record_id.split('_').collect();
-                                if parts.len() == 2 {
+                                if let Some((ip_image_id, ip_id)) =
+                                    change_pair(change, "ip_image_id", "ip_id")
+                                {
                                     tx.execute(
                                         "DELETE FROM ip_image_relations WHERE ip_image_id = ? AND ip_id = ?",
-                                        rusqlite::params![parts[0], parts[1]],
+                                        rusqlite::params![ip_image_id, ip_id],
                                     ).ok()
                                 } else { None }
                             }
@@ -950,11 +1307,12 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                 } else { None }
                             }
                             ("ip_image_tag_relations", "DELETE") => {
-                                let parts: Vec<&str> = change.record_id.split('_').collect();
-                                if parts.len() == 2 {
+                                if let Some((ip_image_id, tag_id)) =
+                                    change_pair(change, "ip_image_id", "tag_id")
+                                {
                                     tx.execute(
                                         "DELETE FROM ip_image_tag_relations WHERE ip_image_id = ? AND tag_id = ?",
-                                        rusqlite::params![parts[0], parts[1]],
+                                        rusqlite::params![ip_image_id, tag_id],
                                     ).ok()
                                 } else { None }
                             }
@@ -970,7 +1328,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                                         let is_builtin = json.get("is_builtin").and_then(|v| v.as_i64()).unwrap_or(0);
                                         let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or_default();
                                         tx.execute(
-                                            "INSERT OR REPLACE INTO tags (id, name, name_en, color, parent_id, use_count, is_builtin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                            "INSERT INTO tags (id, name, name_en, color, parent_id, use_count, is_builtin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, name_en = excluded.name_en, color = excluded.color, parent_id = excluded.parent_id, use_count = excluded.use_count, is_builtin = excluded.is_builtin, created_at = excluded.created_at",
                                             rusqlite::params![id, name, name_en, color, parent_id, use_count, is_builtin, created_at],
                                         ).ok()
                                     } else { None }
@@ -989,16 +1347,11 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                         }
                     }
 
-                    // Recreate sync triggers after applying remote changes.
-                    let _ = tx.execute_batch(crate::sync::triggers::SYNC_TRIGGERS);
+                    crate::sync::cursor::ensure_complete_pull(applied, resp.changes.len())?;
 
-                    if applied != resp.changes.len() {
-                        eprintln!(
-                            "[Sync] Pull apply partial: applied {} of {} changes (some may have been skipped due to missing data or unknown tables)",
-                            applied,
-                            resp.changes.len()
-                        );
-                    }
+                    // Recreate sync triggers after applying remote changes.
+                    tx.execute_batch(crate::sync::triggers::SYNC_TRIGGERS)
+                        .map_err(|e| format!("恢复同步触发器失败: {}", e))?;
 
                     if tx.commit().is_ok() {
                         pulled_count = applied;

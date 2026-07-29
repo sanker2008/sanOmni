@@ -46,19 +46,66 @@ pub struct SyncClient {
 }
 
 impl SyncClient {
-    pub fn new(server_url: String, api_key: String) -> Self {
-        let server_url = server_url.trim().trim_end_matches('/').to_string();
+    pub fn new(server_url: String, api_key: String) -> Result<Self, String> {
+        let server_url = validate_server_url(&server_url)?;
+        let api_key = api_key.trim().to_string();
+        if api_key.is_empty() {
+            return Err("API Key 不能为空".to_string());
+        }
+
         let client = reqwest::Client::builder()
             .no_proxy()
+            .connect_timeout(std::time::Duration::from_secs(10))
             .timeout(std::time::Duration::from_secs(120))
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .map_err(|e| format!("创建同步客户端失败: {}", e))?;
 
-        Self {
+        Ok(Self {
             server_url,
             api_key,
             client,
+        })
+    }
+
+    pub async fn test_connection(
+        &self,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let start = std::time::Instant::now();
+        let health_url = format!("{}/api/health", self.server_url);
+        let reachable = match self.client.get(&health_url).send().await {
+            Ok(resp) => resp.status().is_success(),
+            Err(_) => false,
+        };
+
+        let mut authenticated = false;
+        let mut db_stats = serde_json::Value::Null;
+        if reachable {
+            let auth_url = format!("{}/api/auth/test", self.server_url);
+            if let Ok(resp) = self
+                .client
+                .get(&auth_url)
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .send()
+                .await
+            {
+                if resp.status().is_success() {
+                    authenticated = true;
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        db_stats = json
+                            .get("db_stats")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Null);
+                    }
+                }
+            }
         }
+
+        Ok(serde_json::json!({
+            "reachable": reachable,
+            "authenticated": authenticated,
+            "latency_ms": start.elapsed().as_millis() as u64,
+            "db_stats": db_stats
+        }))
     }
 
     pub async fn push(
@@ -254,5 +301,73 @@ impl SyncClient {
             let body = resp.text().await.unwrap_or_default();
             Err(format!("Fetch snapshot failed: {} {}", status, body).into())
         }
+    }
+}
+
+pub fn validate_server_url(server_url: &str) -> Result<String, String> {
+    let trimmed = server_url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err("服务器 URL 不能为空".to_string());
+    }
+
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|_| "服务器 URL 格式无效，请填写完整的 http:// 或 https:// 地址".to_string())?;
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err("服务器 URL 仅支持 http:// 或 https://".to_string());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("服务器 URL 不能包含用户名或密码".to_string());
+    }
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err("服务器 URL 不能包含查询参数或锚点".to_string());
+    }
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "服务器 URL 缺少主机地址".to_string())?;
+    if parsed.scheme() == "http" && !is_local_or_private_host(host) {
+        return Err(
+            "公网同步地址必须使用 HTTPS；HTTP 仅允许 localhost、回环地址或私网 IP".to_string(),
+        );
+    }
+
+    Ok(trimmed.to_string())
+}
+
+fn is_local_or_private_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+
+    let host = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private(),
+        Ok(std::net::IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unique_local(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_server_url;
+
+    #[test]
+    fn http_is_limited_to_local_and_private_addresses() {
+        assert!(validate_server_url("http://127.0.0.1:3080").is_ok());
+        assert!(validate_server_url("http://[::1]:3080").is_ok());
+        assert!(validate_server_url("http://192.168.1.10:3080").is_ok());
+        assert!(validate_server_url("http://8.8.8.8:3080").is_err());
+        assert!(validate_server_url("http://sync.example.com").is_err());
+    }
+
+    #[test]
+    fn https_allows_public_hosts_and_normalizes_trailing_slash() {
+        assert_eq!(
+            validate_server_url(" https://sync.example.com/ ").unwrap(),
+            "https://sync.example.com"
+        );
     }
 }

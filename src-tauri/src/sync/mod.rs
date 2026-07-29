@@ -1,5 +1,7 @@
 pub mod client;
+pub mod cursor;
 pub mod engine;
+pub mod identity;
 pub mod triggers;
 
 use rusqlite::Connection;

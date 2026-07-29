@@ -19,7 +19,7 @@ export default function SyncButton() {
       const dbPath = await getDbPath();
       const res = await invoke<any>("sync_get_status", { dbPath });
       if (res && res.success !== false && res.data) {
-        setEnabled(res.data.enabled && !!res.data.server_url);
+        setEnabled(res.data.enabled && !!res.data.server_url && !!res.data.api_key);
       } else {
         setEnabled(false);
       }

@@ -4,49 +4,21 @@ use rusqlite::Connection;
 use std::collections::HashSet;
 use std::path::Path;
 
+use crate::sync::identity::creation_record_id;
+
 #[tauri::command]
 pub async fn sync_test_connection(
     server_url: String,
     api_key: String,
 ) -> CommandResult<serde_json::Value> {
-    let start = std::time::Instant::now();
-    let server_url = server_url.trim_end_matches('/');
-    let health_url = format!("{}/api/health", server_url);
-
-    let client = reqwest::Client::new();
-    let reach_resp = client.get(&health_url).send().await;
-    let reachable = reach_resp.is_ok() && reach_resp.unwrap().status().is_success();
-
-    let mut auth_ok = false;
-    let mut db_stats = serde_json::Value::Null;
-
-    if reachable {
-        if let Ok(resp) = client
-            .get(&format!("{}/api/auth/test", server_url))
-            .header("Authorization", format!("Bearer {}", api_key))
-            .send()
-            .await
-        {
-            if resp.status() == 200 {
-                auth_ok = true;
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    db_stats = json
-                        .get("db_stats")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null);
-                }
-            }
-        }
+    let client = match crate::sync::client::SyncClient::new(server_url, api_key) {
+        Ok(client) => client,
+        Err(e) => return CommandResult::err(e),
+    };
+    match client.test_connection().await {
+        Ok(result) => CommandResult::ok(result),
+        Err(e) => CommandResult::err(format!("连接测试失败: {}", e)),
     }
-
-    let latency_ms = start.elapsed().as_millis() as u64;
-
-    CommandResult::ok(serde_json::json!({
-        "reachable": reachable,
-        "authenticated": auth_ok,
-        "latency_ms": latency_ms,
-        "db_stats": db_stats
-    }))
 }
 
 #[tauri::command]
@@ -79,21 +51,32 @@ pub fn sync_configure(db_path: String, server_url: String, api_key: String) -> C
         Ok(c) => c,
         Err(e) => return CommandResult::err(format!("打开数据库失败: {}", e)),
     };
-    let server_url = server_url.trim().trim_end_matches('/').to_string();
+    let server_url = match crate::sync::client::validate_server_url(&server_url) {
+        Ok(url) => url,
+        Err(e) => return CommandResult::err(e),
+    };
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return CommandResult::err("API Key 不能为空".to_string());
+    }
 
     // Ensure sync tables exist before saving config.
     let _ = conn.execute_batch(crate::sync::triggers::SYNC_SCHEMA);
+
+    // 存储 API Key 到 keyring
+    let entry = match keyring::Entry::new("sanomni-sync", "api_key") {
+        Ok(entry) => entry,
+        Err(e) => return CommandResult::err(format!("无法访问系统密钥链: {}", e)),
+    };
+    if let Err(e) = entry.set_password(api_key) {
+        return CommandResult::err(format!("保存 API Key 失败: {}", e));
+    }
 
     if let Err(e) = conn.execute(
         "INSERT OR REPLACE INTO sync_config (key, value) VALUES ('server_url', ?)",
         rusqlite::params![server_url],
     ) {
-        return CommandResult::err(format!("保存失败: {}", e));
-    }
-
-    // 存储 API Key 到 keyring
-    if let Ok(entry) = keyring::Entry::new("sanomni-sync", "api_key") {
-        let _ = entry.set_password(&api_key);
+        return CommandResult::err(format!("保存服务器地址失败: {}", e));
     }
 
     CommandResult::ok(true)
@@ -151,7 +134,10 @@ pub async fn sync_get_history(
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> CommandResult<serde_json::Value> {
-    let client = crate::sync::client::SyncClient::new(server_url, api_key);
+    let client = match crate::sync::client::SyncClient::new(server_url, api_key) {
+        Ok(client) => client,
+        Err(e) => return CommandResult::err(e),
+    };
     let limit = limit.unwrap_or(50);
     let offset = offset.unwrap_or(0);
     match client.fetch_sync_history(limit, offset).await {
@@ -165,7 +151,10 @@ pub async fn sync_get_snapshot(
     server_url: String,
     api_key: String,
 ) -> CommandResult<serde_json::Value> {
-    let client = crate::sync::client::SyncClient::new(server_url, api_key);
+    let client = match crate::sync::client::SyncClient::new(server_url, api_key) {
+        Ok(client) => client,
+        Err(e) => return CommandResult::err(e),
+    };
     match client.fetch_snapshot().await {
         Ok(data) => CommandResult::ok(data),
         Err(e) => CommandResult::err(format!("Fetch sync snapshot failed: {}", e)),
@@ -197,10 +186,9 @@ fn snapshot_record_key(table: &str, value: &serde_json::Value) -> Result<String,
             snapshot_str_field(table, value, "ip_image_id")?,
             snapshot_str_field(table, value, "tag_id")?
         )),
-        "ip_creations" => Ok(format!(
-            "{}|{}",
+        "ip_creations" => Ok(creation_record_id(
             snapshot_str_field(table, value, "ip_id")?,
-            snapshot_str_field(table, value, "image_path")?
+            snapshot_str_field(table, value, "image_path")?,
         )),
         "ip_relations" => Ok(format!(
             "{}|{}|{}",
@@ -229,7 +217,7 @@ fn local_record_keys(conn: &Connection, table: &str) -> Result<HashSet<String>, 
         "ip_image_tag_relations" => {
             "SELECT ip_image_id || '|' || tag_id FROM ip_image_tag_relations"
         }
-        "ip_creations" => "SELECT ip_id || '|' || image_path FROM ip_creations",
+        "ip_creations" => "SELECT ip_id, image_path FROM ip_creations",
         "ip_relations" => {
             "SELECT ip_a_id || '|' || ip_b_id || '|' || relation_type FROM ip_relations"
         }
@@ -244,12 +232,24 @@ fn local_record_keys(conn: &Connection, table: &str) -> Result<HashSet<String>, 
     };
 
     let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|e| e.to_string())?;
     let mut keys = HashSet::new();
-    for row in rows {
-        keys.insert(row.map_err(|e| e.to_string())?);
+    if table == "ip_creations" {
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (ip_id, image_path) = row.map_err(|e| e.to_string())?;
+            keys.insert(creation_record_id(&ip_id, &image_path));
+        }
+    } else {
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            keys.insert(row.map_err(|e| e.to_string())?);
+        }
     }
     Ok(keys)
 }
@@ -277,7 +277,10 @@ pub async fn sync_reconcile_snapshot(db_path: String) -> CommandResult<serde_jso
         Err(_) => return CommandResult::err("Sync API key is not configured".to_string()),
     };
 
-    let client = crate::sync::client::SyncClient::new(server_url, api_key);
+    let client = match crate::sync::client::SyncClient::new(server_url, api_key) {
+        Ok(client) => client,
+        Err(e) => return CommandResult::err(e),
+    };
     let snapshot = match client.fetch_snapshot().await {
         Ok(v) => v,
         Err(e) => return CommandResult::err(format!("Fetch sync snapshot failed: {}", e)),
@@ -335,7 +338,7 @@ mod tests {
 
         assert_eq!(
             snapshot_record_key("ip_creations", &row).unwrap(),
-            "ip-1|archive/ip-1/front.png"
+            "ip-1|front.png"
         );
     }
 
@@ -373,16 +376,16 @@ pub fn sync_force_repush(db_path: String) -> CommandResult<bool> {
         SELECT 'ip_assets', id, 'INSERT', json_object('id', id, 'name', name, 'path', path, 'avatar_path', avatar_path, 'inspiration', inspiration, 'description', description, 'created_at', created_at, 'updated_at', updated_at) FROM ip_assets;
 
         INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
-        SELECT 'ip_images', id, 'INSERT', json_object('id', id, 'filename', filename, 'original_filename', original_filename, 'ip_id', ip_id, 'relative_path', relative_path, 'absolute_path', absolute_path, 'status', status, 'file_size', file_size, 'width', width, 'height', height, 'file_hash', file_hash, 'format', format, 'has_watermark', has_watermark, 'watermark_platform', watermark_platform, 'watermark_detected', watermark_detected, 'watermark_removed', watermark_removed, 'created_at', created_at, 'imported_at', imported_at, 'archived_at', archived_at) FROM ip_images;
-        
-        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
-        SELECT 'ip_image_relations', ip_image_id || '_' || ip_id, 'INSERT', json_object('ip_image_id', ip_image_id, 'ip_id', ip_id, 'is_primary', is_primary) FROM ip_image_relations;
-
-        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
-        SELECT 'ip_image_tag_relations', ip_image_id || '_' || tag_id, 'INSERT', json_object('ip_image_id', ip_image_id, 'tag_id', tag_id) FROM ip_image_tag_relations;
-
-        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
         SELECT 'tags', id, 'INSERT', json_object('id', id, 'name', name, 'name_en', name_en, 'color', color, 'parent_id', parent_id, 'use_count', use_count, 'is_builtin', is_builtin, 'created_at', created_at) FROM tags;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_images', id, 'INSERT', json_object('id', id, 'filename', filename, 'original_filename', original_filename, 'ip_id', ip_id, 'relative_path', relative_path, 'absolute_path', absolute_path, 'status', status, 'file_size', file_size, 'width', width, 'height', height, 'file_hash', file_hash, 'format', format, 'has_watermark', has_watermark, 'watermark_platform', watermark_platform, 'watermark_detected', watermark_detected, 'watermark_removed', watermark_removed, 'created_at', created_at, 'imported_at', imported_at, 'archived_at', archived_at) FROM ip_images;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_character_sheets', id, 'INSERT', json_object('id', id, 'ip_id', ip_id, 'image_path', image_path, 'sheet_type', sheet_type, 'sort_order', sort_order, 'created_at', created_at) FROM ip_character_sheets;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_creations', ip_id || '|' || image_path, 'INSERT', json_object('ip_id', ip_id, 'image_path', image_path, 'creation_name', creation_name, 'created_at', created_at) FROM ip_creations;
 
         INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
         SELECT 'ip_sticker_packs', id, 'INSERT', json_object('id', id, 'ip_id', ip_id, 'name', name, 'path', path, 'description', description, 'cover_path', cover_path, 'banner_path', banner_path, 'icon_path', icon_path, 'reward_guide_path', reward_guide_path, 'reward_thanks_path', reward_thanks_path, 'created_at', created_at, 'updated_at', updated_at) FROM ip_sticker_packs;
@@ -392,7 +395,16 @@ pub fn sync_force_repush(db_path: String) -> CommandResult<bool> {
 
         INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
         SELECT 'ip_emojis', id, 'INSERT', json_object('id', id, 'ip_id', ip_id, 'pack_id', pack_id, 'image_path', image_path, 'trigger_word', trigger_word, 'sort_order', sort_order, 'created_at', created_at) FROM ip_emojis;
-        
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_relations', ip_a_id || '|' || ip_b_id || '|' || relation_type, 'INSERT', json_object('ip_a_id', ip_a_id, 'ip_b_id', ip_b_id, 'relation_type', relation_type, 'description', description, 'created_at', created_at) FROM ip_relations;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_image_relations', ip_image_id || '|' || ip_id, 'INSERT', json_object('ip_image_id', ip_image_id, 'ip_id', ip_id, 'is_primary', is_primary) FROM ip_image_relations;
+
+        INSERT INTO sync_changelog (table_name, record_id, operation, data_json)
+        SELECT 'ip_image_tag_relations', ip_image_id || '|' || tag_id, 'INSERT', json_object('ip_image_id', ip_image_id, 'tag_id', tag_id) FROM ip_image_tag_relations;
+
         COMMIT;
     "#;
 
