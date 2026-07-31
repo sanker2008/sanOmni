@@ -11,6 +11,10 @@ import WorkCard from "./WorkCard";
 import WorkEditModal from "./WorkEditModal";
 
 const WORK_TYPES = [
+  { value: "image", label: "图片" },
+  { value: "song", label: "歌曲" },
+  { value: "album", label: "专辑" },
+  { value: "screenplay", label: "剧本" },
   { value: "tv_series", label: "电视剧" },
   { value: "movie", label: "电影" },
   { value: "short_drama", label: "微短剧" },
@@ -317,7 +321,7 @@ export function WorksView() {
               <p className="text-sm mt-1.5 leading-relaxed">
                 {activeFiltersCount > 0
                   ? "当前筛选条件过于严苛，请尝试放宽关键字或清除分类、状态、标签筛选器再次检索。"
-                  : "这里可以对电视剧、电影、动漫、小说等任何创作类型的作品集进行一站式角色画像及参演设定归档。"}
+                  : "这里可以收纳图片、歌曲、专辑、剧本、短剧、电影等创作成果，并按需要展开章节或人物设定。"}
               </p>
               {activeFiltersCount > 0 ? (
                 <Button variant="outline" size="sm" onClick={handleClearAllFilters} className="mt-5 shadow-sm">

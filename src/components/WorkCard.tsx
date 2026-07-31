@@ -22,6 +22,10 @@ interface WorkCardProps {
 }
 
 const WORK_TYPE_LABELS: Record<string, string> = {
+  image: "图片",
+  song: "歌曲",
+  album: "专辑",
+  screenplay: "剧本",
   tv_series: "电视剧",
   movie: "电影",
   short_drama: "微短剧",

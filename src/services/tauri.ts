@@ -1287,12 +1287,21 @@ export const ipImageApi = {
 };
 
 // Works Collection API
-import type { Work, WorkWithRelations, WorkFilters, Character, CharacterWithRelations } from "@/stores";
+import type {
+  Work,
+  WorkWithRelations,
+  WorkFilters,
+  Character,
+  CharacterWithRelations,
+  ChapterCharacterInput,
+  ChapterWithCharacters,
+} from "@/stores";
 
 export async function createWork(params: {
   name: string;
   path?: string | null;
   work_type: string;
+  structure_mode?: string;
   description?: string | null;
   release_date?: string | null;
   producer?: string | null;
@@ -1303,6 +1312,7 @@ export async function createWork(params: {
     name: params.name,
     path: params.path,
     workType: params.work_type,
+    structureMode: params.structure_mode,
     description: params.description,
     releaseDate: params.release_date,
     producer: params.producer,
@@ -1324,6 +1334,7 @@ export async function updateWork(params: {
   name?: string;
   path?: string | null;
   work_type?: string;
+  structure_mode?: string;
   description?: string | null;
   release_date?: string | null;
   producer?: string | null;
@@ -1335,6 +1346,7 @@ export async function updateWork(params: {
     name: params.name,
     path: params.path,
     workType: params.work_type,
+    structureMode: params.structure_mode,
     description: params.description,
     releaseDate: params.release_date,
     producer: params.producer,
@@ -1365,6 +1377,62 @@ export async function addWorkTag(workId: string, tagId: string): Promise<void> {
 
 export async function removeWorkTag(workId: string, tagId: string): Promise<void> {
   return await invoke("remove_work_tag", { workId, tagId });
+}
+
+// Narrative chapters API
+export async function createChapter(params: {
+  work_id: string;
+  title: string;
+  summary?: string | null;
+  content?: string | null;
+  status: string;
+  target_word_count?: number | null;
+}): Promise<ChapterWithCharacters> {
+  return await invoke("create_chapter", {
+    workId: params.work_id,
+    title: params.title,
+    summary: params.summary,
+    content: params.content,
+    status: params.status,
+    targetWordCount: params.target_word_count,
+  });
+}
+
+export async function getChapters(workId: string): Promise<ChapterWithCharacters[]> {
+  return await invoke("get_chapters", { workId });
+}
+
+export async function updateChapter(params: {
+  id: string;
+  title: string;
+  summary?: string | null;
+  content?: string | null;
+  status: string;
+  target_word_count?: number | null;
+}): Promise<ChapterWithCharacters> {
+  return await invoke("update_chapter", {
+    id: params.id,
+    title: params.title,
+    summary: params.summary,
+    content: params.content,
+    status: params.status,
+    targetWordCount: params.target_word_count,
+  });
+}
+
+export async function deleteChapter(id: string): Promise<void> {
+  return await invoke("delete_chapter", { id });
+}
+
+export async function updateChapterOrder(chapterIds: string[]): Promise<void> {
+  return await invoke("update_chapter_order", { chapterIds });
+}
+
+export async function setChapterCharacters(
+  chapterId: string,
+  characters: ChapterCharacterInput[],
+): Promise<ChapterWithCharacters> {
+  return await invoke("set_chapter_characters", { chapterId, characters });
 }
 
 // Characters API

@@ -134,6 +134,7 @@ pub struct Work {
     pub name: String,
     pub path: Option<String>,
     pub work_type: String,
+    pub structure_mode: String,
     pub description: Option<String>,
     pub release_date: Option<String>,
     pub producer: Option<String>,
@@ -189,4 +190,39 @@ pub struct WorkFilters {
     pub tag_ids: Option<Vec<String>>,
     pub sort_by: Option<String>,
     pub sort_order: Option<String>,
+}
+
+/// A narrative unit owned by a work whose structure mode is `narrative`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Chapter {
+    pub id: String,
+    pub work_id: String,
+    pub title: String,
+    pub summary: Option<String>,
+    pub content: Option<String>,
+    pub status: String,
+    pub target_word_count: Option<i32>,
+    pub sort_order: i32,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChapterCharacterRelation {
+    pub character_id: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChapterWithCharacters {
+    #[serde(flatten)]
+    pub chapter: Chapter,
+    pub characters: Vec<ChapterCharacterRelation>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChapterCharacterInput {
+    pub character_id: String,
+    pub note: Option<String>,
 }

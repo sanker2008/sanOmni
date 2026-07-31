@@ -155,8 +155,57 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         set_db_version(conn, 3)?;
     }
 
+    if current_version < 4 {
+        // v3 -> v4: allow a work to opt into an explicit content structure.
+        // Existing works intentionally remain `single`, so old records never
+        // suddenly gain chapter UI.
+        let _ = conn.execute(
+            "ALTER TABLE works ADD COLUMN structure_mode TEXT NOT NULL DEFAULT 'single'",
+            [],
+        );
+
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS work_chapters (
+                id                  TEXT PRIMARY KEY,
+                work_id             TEXT NOT NULL,
+                title               TEXT NOT NULL,
+                summary             TEXT,
+                content             TEXT,
+                status              TEXT NOT NULL DEFAULT 'outline',
+                target_word_count   INTEGER,
+                sort_order          INTEGER NOT NULL DEFAULT 0,
+                created_at          TEXT NOT NULL,
+                updated_at          TEXT NOT NULL,
+                deleted_at          TEXT,
+                FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS chapter_character_relations (
+                chapter_id          TEXT NOT NULL,
+                character_id        TEXT NOT NULL,
+                note                TEXT,
+                created_at          TEXT NOT NULL,
+                updated_at          TEXT NOT NULL,
+                PRIMARY KEY (chapter_id, character_id),
+                FOREIGN KEY (chapter_id) REFERENCES work_chapters(id) ON DELETE CASCADE,
+                FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_work_chapters_work_order
+                ON work_chapters(work_id, sort_order);
+            CREATE INDEX IF NOT EXISTS idx_work_chapters_deleted_at
+                ON work_chapters(deleted_at);
+            CREATE INDEX IF NOT EXISTS idx_chapter_character_relations_character
+                ON chapter_character_relations(character_id);
+            "#,
+        )?;
+
+        set_db_version(conn, 4)?;
+    }
+
     // Future migrations go here:
-    // if current_version < 4 { ... set_db_version(conn, 4)?; }
+    // if current_version < 5 { ... set_db_version(conn, 5)?; }
 
     Ok(())
 }
@@ -499,6 +548,7 @@ CREATE TABLE IF NOT EXISTS works (
     name                TEXT NOT NULL,
     path                TEXT,
     work_type           TEXT NOT NULL,
+    structure_mode      TEXT NOT NULL DEFAULT 'single',
     description         TEXT,
     release_date        TEXT,
     producer            TEXT,
@@ -536,6 +586,32 @@ CREATE TABLE IF NOT EXISTS work_tags (
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS work_chapters (
+    id                  TEXT PRIMARY KEY,
+    work_id             TEXT NOT NULL,
+    title               TEXT NOT NULL,
+    summary             TEXT,
+    content             TEXT,
+    status              TEXT NOT NULL DEFAULT 'outline',
+    target_word_count   INTEGER,
+    sort_order          INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    deleted_at          TEXT,
+    FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS chapter_character_relations (
+    chapter_id          TEXT NOT NULL,
+    character_id        TEXT NOT NULL,
+    note                TEXT,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    PRIMARY KEY (chapter_id, character_id),
+    FOREIGN KEY (chapter_id) REFERENCES work_chapters(id) ON DELETE CASCADE,
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+);
+
 -- Indexes for Works Collection
 CREATE INDEX IF NOT EXISTS idx_works_work_type ON works(work_type);
 CREATE INDEX IF NOT EXISTS idx_works_status ON works(status);
@@ -545,6 +621,9 @@ CREATE INDEX IF NOT EXISTS idx_characters_ip_id ON characters(ip_id);
 CREATE INDEX IF NOT EXISTS idx_characters_display_order ON characters(work_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_characters_deleted_at ON characters(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_work_tags_tag_id ON work_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_work_chapters_work_order ON work_chapters(work_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_work_chapters_deleted_at ON work_chapters(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_chapter_character_relations_character ON chapter_character_relations(character_id);
 "#;
 
 fn migrate_ip_images(conn: &Connection) -> Result<()> {

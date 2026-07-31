@@ -10,6 +10,7 @@ import WorkEditModal from "./WorkEditModal";
 import CharacterEditModal from "./CharacterEditModal";
 import CharacterCard from "./CharacterCard";
 import ConfirmDialog from "./ConfirmDialog";
+import NarrativeChaptersPanel from "./NarrativeChaptersPanel";
 
 
 interface WorkDetailViewProps {
@@ -17,6 +18,10 @@ interface WorkDetailViewProps {
 }
 
 const WORK_TYPE_LABELS: Record<string, string> = {
+  image: "图片",
+  song: "歌曲",
+  album: "专辑",
+  screenplay: "剧本",
   tv_series: "电视剧",
   movie: "电影",
   short_drama: "微短剧",
@@ -54,6 +59,7 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
   const [isEditWorkOpen, setIsEditWorkOpen] = useState(false);
   const [isEditCharOpen, setIsEditCharOpen] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<CharacterWithRelations | null>(null);
+  const [activeNarrativeTab, setActiveNarrativeTab] = useState<"chapters" | "characters">("chapters");
   
   const [showDeleteWorkConfirm, setShowDeleteWorkConfirm] = useState(false);
   const [isDeletingWork, setIsDeletingWork] = useState(false);
@@ -65,10 +71,12 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
   useEffect(() => {
     if (selectedWork) {
       fetchCharacters(selectedWork.id);
+      setActiveNarrativeTab("chapters");
     }
   }, [selectedWork]);
 
   if (!selectedWork) return null;
+  const isNarrativeWork = selectedWork.structure_mode === "narrative";
 
   const handleDeleteWork = async () => {
     setIsDeletingWork(true);
@@ -305,7 +313,9 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
 
                 {selectedWork.description && (
                   <div className="pt-4 border-t space-y-1.5">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">故事大纲 / 特征设定</p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      {isNarrativeWork ? "剧本总纲 / 世界观" : "作品简介 / 特征设定"}
+                    </p>
                     <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-line bg-card/40 p-3 rounded-lg border border-dashed">
                       {selectedWork.description}
                     </p>
@@ -316,8 +326,35 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
           </ScrollArea>
         </div>
 
-        {/* Right pane: Characters lists */}
+        {/* Right pane: narrative chapters or character reference */}
         <div className="flex-1 flex flex-col overflow-hidden">
+          {isNarrativeWork && (
+            <div className="px-6 pt-3 border-b bg-card/15 flex items-center gap-2">
+              <Button
+                variant={activeNarrativeTab === "chapters" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setActiveNarrativeTab("chapters")}
+                className="gap-1.5"
+              >
+                <Film className="w-4 h-4" />
+                章节
+              </Button>
+              <Button
+                variant={activeNarrativeTab === "characters" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setActiveNarrativeTab("characters")}
+                className="gap-1.5"
+              >
+                <Users className="w-4 h-4" />
+                人物设定
+              </Button>
+            </div>
+          )}
+
+          {isNarrativeWork && activeNarrativeTab === "chapters" ? (
+            <NarrativeChaptersPanel workId={selectedWork.id} />
+          ) : (
+            <>
           {/* List Toolbar */}
           <div className="px-6 py-4 border-b flex items-center justify-between bg-card/25 flex-shrink-0">
             <h2 className="text-base font-semibold flex items-center gap-2">
@@ -372,6 +409,8 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
               )}
             </div>
           </ScrollArea>
+            </>
+          )}
         </div>
       </div>
 

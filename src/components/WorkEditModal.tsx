@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type WorkWithRelations, useWorksStore, useTagStore, useUIStore, groupAndDeduplicateTags, type UniqueTagGroup } from "@/stores";
+import { type WorkStructureMode, type WorkWithRelations, useWorksStore, useTagStore, useUIStore, groupAndDeduplicateTags, type UniqueTagGroup } from "@/stores";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,10 @@ interface WorkEditModalProps {
 }
 
 const WORK_TYPES = [
+  { value: "image", label: "图片" },
+  { value: "song", label: "歌曲" },
+  { value: "album", label: "专辑" },
+  { value: "screenplay", label: "剧本" },
   { value: "tv_series", label: "电视剧" },
   { value: "movie", label: "电影" },
   { value: "short_drama", label: "微短剧" },
@@ -27,6 +31,20 @@ const WORK_TYPES = [
   { value: "comic", label: "漫画" },
   { value: "other", label: "其他" },
 ];
+
+const STRUCTURE_MODES = [
+  { value: "single", label: "单体作品", hint: "适合图片、歌曲等独立作品" },
+  { value: "collection", label: "集合结构", hint: "适合专辑、系列作品（曲目功能后续接入）" },
+  { value: "narrative", label: "叙事结构", hint: "启用章节、正文与人物出场管理" },
+];
+
+function suggestedStructureMode(workType: string): WorkStructureMode {
+  return ["screenplay", "short_drama", "tv_series", "novel"].includes(workType)
+    ? "narrative"
+    : workType === "album"
+      ? "collection"
+      : "single";
+}
 
 const WORK_STATUSES = [
   { value: "planning", label: "筹备中" },
@@ -46,6 +64,7 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [workType, setWorkType] = useState("tv_series");
+  const [structureMode, setStructureMode] = useState<WorkStructureMode>("narrative");
   const [status, setStatus] = useState("planning");
   const [releaseDate, setReleaseDate] = useState("");
   const [producer, setProducer] = useState("");
@@ -85,6 +104,7 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
         setName(work.name);
         setPath(work.path || "");
         setWorkType(work.work_type);
+        setStructureMode(work.structure_mode || "single");
         setStatus(work.status || "planning");
         setReleaseDate(work.release_date || "");
         setProducer(work.producer || "");
@@ -98,6 +118,7 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
         setName("");
         setPath("");
         setWorkType("tv_series");
+        setStructureMode("narrative");
         setStatus("planning");
         setReleaseDate("");
         setProducer("");
@@ -154,6 +175,7 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
         name: name.trim(),
         path: path.trim() || null,
         work_type: workType,
+        structure_mode: structureMode,
         status: status || null,
         release_date: releaseDate.trim() || null,
         producer: producer.trim() || null,
@@ -310,7 +332,11 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
                 <label className="text-xs font-semibold text-muted-foreground">作品类型</label>
                 <select
                   value={workType}
-                  onChange={(e) => setWorkType(e.target.value)}
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    setWorkType(nextType);
+                    if (!work) setStructureMode(suggestedStructureMode(nextType));
+                  }}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-950"
                 >
                   {WORK_TYPES.map((type) => (
@@ -335,6 +361,22 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">作品结构</label>
+              <select
+                value={structureMode}
+                onChange={(e) => setStructureMode(e.target.value as WorkStructureMode)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-950"
+              >
+                {STRUCTURE_MODES.map((mode) => (
+                  <option key={mode.value} value={mode.value}>{mode.label}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-muted-foreground">
+                {STRUCTURE_MODES.find((mode) => mode.value === structureMode)?.hint}
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -370,9 +412,11 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
 
         {/* Description textarea */}
         <div className="flex flex-col gap-1.5 py-1">
-          <label className="text-xs font-semibold text-muted-foreground">简要故事梗概 / 背景特征描述</label>
+          <label className="text-xs font-semibold text-muted-foreground">
+            {structureMode === "narrative" ? "剧本总纲 / 世界观" : "作品简介 / 创作说明"}
+          </label>
           <textarea
-            placeholder="输入作品的简要大纲、核心故事背景或其它详细特征设定描述..."
+            placeholder={structureMode === "narrative" ? "输入剧本总纲、世界观或核心设定…" : "输入作品的创作说明、背景或特征设定…"}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-950"

@@ -26,6 +26,7 @@
 - [网页浏览器更新](./features/WEB_BROWSER_UPDATE.md) - 浏览器功能说明
 - [列表模式更新](./features/LIST_MODE_UPDATE.md) - 列表显示模式
 - [IP 作品合集](./features/IP_WORKS_COLLECTION.md) - IP 作品管理
+- [通用作品集与叙事章节](./features/WORKS_COLLECTION_STRUCTURE.md) - 图片、歌曲、专辑、剧本等作品的结构与章节管理
 - [图片切割 (Lab)](./features/LAB_IMAGE_SLICER.md) - 可视化图片切割工具
 - [产品图制作 (Lab)](./features/LAB_PRODUCT_IMAGE_MAKER.md) - 产品图推广制作工具
 - [模板商品化说明](./features/template.md) - 统一分类、图片证据与发布流
@@ -51,4 +52,4 @@
 发版说明及历史大功能变更日志，请查阅 `docs/release-notes/` 目录。
 
 ---
-**最后更新**: 2026-06-23
+**最后更新**: 2026-07-31

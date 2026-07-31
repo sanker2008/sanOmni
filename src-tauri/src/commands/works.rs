@@ -56,6 +56,14 @@ fn work_sort_clause(sort_by: Option<&str>, sort_order: Option<&str>) -> &'static
     }
 }
 
+fn normalize_structure_mode(structure_mode: Option<String>) -> Result<String, String> {
+    let structure_mode = structure_mode.unwrap_or_else(|| "single".to_string());
+    match structure_mode.as_str() {
+        "single" | "collection" | "narrative" => Ok(structure_mode),
+        _ => Err("作品结构必须是单体、集合或叙事之一".to_string()),
+    }
+}
+
 // Path resolver helpers
 fn resolve_relative_path(
     app_data_dir: &std::path::Path,
@@ -99,6 +107,7 @@ pub async fn create_work(
     name: String,
     path: Option<String>,
     work_type: String,
+    structure_mode: Option<String>,
     description: Option<String>,
     release_date: Option<String>,
     producer: Option<String>,
@@ -108,6 +117,7 @@ pub async fn create_work(
     let conn = get_connection(&app_handle)?;
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
+    let structure_mode = normalize_structure_mode(structure_mode)?;
 
     let final_path = match path {
         Some(ref p) if !p.trim().is_empty() => p.trim().to_lowercase().replace(' ', "-"),
@@ -115,14 +125,15 @@ pub async fn create_work(
     };
 
     conn.execute(
-        "INSERT INTO works (id, name, path, work_type, description, release_date, 
-         producer, director_author, status, created_at, updated_at) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        "INSERT INTO works (id, name, path, work_type, structure_mode, description, release_date,
+         producer, director_author, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             id,
             name,
             final_path.clone(),
             work_type,
+            structure_mode,
             description,
             release_date,
             producer,
@@ -160,7 +171,7 @@ pub async fn get_works(
 
     let mut query = String::from(
         "SELECT id, name, path, work_type, description, release_date, producer, 
-         director_author, status, cover_path, created_at, updated_at, deleted_at
+         director_author, status, cover_path, created_at, updated_at, deleted_at, structure_mode
          FROM works WHERE deleted_at IS NULL",
     );
 
@@ -213,6 +224,7 @@ pub async fn get_works(
                 name: row.get(1)?,
                 path: row.get(2)?,
                 work_type: row.get(3)?,
+                structure_mode: row.get(13)?,
                 description: row.get(4)?,
                 release_date: row.get(5)?,
                 producer: row.get(6)?,
@@ -259,7 +271,7 @@ pub async fn get_work_by_id(
     let work = conn
         .query_row(
             "SELECT id, name, path, work_type, description, release_date, producer, 
-         director_author, status, cover_path, created_at, updated_at, deleted_at
+         director_author, status, cover_path, created_at, updated_at, deleted_at, structure_mode
          FROM works WHERE id = ? AND deleted_at IS NULL",
             params![id],
             |row| {
@@ -270,6 +282,7 @@ pub async fn get_work_by_id(
                     name: row.get(1)?,
                     path: row.get(2)?,
                     work_type: row.get(3)?,
+                    structure_mode: row.get(13)?,
                     description: row.get(4)?,
                     release_date: row.get(5)?,
                     producer: row.get(6)?,
@@ -303,6 +316,7 @@ pub async fn update_work(
     name: Option<String>,
     path: Option<String>,
     work_type: Option<String>,
+    structure_mode: Option<String>,
     description: Option<String>,
     release_date: Option<String>,
     producer: Option<String>,
@@ -318,6 +332,10 @@ pub async fn update_work(
     {
         let conn = get_connection(&app_handle)?;
         let now = Utc::now().to_rfc3339();
+        let structure_mode = match structure_mode {
+            Some(value) => Some(normalize_structure_mode(Some(value))?),
+            None => None,
+        };
 
         // 1. Get old path and cover path
         let (old_path, old_cover_path): (String, Option<String>) = conn
@@ -401,6 +419,10 @@ pub async fn update_work(
             query.push_str(&format!(", work_type = ?{}", param_index));
             param_index += 1;
         }
+        if structure_mode.is_some() {
+            query.push_str(&format!(", structure_mode = ?{}", param_index));
+            param_index += 1;
+        }
         if description.is_some() {
             query.push_str(&format!(", description = ?{}", param_index));
             param_index += 1;
@@ -433,6 +455,9 @@ pub async fn update_work(
         }
         params_vec.push(&final_path);
         if let Some(ref v) = work_type {
+            params_vec.push(v);
+        }
+        if let Some(ref v) = structure_mode {
             params_vec.push(v);
         }
         if let Some(ref v) = description {
@@ -473,6 +498,12 @@ pub async fn delete_work(app_handle: AppHandle, id: String) -> Result<(), String
     // Soft delete characters as well
     conn.execute(
         "UPDATE characters SET deleted_at = ?1 WHERE work_id = ?2",
+        params![now, id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE work_chapters SET deleted_at = ?1, updated_at = ?1 WHERE work_id = ?2 AND deleted_at IS NULL",
         params![now, id],
     )
     .map_err(|e| e.to_string())?;

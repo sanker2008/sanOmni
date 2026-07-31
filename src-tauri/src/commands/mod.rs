@@ -90,6 +90,7 @@ pub mod watermark_removal;
 pub mod engine;
 
 pub mod characters;
+pub mod chapters;
 pub mod classifier;
 pub mod fs;
 pub mod ip_assets;

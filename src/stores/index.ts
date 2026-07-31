@@ -649,8 +649,11 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
 // Works Collection Types
 export type WorkType = 
-  | 'tv_series' | 'movie' | 'novel' | 'drama' 
-  | 'animation' | 'game' | 'comic' | 'other';
+  | 'tv_series' | 'movie' | 'short_drama' | 'novel' | 'drama'
+  | 'animation' | 'game' | 'comic' | 'image' | 'song' | 'album'
+  | 'screenplay' | 'other';
+
+export type WorkStructureMode = 'single' | 'collection' | 'narrative';
 
 export type WorkStatus = 
   | 'planning' | 'in_production' | 'released' 
@@ -665,6 +668,7 @@ export interface Work {
   name: string;
   path?: string;
   work_type: WorkType;
+  structure_mode: WorkStructureMode;
   description?: string;
   release_date?: string;
   producer?: string;
@@ -714,6 +718,33 @@ export interface WorkFilters {
   sort_order?: 'asc' | 'desc';
 }
 
+export type ChapterStatus = 'outline' | 'draft' | 'review' | 'final';
+
+export interface Chapter {
+  id: string;
+  work_id: string;
+  title: string;
+  summary?: string;
+  content?: string;
+  status: ChapterStatus;
+  target_word_count?: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface ChapterCharacterInput {
+  character_id: string;
+  note?: string | null;
+}
+
+export interface ChapterCharacterRelation extends ChapterCharacterInput {}
+
+export interface ChapterWithCharacters extends Chapter {
+  characters: ChapterCharacterRelation[];
+}
+
 // Works Store
 interface WorksStore {
   works: WorkWithRelations[];
@@ -722,8 +753,8 @@ interface WorksStore {
   loading: boolean;
   
   fetchWorks: () => Promise<void>;
-  createWork: (work: { name: string; path?: string | null; work_type: string; description?: string | null; release_date?: string | null; producer?: string | null; director_author?: string | null; status?: string | null }) => Promise<Work>;
-  updateWork: (id: string, updates: { name?: string; path?: string | null; work_type?: string; description?: string | null; release_date?: string | null; producer?: string | null; director_author?: string | null; status?: string | null }) => Promise<Work>;
+  createWork: (work: { name: string; path?: string | null; work_type: string; structure_mode?: WorkStructureMode; description?: string | null; release_date?: string | null; producer?: string | null; director_author?: string | null; status?: string | null }) => Promise<Work>;
+  updateWork: (id: string, updates: { name?: string; path?: string | null; work_type?: string; structure_mode?: WorkStructureMode; description?: string | null; release_date?: string | null; producer?: string | null; director_author?: string | null; status?: string |null }) => Promise<Work>;
   deleteWork: (id: string) => Promise<void>;
   selectWork: (work: WorkWithRelations | null) => void;
   setFilters: (filters: Partial<WorkFilters>) => void;
@@ -931,6 +962,81 @@ export const useCharactersStore = create<CharactersStore>((set) => ({
   
   setCharacters: (characters) => set({ characters }),
   setLoading: (loading) => set({ loading }),
+}));
+
+// Narrative chapters stay separate from work and character state so a
+// single image, song, or album never loads screenplay-specific data.
+interface ChaptersStore {
+  chapters: ChapterWithCharacters[];
+  loading: boolean;
+  fetchChapters: (workId: string) => Promise<void>;
+  createChapter: (params: { work_id: string; title: string; summary?: string | null; content?: string | null; status: ChapterStatus; target_word_count?: number | null }) => Promise<ChapterWithCharacters>;
+  updateChapter: (params: { id: string; title: string; summary?: string | null; content?: string | null; status: ChapterStatus; target_word_count?: number | null }) => Promise<ChapterWithCharacters>;
+  deleteChapter: (id: string) => Promise<void>;
+  updateOrder: (chapterIds: string[]) => Promise<void>;
+  setChapterCharacters: (chapterId: string, characters: ChapterCharacterInput[]) => Promise<ChapterWithCharacters>;
+}
+
+export const useChaptersStore = create<ChaptersStore>((set) => ({
+  chapters: [],
+  loading: false,
+
+  fetchChapters: async (workId) => {
+    set({ loading: true });
+    try {
+      const { getChapters } = await import("@/services/tauri");
+      set({ chapters: await getChapters(workId) });
+    } catch (error) {
+      console.error("Failed to fetch chapters:", error);
+      set({ chapters: [] });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  createChapter: async (params) => {
+    const { createChapter } = await import("@/services/tauri");
+    const chapter = await createChapter(params);
+    set((state) => ({ chapters: [...state.chapters, chapter] }));
+    return chapter;
+  },
+
+  updateChapter: async (params) => {
+    const { updateChapter } = await import("@/services/tauri");
+    const chapter = await updateChapter(params);
+    set((state) => ({
+      chapters: state.chapters.map((item) => item.id === chapter.id ? chapter : item),
+    }));
+    return chapter;
+  },
+
+  deleteChapter: async (id) => {
+    const { deleteChapter } = await import("@/services/tauri");
+    await deleteChapter(id);
+    set((state) => ({ chapters: state.chapters.filter((chapter) => chapter.id !== id) }));
+  },
+
+  updateOrder: async (chapterIds) => {
+    const { updateChapterOrder } = await import("@/services/tauri");
+    await updateChapterOrder(chapterIds);
+    set((state) => ({
+      chapters: chapterIds
+        .map((id, sort_order) => {
+          const chapter = state.chapters.find((item) => item.id === id);
+          return chapter ? { ...chapter, sort_order } : null;
+        })
+        .filter(Boolean) as ChapterWithCharacters[],
+    }));
+  },
+
+  setChapterCharacters: async (chapterId, characters) => {
+    const { setChapterCharacters } = await import("@/services/tauri");
+    const chapter = await setChapterCharacters(chapterId, characters);
+    set((state) => ({
+      chapters: state.chapters.map((item) => item.id === chapter.id ? chapter : item),
+    }));
+    return chapter;
+  },
 }));
 
 // Tag Deduplication Helper
