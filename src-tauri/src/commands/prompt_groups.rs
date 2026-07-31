@@ -408,11 +408,13 @@ pub async fn update_prompt_group_image_meta(
     variant_key: Option<String>,
     variant_json: Option<String>,
     is_sync_enabled: Option<bool>,
+    remote_url: Option<String>,
 ) -> Result<(), String> {
     let mut conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
-    if is_cover.unwrap_or(false) {
+    // Special logic: if this image is being set as the cover, we unset all other covers in this group.
+    if let Some(true) = is_cover {
         tx.execute(
             "UPDATE image_prompt_group_relations SET is_cover = 0, role = CASE WHEN role = 'cover' THEN 'gallery' ELSE role END WHERE prompt_group_id = ?1",
             [&group_id],
@@ -420,37 +422,53 @@ pub async fn update_prompt_group_image_meta(
         .map_err(|e| e.to_string())?;
     }
 
-    let current_role = role.unwrap_or_else(|| {
-        if is_cover.unwrap_or(false) {
-            "cover".to_string()
-        } else {
-            "gallery".to_string()
-        }
-    });
+    let mut updates = Vec::new();
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
-    tx.execute(
-        "UPDATE image_prompt_group_relations
-         SET role = ?1,
-             is_cover = ?2,
-             sort_order = ?3,
-             caption = ?4,
-             variant_key = ?5,
-             variant_json = ?6,
-             is_sync_enabled = ?7
-         WHERE prompt_group_id = ?8 AND image_id = ?9",
-        rusqlite::params![
-            current_role,
-            is_cover.unwrap_or(false),
-            sort_order.unwrap_or(0),
-            caption,
-            variant_key,
-            variant_json,
-            is_sync_enabled.unwrap_or(true),
-            &group_id,
-            &image_id
-        ],
-    )
-    .map_err(|e| e.to_string())?;
+    if let Some(r) = role {
+        updates.push("role = ?");
+        params.push(Box::new(r));
+    }
+    if let Some(ic) = is_cover {
+        updates.push("is_cover = ?");
+        params.push(Box::new(ic));
+    }
+    if let Some(so) = sort_order {
+        updates.push("sort_order = ?");
+        params.push(Box::new(so));
+    }
+    if let Some(c) = caption {
+        updates.push("caption = ?");
+        params.push(Box::new(c));
+    }
+    if let Some(vk) = variant_key {
+        updates.push("variant_key = ?");
+        params.push(Box::new(vk));
+    }
+    if let Some(vj) = variant_json {
+        updates.push("variant_json = ?");
+        params.push(Box::new(vj));
+    }
+    if let Some(se) = is_sync_enabled {
+        updates.push("is_sync_enabled = ?");
+        params.push(Box::new(se));
+    }
+    if let Some(ru) = remote_url {
+        updates.push("remote_url = ?");
+        params.push(Box::new(ru));
+    }
+
+    if !updates.is_empty() {
+        let sql = format!(
+            "UPDATE image_prompt_group_relations SET {} WHERE prompt_group_id = ? AND image_id = ?",
+            updates.join(", ")
+        );
+        params.push(Box::new(group_id.clone()));
+        params.push(Box::new(image_id.clone()));
+
+        tx.execute(&sql, rusqlite::params_from_iter(params.iter()))
+            .map_err(|e| e.to_string())?;
+    }
 
     let now = chrono::Utc::now().to_rfc3339();
     tx.execute(

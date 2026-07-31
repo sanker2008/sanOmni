@@ -98,5 +98,6 @@ pub mod ip_images;
 pub mod prompt_groups;
 pub mod scanner;
 pub mod settings;
+pub mod supabase_storage;
 pub mod sync_commands;
 pub mod works;

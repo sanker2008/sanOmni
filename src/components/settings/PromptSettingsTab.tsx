@@ -126,8 +126,37 @@ export default function PromptSettingsTab({
           </div>
         </CardContent>
       </Card>
-            <div className="space-y-6">
-              <div className="text-lg font-semibold mb-4 border-b pb-2">归档与路径配置</div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Supabase Storage 图片上传</CardTitle>
+          <CardDescription>
+            配置后会由桌面端原生网络层上传，避免 WebView 跨域问题；Storage Key 仅保存到系统凭据库。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Supabase URL</label>
+            <Input
+              value={localSettings.sanPromptSupabaseUrl || ""}
+              onChange={(e) => handleLocalUpdate("sanPromptSupabaseUrl", e.target.value)}
+              placeholder="https://xxxx.supabase.co"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Supabase Storage Key</label>
+            <Input
+              type="password"
+              value={localSettings.sanPromptSupabaseAnonKey || ""}
+              onChange={(e) => handleLocalUpdate("sanPromptSupabaseAnonKey", e.target.value)}
+              placeholder="从 Supabase Dashboard → Settings → API 获取；已配置时留空不变"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6">
+        <div className="text-lg font-semibold mb-4 border-b pb-2">归档与路径配置</div>
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">图片归档命名模板</CardTitle>

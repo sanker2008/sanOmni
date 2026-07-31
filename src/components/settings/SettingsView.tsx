@@ -15,7 +15,10 @@ import AboutTab from "./AboutTab";
 import SyncTab from "./SyncTab";
 import TrashView from "@/components/TrashView";
 
-const KEYRING_SETTING_KEYS = new Set(["sanPromptPublishSecret"]);
+const KEYRING_SETTING_KEYS = new Set([
+  "sanPromptPublishSecret",
+  "sanPromptSupabaseAnonKey",
+]);
 
 function buildPersistedSettings(settings: Record<string, any>): Record<string, string> {
   const settingsToSave: Record<string, string> = {};
@@ -39,22 +42,49 @@ export default function SettingsView() {
 
   const [resetType, setResetType] = useState<ResetType>(null);
 
-  // 初始化本地设置
+  // 打开设置时以数据库为准，localStorage 只作为 WebView 的缓存。
   useEffect(() => {
-    if (settingsOpen) {
-      setLocalSettings({ ...DEFAULT_SETTINGS, ...settings });
-      setHasChanges(false);
-      import("@/services/tauri").then(async ({ settingsApi }) => {
-        try {
-          const secret = await settingsApi.getSanPromptPublishSecret();
-          setLocalSettings((prev) => ({ ...prev, sanPromptPublishSecret: secret }));
-        } catch (e) {
-          console.error("Failed to load sanPrompt publish secret:", e);
+    if (!settingsOpen) return;
+
+    let disposed = false;
+
+    const loadSettings = async () => {
+      try {
+        const { settingsApi } = await import("@/services/tauri");
+        const [persistedSettings, secret] = await Promise.all([
+          settingsApi.getAll(),
+          settingsApi.getSanPromptPublishSecret(),
+        ]);
+        if (disposed) return;
+
+        const nextSettings = { ...DEFAULT_SETTINGS, ...useUIStore.getState().settings };
+        const persistedSupabaseUrl = persistedSettings.sanPromptSupabaseUrl;
+        if (typeof persistedSupabaseUrl === "string") {
+          nextSettings.sanPromptSupabaseUrl = persistedSupabaseUrl;
+          if (useUIStore.getState().settings.sanPromptSupabaseUrl !== persistedSupabaseUrl) {
+            updateSetting("sanPromptSupabaseUrl", persistedSupabaseUrl);
+          }
         }
-      });
-    }
+
+        nextSettings.sanPromptPublishSecret = secret;
+        setLocalSettings(nextSettings);
+        setHasChanges(false);
+      } catch (error) {
+        console.error("Failed to load settings from DB:", error);
+        if (!disposed) {
+          setLocalSettings({ ...DEFAULT_SETTINGS, ...useUIStore.getState().settings });
+          setHasChanges(false);
+        }
+      }
+    };
+
+    void loadSettings();
+
+    return () => {
+      disposed = true;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsOpen]);
+  }, [settingsOpen, updateSetting]);
 
   // 检测变更
   useEffect(() => {
@@ -95,6 +125,9 @@ export default function SettingsView() {
         // 保存其他设置
         const settingsToSave = buildPersistedSettings(localSettings);
         await settingsApi.setSanPromptPublishSecret(localSettings.sanPromptPublishSecret || "");
+        if (localSettings.sanPromptSupabaseAnonKey?.trim()) {
+          await settingsApi.setSanPromptSupabaseStorageKey(localSettings.sanPromptSupabaseAnonKey);
+        }
         
         await settingsApi.save(settingsToSave);
 
@@ -109,7 +142,7 @@ export default function SettingsView() {
         }
 
         Object.entries(localSettings).forEach(([key, value]) => {
-          updateSetting(key, value);
+          updateSetting(key, key === "sanPromptSupabaseAnonKey" ? "" : value);
         });
         setHasChanges(false);
         setPendingMigrations(null);
@@ -135,6 +168,9 @@ export default function SettingsView() {
     import("@/services/tauri").then(async ({ settingsApi }) => {
       const settingsToSave = buildPersistedSettings(localSettings);
       await settingsApi.setSanPromptPublishSecret(localSettings.sanPromptPublishSecret || "");
+      if (localSettings.sanPromptSupabaseAnonKey?.trim()) {
+        await settingsApi.setSanPromptSupabaseStorageKey(localSettings.sanPromptSupabaseAnonKey);
+      }
       await settingsApi.save(settingsToSave).catch(e => console.error("Failed to save settings to DB:", e));
 
       // ALWAYS save to the default DB as well, because Rust relies on the default DB to find the unifiedRootPath
@@ -149,7 +185,7 @@ export default function SettingsView() {
     });
 
     Object.entries(localSettings).forEach(([key, value]) => {
-      updateSetting(key, value);
+      updateSetting(key, key === "sanPromptSupabaseAnonKey" ? "" : value);
     });
     setHasChanges(false);
     setPendingMigrations(null);

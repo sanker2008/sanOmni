@@ -3,6 +3,7 @@ use crate::sync::client::{
 };
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::path::Path;
 use tauri::Emitter;
 use uuid::Uuid;
@@ -70,6 +71,48 @@ fn change_pair(change: &SyncChange, first: &str, second: &str) -> Option<(String
         })
 }
 
+fn normalize_creation_record_id(change: &mut SyncChange) {
+    if change.table != "ip_creations" {
+        return;
+    }
+
+    if let Some(data_str) = &change.data {
+        if let Ok(json) = parse_sync_json(data_str) {
+            if let (Some(ip_id), Some(image_path)) = (
+                json.get("ip_id").and_then(|v| v.as_str()),
+                json.get("image_path").and_then(|v| v.as_str()),
+            ) {
+                change.record_id = creation_record_id(ip_id, image_path);
+            }
+        }
+    }
+}
+
+/// Reduce unsent history to each record's final local state before preparing
+/// file uploads. In particular, a local deletion must supersede an older
+/// INSERT/UPDATE whose file was already removed from disk.
+///
+/// The first position is retained so parent/child dependency ordering from the
+/// original changelog remains intact while the final payload is sent.
+fn collapse_pending_changes(changes: Vec<SyncChange>) -> Vec<SyncChange> {
+    let mut positions = HashMap::new();
+    let mut collapsed = Vec::with_capacity(changes.len());
+
+    for mut change in changes {
+        normalize_creation_record_id(&mut change);
+        let key = (change.table.clone(), change.record_id.clone());
+
+        if let Some(&position) = positions.get(&key) {
+            collapsed[position] = change;
+        } else {
+            positions.insert(key, collapsed.len());
+            collapsed.push(change);
+        }
+    }
+
+    collapsed
+}
+
 fn queue_pending_download(
     db_path: &str,
     file_hash: &str,
@@ -93,7 +136,7 @@ fn queue_pending_download(
 
 pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     // 1. 读库，收集待推送的变更（放入独立的代码块中，确保 Connection 及时被释放）
-    let (server_url, api_key, device_id, last_sync_version, pending_ids, mut changes) = {
+    let (server_url, api_key, device_id, last_sync_version, pending_ids, changes) = {
         let conn =
             Connection::open(Path::new(db_path)).map_err(|e| format!("打开数据库失败: {}", e))?;
 
@@ -168,6 +211,11 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
         )
     }; // <--- conn 在这里被 Drop，不再跨越 .await
 
+    // A deleted image leaves historical INSERT/UPDATE rows in the local queue.
+    // Only the latest state of each record belongs in this push; otherwise the
+    // stale row makes us try to read a file the deletion has already removed.
+    let mut changes = collapse_pending_changes(changes);
+
     let client = SyncClient::new(server_url, api_key)?;
 
     // 2. Push 到服务器
@@ -184,19 +232,6 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
     if should_push {
 
     for (i, change) in changes.iter_mut().enumerate() {
-        if change.table == "ip_creations" {
-            if let Some(data_str) = &change.data {
-                if let Ok(json) = parse_sync_json(data_str) {
-                    if let (Some(ip_id), Some(image_path)) = (
-                        json.get("ip_id").and_then(|v| v.as_str()),
-                        json.get("image_path").and_then(|v| v.as_str()),
-                    ) {
-                        change.record_id = creation_record_id(ip_id, image_path);
-                    }
-                }
-            }
-        }
-
         if matches!(
             change.table.as_str(),
             "ip_assets"
@@ -1438,4 +1473,36 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
             "deletes": pushed_deletes
         }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn change(table: &str, record_id: &str, operation: &str, data: Option<&str>) -> SyncChange {
+        SyncChange {
+            domain: SANIP_SYNC_DOMAIN.to_string(),
+            table: table.to_string(),
+            record_id: record_id.to_string(),
+            operation: operation.to_string(),
+            data: data.map(str::to_string),
+            changed_at: "2026-07-31T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn deletion_supersedes_stale_image_change_before_file_upload() {
+        let stale_path = r#"{"id":"image-1","absolute_path":"D:\\sanomnidata\\ip_inbox\\deleted.webp"}"#;
+        let changes = collapse_pending_changes(vec![
+            change("ip_assets", "ip-1", "INSERT", Some(r#"{"id":"ip-1"}"#)),
+            change("ip_images", "image-1", "INSERT", Some(stale_path)),
+            change("ip_images", "image-1", "DELETE", Some(r#"{"id":"image-1"}"#)),
+        ]);
+
+        assert_eq!(changes.len(), 2);
+        assert_eq!(changes[0].table, "ip_assets");
+        assert_eq!(changes[1].table, "ip_images");
+        assert_eq!(changes[1].operation, "DELETE");
+        assert_eq!(changes[1].data.as_deref(), Some(r#"{"id":"image-1"}"#));
+    }
 }

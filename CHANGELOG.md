@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- sanPrompt: 在模板详情弹窗中新增“上一个/下一个”快捷切换按钮，支持在当前搜索与筛选结果内无缝浏览相邻模板。
+- sanPrompt: 新增 Supabase Storage 直传功能。发布模板时支持自动将本地图片上传至 Supabase，并替换为云端 public URL。
+- 图片自动压缩：上传 Supabase 前通过浏览器 Canvas 自动压缩图片（转为 WebP 格式，最大 1920px 宽），单张图片体积减少 90%+，极大节省云端存储空间。
+
+### Changed
+- sanPrompt 发布流程：图片上传成功后，系统会自动将 public URL 存回本地 SQLite 数据库（`remote_url` 字段），更新模板时实现“秒传”，避免图片重复上传造成的流量与时间浪费。
+- sanPrompt (Web): 优化 Next.js `Image` 组件，对 Supabase 和 placehold.co 域名的图片自动应用 Next.js 图片优化逻辑，不再全局禁用优化。
+
 ### Fixed
 - 修复客户端游标已等于服务端最新版本时，历史漏拉记录（例如另一台设备创建的 IP）永远无法通过普通增量同步补回的问题。增量 Pull 返回空结果后会对照服务端快照；若发现远端记录缺失，则从保留的完整历史中筛选这些记录的最新有效变更，通过现有事务化 Pull 路径安全恢复，并在同步结果中明确显示补回数量。
+- 修复删除 sanIP 图片后同步会尝试读取队列中已失效的旧文件路径、导致同步中断的问题。推送前会将同一记录的未同步历史折叠为最终状态，保留删除操作并跳过已被删除图片的旧新增/更新记录。
 
 ## [1.4.3] - 2026-07-29
 

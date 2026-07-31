@@ -46,6 +46,9 @@ pub fn run() {
     let close_event_is_quitting = Arc::clone(&is_quitting);
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main_window(app);
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -164,6 +167,9 @@ pub fn run() {
             commands::settings::get_sanprompt_publish_secret,
             commands::settings::save_settings,
             commands::settings::set_sanprompt_publish_secret,
+            commands::settings::set_sanprompt_supabase_storage_key,
+            commands::supabase_storage::get_supabase_storage_config,
+            commands::supabase_storage::upload_supabase_storage_object,
             commands::settings::reset_database,
             commands::settings::reset_general_settings,
             commands::settings::reset_prompt_data,

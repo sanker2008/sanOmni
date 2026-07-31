@@ -5,7 +5,61 @@ use std::path::PathBuf;
 
 const SANPROMPT_KEYRING_SERVICE: &str = "sanomni-sanprompt";
 const SANPROMPT_PUBLISH_SECRET_ACCOUNT: &str = "publish_secret";
-const KEYRING_SETTING_KEYS: &[&str] = &["sanPromptPublishSecret"];
+const SANPROMPT_SUPABASE_STORAGE_KEY_ACCOUNT: &str = "supabase_storage_key";
+const KEYRING_SETTING_KEYS: &[&str] = &[
+    "sanPromptPublishSecret",
+    "sanPromptSupabaseAnonKey",
+];
+
+fn keyring_entry(account: &str) -> Result<keyring::Entry, String> {
+    keyring::Entry::new(SANPROMPT_KEYRING_SERVICE, account)
+        .map_err(|error| format!("Failed to open keyring: {}", error))
+}
+
+/// Loads the Storage key from the OS credential store. On the first run after
+/// this feature was added, a legacy SQLite value is migrated and removed before
+/// the settings map can expose it to the WebView.
+pub fn get_sanprompt_supabase_storage_key(
+    conn: &Connection,
+) -> Result<Option<String>, String> {
+    let entry = keyring_entry(SANPROMPT_SUPABASE_STORAGE_KEY_ACCOUNT)?;
+    let legacy_key: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'sanPromptSupabaseAnonKey'",
+            [],
+            |row| row.get(0),
+        )
+        .ok()
+        .filter(|key: &String| !key.trim().is_empty());
+
+    if let Ok(key) = entry.get_password() {
+        if !key.trim().is_empty() {
+            if legacy_key.is_some() {
+                conn.execute(
+                    "DELETE FROM settings WHERE key = 'sanPromptSupabaseAnonKey'",
+                    [],
+                )
+                .map_err(|error| format!("Failed to remove legacy Supabase Storage key: {}", error))?;
+            }
+            return Ok(Some(key));
+        }
+    }
+
+    let Some(legacy_key) = legacy_key else {
+        return Ok(None);
+    };
+
+    entry
+        .set_password(legacy_key.trim())
+        .map_err(|error| format!("Failed to migrate Supabase Storage key to keyring: {}", error))?;
+    conn.execute(
+        "DELETE FROM settings WHERE key = 'sanPromptSupabaseAnonKey'",
+        [],
+    )
+    .map_err(|error| format!("Failed to remove legacy Supabase Storage key: {}", error))?;
+
+    Ok(Some(legacy_key))
+}
 
 #[tauri::command]
 pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
@@ -15,6 +69,10 @@ pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
     };
 
     let _ = crate::database::init_database(std::path::Path::new(&db_path));
+
+    if let Err(error) = get_sanprompt_supabase_storage_key(&conn) {
+        return CommandResult::err(error);
+    }
 
     let mut stmt = match conn.prepare("SELECT key, value FROM settings") {
         Ok(s) => s,
@@ -45,9 +103,11 @@ pub fn get_settings(db_path: String) -> CommandResult<HashMap<String, String>> {
 
 #[tauri::command]
 pub fn get_sanprompt_publish_secret() -> CommandResult<String> {
-    match keyring::Entry::new(SANPROMPT_KEYRING_SERVICE, SANPROMPT_PUBLISH_SECRET_ACCOUNT)
-        .and_then(|entry| entry.get_password())
-    {
+    match keyring_entry(SANPROMPT_PUBLISH_SECRET_ACCOUNT).and_then(|entry| {
+        entry
+            .get_password()
+            .map_err(|error| format!("Failed to load publish secret: {}", error))
+    }) {
         Ok(secret) => CommandResult::ok(secret),
         Err(_) => CommandResult::ok(String::new()),
     }
@@ -55,11 +115,10 @@ pub fn get_sanprompt_publish_secret() -> CommandResult<String> {
 
 #[tauri::command]
 pub fn set_sanprompt_publish_secret(secret: String) -> CommandResult<bool> {
-    let entry =
-        match keyring::Entry::new(SANPROMPT_KEYRING_SERVICE, SANPROMPT_PUBLISH_SECRET_ACCOUNT) {
-            Ok(entry) => entry,
-            Err(e) => return CommandResult::err(format!("Failed to open keyring: {}", e)),
-        };
+    let entry = match keyring_entry(SANPROMPT_PUBLISH_SECRET_ACCOUNT) {
+        Ok(entry) => entry,
+        Err(error) => return CommandResult::err(error),
+    };
 
     if secret.trim().is_empty() {
         let _ = entry.delete_password();
@@ -69,6 +128,24 @@ pub fn set_sanprompt_publish_secret(secret: String) -> CommandResult<bool> {
     match entry.set_password(secret.trim()) {
         Ok(_) => CommandResult::ok(true),
         Err(e) => CommandResult::err(format!("Failed to save publish secret: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub fn set_sanprompt_supabase_storage_key(key: String) -> CommandResult<bool> {
+    let entry = match keyring_entry(SANPROMPT_SUPABASE_STORAGE_KEY_ACCOUNT) {
+        Ok(entry) => entry,
+        Err(error) => return CommandResult::err(error),
+    };
+
+    if key.trim().is_empty() {
+        let _ = entry.delete_password();
+        return CommandResult::ok(true);
+    }
+
+    match entry.set_password(key.trim()) {
+        Ok(_) => CommandResult::ok(true),
+        Err(error) => CommandResult::err(format!("Failed to save Supabase Storage key: {}", error)),
     }
 }
 

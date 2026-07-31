@@ -408,6 +408,7 @@ export const promptApi = {
       variantKey?: string;
       variantJson?: string;
       isSyncEnabled?: boolean;
+      remoteUrl?: string;
     }
   ): Promise<void> {
     const dbPath = await getDbPath();
@@ -422,6 +423,7 @@ export const promptApi = {
       variantKey: payload.variantKey,
       variantJson: payload.variantJson,
       isSyncEnabled: payload.isSyncEnabled,
+      remoteUrl: payload.remoteUrl,
     });
   },
 
@@ -755,10 +757,17 @@ export const settingsApi = {
     return result.data || false;
   },
 
+  async setSanPromptSupabaseStorageKey(key: string): Promise<boolean> {
+    const result = await invoke<CommandResult<boolean>>("set_sanprompt_supabase_storage_key", { key });
+    if (!result.success) throw new Error(result.error || "Failed to save Supabase Storage key");
+    return result.data || false;
+  },
+
   async save(settings: Record<string, string>): Promise<boolean> {
     const dbPath = await getDbPath();
     const persistedSettings = { ...settings };
     delete persistedSettings.sanPromptPublishSecret;
+    delete persistedSettings.sanPromptSupabaseAnonKey;
     const result = await invoke<CommandResult<boolean>>("save_settings", {
       dbPath,
       settings: persistedSettings,
@@ -816,6 +825,36 @@ export const settingsApi = {
     });
     if (!result.success) throw new Error(result.error || "Failed to repair database paths");
     return result.data!;
+  },
+};
+
+interface SupabaseStorageConfig {
+  configured: boolean;
+  base_url?: string;
+}
+
+export const supabaseStorageApi = {
+  async getConfig(): Promise<SupabaseStorageConfig> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<SupabaseStorageConfig>>("get_supabase_storage_config", { dbPath });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "Failed to load Supabase Storage configuration");
+    }
+    return result.data;
+  },
+
+  async uploadObject(storagePath: string, fileBytes: Uint8Array, contentType: string): Promise<string> {
+    const dbPath = await getDbPath();
+    const result = await invoke<CommandResult<string>>("upload_supabase_storage_object", {
+      dbPath,
+      storagePath,
+      fileBytes: Array.from(fileBytes),
+      contentType,
+    });
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "Supabase 图片上传失败");
+    }
+    return result.data;
   },
 };
 

@@ -809,6 +809,24 @@ export function PromptGroupsView() {
     });
   }, [allImages, imageSearch, filterMode]);
 
+  const currentGroupIndex = selectedGroup ? filteredGroups.findIndex(g => g.id === selectedGroup.group.id) : -1;
+  const hasPrevious = currentGroupIndex > 0;
+  const hasNext = currentGroupIndex !== -1 && currentGroupIndex < filteredGroups.length - 1;
+
+  const navigateToPrevious = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hasPrevious) {
+      void viewGroupDetails(filteredGroups[currentGroupIndex - 1].id);
+    }
+  };
+
+  const navigateToNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hasNext) {
+      void viewGroupDetails(filteredGroups[currentGroupIndex + 1].id);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b p-4 bg-card shadow-sm z-10">
@@ -1158,15 +1176,41 @@ export function PromptGroupsView() {
 
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-h-[90vh] max-w-6xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-primary">
-              {selectedGroup?.group.name || "Prompt 详情"}
-            </DialogTitle>
-            {selectedGroup?.group.description && (
-              <DialogDescription className="text-sm mt-3 bg-muted/40 p-3 rounded-md border text-left text-muted-foreground">
-                {selectedGroup.group.description}
-              </DialogDescription>
-            )}
+          <DialogHeader className="pr-8">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <DialogTitle className="text-xl font-bold text-primary">
+                  {selectedGroup?.group.name || "Prompt 详情"}
+                </DialogTitle>
+                {selectedGroup?.group.description && (
+                  <DialogDescription className="text-sm mt-3 bg-muted/40 p-3 rounded-md border text-left text-muted-foreground">
+                    {selectedGroup.group.description}
+                  </DialogDescription>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-8 w-8" 
+                  onClick={navigateToPrevious} 
+                  disabled={!hasPrevious}
+                  title="上一个"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-8 w-8" 
+                  onClick={navigateToNext} 
+                  disabled={!hasNext}
+                  title="下一个"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </DialogHeader>
 
           {selectedGroup && (

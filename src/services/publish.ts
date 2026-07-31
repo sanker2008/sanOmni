@@ -1,4 +1,5 @@
 import { promptApi, settingsApi } from "./tauri";
+import { uploadPromptImages } from "./supabase-storage";
 
 const DEFAULT_SANPROMPT_API_URL = "http://localhost:3000/api/sync";
 
@@ -57,9 +58,6 @@ export async function publishPromptToWeb(groupId: string, config: PublishConfig)
       }
     }
 
-    // 假设拿第一张关联图片的 filename 作为封面（实际生产环境需要先上传图床）
-    const cover_image_url = images.length > 0 ? `/images/placeholders/${images[0].filename}` : "";
-
     const name = group.name || "Untitled Template";
     const slug = name
       .toLowerCase()
@@ -93,8 +91,37 @@ export async function publishPromptToWeb(groupId: string, config: PublishConfig)
           is_sync_enabled: image.is_sync_enabled !== false,
         };
       });
+
+    // Upload images to Supabase Storage and get public URLs
+    const imagesToUpload = syncImages.map((img) => {
+      const original = images.find((i) => i.id === img.id);
+      return {
+        id: img.id,
+        filename: img.filename,
+        absolute_path: original?.absolute_path || "",
+        remote_url: img.url.startsWith("/") ? undefined : img.url,
+      };
+    }).filter((img) => img.absolute_path);
+
+    const uploadedUrls = await uploadPromptImages(imagesToUpload, group.id);
+
+    // Replace placeholder URLs with actual Supabase Storage public URLs
+    for (const img of syncImages) {
+      const uploadedUrl = uploadedUrls.get(img.id);
+      if (uploadedUrl) {
+        img.url = uploadedUrl;
+        
+        // Save the remote URL to local database to prevent re-uploading next time
+        try {
+          await promptApi.updateImageMeta(group.id, img.id, { remoteUrl: uploadedUrl });
+        } catch (err) {
+          console.error(`Failed to save remote URL for image ${img.filename}:`, err);
+        }
+      }
+    }
+
     const coverImage = syncImages.find((image) => image.is_cover) || syncImages[0];
-    const selectedCoverUrl = coverImage?.url || cover_image_url;
+    const selectedCoverUrl = coverImage?.url || "";
 
     const payload = {
       id: group.id,

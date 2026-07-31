@@ -34,7 +34,7 @@ import {
   type GeminiWatermarkRemovalResult,
   type WatermarkRegion,
 } from '@/services/tauri';
-import { authorizeFsPaths, copyFile, exists, readDir, remove } from '@/services/secureFs';
+import { authorizeFsPaths, copyFile, exists, readDir, remove, writeFile } from '@/services/secureFs';
 import { getLabsRoot, openPath } from '@/lib/pathUtils';
 import { ensureDirectory } from '../image-compressor/fs';
 
@@ -144,6 +144,7 @@ export default function GeminiWatermarkLab() {
     originX: number;
     originY: number;
   } | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const imgRef = useRef<HTMLImageElement>(null);
   const nudgeTimerRef = useRef<number | null>(null);
@@ -190,16 +191,7 @@ export default function GeminiWatermarkLab() {
     }, 350);
   };
 
-  const chooseImage = async () => {
-    const selected = await open({
-      multiple: false,
-      directory: false,
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
-      title: '选择需要处理的 Gemini 图片',
-    });
-
-    if (!selected || typeof selected !== 'string') return;
-
+  const loadFileByPath = async (selected: string) => {
     await authorizeFsPaths([selected]);
     if (outputPath) {
       await remove(outputPath).catch((error) => {
@@ -223,6 +215,74 @@ export default function GeminiWatermarkLab() {
     setPanState(null);
     setSelectionDrag(null);
     setNudgeActive(false);
+  };
+
+  const chooseImage = async () => {
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      title: '选择需要处理的 Gemini 图片',
+    });
+
+    if (!selected || typeof selected !== 'string') return;
+    await loadFileByPath(selected);
+  };
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+
+    const files = event.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const path = (file as any).path;
+
+    if (path && typeof path === 'string') {
+      const ext = path.split('.').pop()?.toLowerCase();
+      if (ext && ['png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(ext)) {
+        await loadFileByPath(path);
+        return;
+      }
+    }
+
+    if (file.type.startsWith('image/')) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const labsRoot = await getLabsRoot();
+        const tempDir = await join(labsRoot, 'gemini_watermark_lab', 'temp');
+        await ensureDirectory(tempDir);
+        const tempPath = await join(tempDir, `temp_drop_${Date.now()}_${file.name}`);
+        await writeFile(tempPath, new Uint8Array(buffer));
+        await loadFileByPath(tempPath);
+      } catch (err: any) {
+        toast({
+          title: '文件加载失败',
+          description: err?.message || String(err),
+          variant: 'destructive',
+        });
+      }
+    } else {
+      toast({
+        title: '不支持的文件格式',
+        description: '请拖入图片文件（PNG, JPG, WEBP等）',
+        variant: 'destructive',
+      });
+    }
   };
 
   const getPointerPosition = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -644,18 +704,35 @@ export default function GeminiWatermarkLab() {
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-slate-900/5 dark:bg-black/10">
+        <div
+          className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-slate-900/5 dark:bg-black/10"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {isDragOver && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary m-3 rounded-lg pointer-events-none transition-all">
+              <div className="flex flex-col items-center gap-2 text-primary font-medium">
+                <ImagePlus className="h-10 w-10 animate-bounce" />
+                <span>{imageSrc ? '松开鼠标替换当前图片' : '松开鼠标加载图片'}</span>
+              </div>
+            </div>
+          )}
           {!imageSrc ? (
             <div className="flex h-full items-center justify-center p-8">
               <button
                 type="button"
                 onClick={chooseImage}
-                className="flex aspect-[16/10] w-full max-w-xl flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-card p-8 text-center hover:border-primary/60 hover:bg-card/80"
+                className={`flex aspect-[16/10] w-full max-w-xl flex-col items-center justify-center rounded-lg border-2 border-dashed transition-all ${
+                  isDragOver
+                    ? 'border-primary bg-primary/10 shadow-lg scale-[1.02]'
+                    : 'border-border bg-card hover:border-primary/60 hover:bg-card/80'
+                } p-8 text-center`}
               >
-                <ImagePlus className="mb-4 h-10 w-10 text-primary" />
-                <div className="text-sm font-semibold">选择一张 Gemini 生成图</div>
+                <ImagePlus className={`mb-4 h-10 w-10 text-primary transition-transform ${isDragOver ? 'scale-110' : ''}`} />
+                <div className="text-sm font-semibold">{isDragOver ? '松开鼠标加载图片' : '选择或拖入一张 Gemini 生成图'}</div>
                 <div className="mt-2 max-w-sm text-xs leading-5 text-muted-foreground">
-                  自动模式会使用已知 profile；如果命中位置错误，可以在这里框选水印区域并手动处理。
+                  支持直接拖拽图片文件到此处，或点击按钮选择图片。自动模式会使用已知 profile。
                 </div>
               </button>
             </div>

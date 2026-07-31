@@ -4,6 +4,31 @@
 
 ---
 
+## [2026-07-31] - sanPrompt Supabase URL 显示旧缓存，但数据库配置已更新
+
+### 1. 问题表现 (Symptoms)
+- 用户在“设置 → sanPrompt”更新 Supabase URL 并重启客户端后，设置输入框仍显示旧 URL。
+- 默认 AppData 数据库和统一根目录数据库中的 `sanPromptSupabaseUrl` 已经一致且为最新值，界面与数据库状态不一致。
+- 因实际上传配置由 Tauri 原生层读取数据库，可能出现“界面看起来是旧 URL，但同步仍按当前数据库配置执行”的误导性现象。
+
+### 2. 根本原因 (Root Cause)
+1. `useUIStore` 初始化时只从 WebView `localStorage` 的 `ai-image-manager-settings` 读取设置。
+2. 应用启动时虽然调用了 `settingsApi.getAll()`，但结果仅用于初始化数据库，没有回填到 Zustand 状态或 `localStorage` 缓存。
+3. `SettingsView` 打开时直接使用 Zustand 中的缓存值，没有重新读取 SQLite。因此重启不会淘汰已持久化的旧 WebView 缓存。
+
+### 3. 已实施修复 (Fixes Applied)
+- `src/App.tsx`：启动时读取数据库中的 `sanPromptSupabaseUrl`；若与 WebView 缓存不同，则更新 Zustand 和 `localStorage`。
+- `src/components/settings/SettingsView.tsx`：每次打开设置时重新读取数据库 URL 与系统凭据库中的发布密钥，避免启动阶段尚未完成时短暂显示旧值。
+- 保持 Storage Key 不进入 `localStorage`；数据库 URL 与敏感凭据继续分开管理。
+
+### 4. 验证与发布注意事项 (Verification & Rollout)
+- 已只读核对默认数据库 `%APPDATA%\com.sanomni.app\data\database.sqlite` 与统一根目录数据库 `D:\sanomnidata\data\database.sqlite`：`sanPromptSupabaseUrl` 一致。
+- `pnpm exec tsc --noEmit` 通过。
+- 本轮 WSL 的完整 Vite 构建受缺少 `@rollup/rollup-linux-x64-gnu` 可选原生依赖阻断；需在依赖完整的构建环境产出新客户端后再做安装包验收。
+- 在升级到包含本修复的客户端之前，不要在仍显示旧 URL 的界面点击“保存更改”，以免旧缓存覆盖数据库值。
+
+---
+
 ## [2026-07-29] - sanIP 双向同步游标跳跃、父记录更新丢子数据与子表漏同步
 
 ### 1. 问题表现 (Symptoms)

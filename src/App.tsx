@@ -33,9 +33,28 @@ function App() {
   const { activeTab, setActiveTab, openSettings, theme, setTheme } = useUIStore();
   const appMode = import.meta.env.VITE_APP_MODE || "all";
 
-  // Ensure DB is initialized on startup for custom paths
+  // 数据库是持久化设置的来源；localStorage 仅作 WebView 缓存。
+  // 启动时回填 Supabase URL，避免旧缓存覆盖已经保存到数据库的配置。
   useEffect(() => {
-    settingsApi.getAll().catch(e => console.error("Failed to initialize db on startup:", e));
+    let disposed = false;
+
+    settingsApi.getAll()
+      .then((persistedSettings) => {
+        if (disposed) return;
+
+        const persistedSupabaseUrl = persistedSettings.sanPromptSupabaseUrl;
+        if (typeof persistedSupabaseUrl !== "string") return;
+
+        const { settings, updateSetting } = useUIStore.getState();
+        if (settings.sanPromptSupabaseUrl !== persistedSupabaseUrl) {
+          updateSetting("sanPromptSupabaseUrl", persistedSupabaseUrl);
+        }
+      })
+      .catch((error) => console.error("Failed to load settings from DB on startup:", error));
+
+    return () => {
+      disposed = true;
+    };
   }, []);
 
   // Register keyboard shortcuts
@@ -111,7 +130,7 @@ function App() {
                   <ThemeIcon className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
+              <TooltipContent>
                 <p>{THEME_LABELS[theme]}</p>
               </TooltipContent>
             </Tooltip>
@@ -121,7 +140,7 @@ function App() {
                   <Settings className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="end">
+              <TooltipContent>
                 <p>设置 (Ctrl+,)</p>
               </TooltipContent>
             </Tooltip>

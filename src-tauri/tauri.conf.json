@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost blob:; media-src 'self' asset: http://asset.localhost blob:; connect-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'",
+      "csp": "default-src * 'unsafe-inline' 'unsafe-eval' data: blob: asset:; img-src * 'unsafe-inline' data: blob: asset:; connect-src * 'unsafe-inline' data: blob: asset:; media-src * 'unsafe-inline' data: blob: asset:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval'",
       "assetProtocol": {
         "enable": true,
         "scope": [
