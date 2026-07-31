@@ -67,6 +67,9 @@ export default function SyncButton() {
         if (details.length > 0) desc += ` (${details.join(', ')})`;
       }
       desc += `, 从云端拉取: ${data.pulled} 条`;
+      if (data.recovered_missing_records > 0) {
+        desc += `；检测到历史同步缺口，已补回 ${data.recovered_missing_records} 条远端记录`;
+      }
 
       toast({ 
         title: "同步完成", 

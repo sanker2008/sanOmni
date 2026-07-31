@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- 修复客户端游标已等于服务端最新版本时，历史漏拉记录（例如另一台设备创建的 IP）永远无法通过普通增量同步补回的问题。增量 Pull 返回空结果后会对照服务端快照；若发现远端记录缺失，则从保留的完整历史中筛选这些记录的最新有效变更，通过现有事务化 Pull 路径安全恢复，并在同步结果中明确显示补回数量。
+
 ## [1.4.3] - 2026-07-29
 
 ### Added

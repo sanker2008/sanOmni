@@ -327,6 +327,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
 
     // 3. Pull 服务器变更
     let mut pulled_count = 0;
+    let mut recovered_missing_records = 0usize;
 
     if should_pull {
     // Push 只代表服务端接收了本地变更，并不代表本机已经消费了此前的远端版本。
@@ -444,6 +445,45 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
     match client.pull(current_version).await {
         // <--- 又一个 .await 点
         Ok(mut resp) => {
+            // An empty incremental response is not sufficient proof that the local
+            // database is complete: an older buggy client may already have advanced
+            // its cursor past unapplied rows. Compare the current server snapshot and
+            // replay retained history only when a real remote-only gap is detected.
+            if resp.changes.is_empty() {
+                let snapshot = client
+                    .fetch_snapshot()
+                    .await
+                    .map_err(|e| format!("同步快照对账失败: {}", e))?;
+                let gap = {
+                    let reconcile_conn = Connection::open(Path::new(db_path))
+                        .map_err(|e| format!("打开数据库进行同步对账失败: {}", e))?;
+                    crate::commands::sync_commands::snapshot_gap(&reconcile_conn, &snapshot)?
+                };
+                let recovery_version = crate::sync::cursor::pull_start_after_reconciliation(
+                    current_version,
+                    gap.missing_total,
+                );
+
+                if recovery_version < current_version {
+                    let history = client
+                        .pull(recovery_version)
+                        .await
+                        .map_err(|e| format!("同步历史缺口恢复失败: {}", e))?;
+                    resp.changes =
+                        crate::commands::sync_commands::select_snapshot_recovery_changes(
+                            &history.changes,
+                            &gap,
+                        )?;
+                    resp.latest_version = history.latest_version;
+                    recovered_missing_records = gap.missing_total;
+                } else if gap.missing_total > 0 {
+                    return Err(
+                        "服务器快照存在本机缺失记录，但完整历史无法继续回放；同步游标未推进"
+                            .to_string(),
+                    );
+                }
+            }
+
             if !resp.changes.is_empty() {
                 let mut pulled_ip_paths = std::collections::HashMap::<String, String>::new();
                 let mut pulled_pack_paths = std::collections::HashMap::<String, String>::new();
@@ -1391,6 +1431,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
         "status": "success",
         "pushed": pushed_count,
         "pulled": pulled_count,
+        "recovered_missing_records": recovered_missing_records,
         "pushed_details": {
             "inserts": pushed_inserts,
             "updates": pushed_updates,

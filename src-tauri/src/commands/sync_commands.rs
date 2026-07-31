@@ -1,9 +1,10 @@
 use crate::commands::CommandResult;
 use crate::sync;
 use rusqlite::Connection;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use crate::sync::client::SyncChange;
 use crate::sync::identity::creation_record_id;
 
 #[tauri::command]
@@ -254,6 +255,153 @@ fn local_record_keys(conn: &Connection, table: &str) -> Result<HashSet<String>, 
     Ok(keys)
 }
 
+pub(crate) struct SnapshotGap {
+    pub missing_total: usize,
+    pub missing_keys: HashMap<String, HashSet<String>>,
+}
+
+fn snapshot_table_reports(
+    conn: &Connection,
+    snapshot: &serde_json::Value,
+) -> Result<(serde_json::Map<String, serde_json::Value>, SnapshotGap), String> {
+    let tables = snapshot
+        .get("tables")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "Snapshot response has no tables object".to_string())?;
+
+    let mut table_reports = serde_json::Map::new();
+    let mut missing_local_total = 0usize;
+    let mut missing_keys = HashMap::new();
+    for (table, rows) in tables {
+        let remote_keys = remote_snapshot_keys(table, rows)?;
+        let local_keys = local_record_keys(conn, table)
+            .map_err(|e| format!("Read local {} failed: {}", table, e))?;
+        let table_missing_keys: HashSet<String> =
+            remote_keys.difference(&local_keys).cloned().collect();
+        let missing_local = table_missing_keys.len();
+        let extra_local = local_keys.difference(&remote_keys).count();
+        missing_local_total += missing_local;
+        if !table_missing_keys.is_empty() {
+            missing_keys.insert(table.clone(), table_missing_keys);
+        }
+
+        table_reports.insert(
+            table.clone(),
+            serde_json::json!({
+                "remote_count": remote_keys.len(),
+                "local_count": local_keys.len(),
+                "missing_local": missing_local,
+                "extra_local": extra_local,
+            }),
+        );
+    }
+
+    Ok((
+        table_reports,
+        SnapshotGap {
+            missing_total: missing_local_total,
+            missing_keys,
+        },
+    ))
+}
+
+pub(crate) fn snapshot_missing_local_count(
+    conn: &Connection,
+    snapshot: &serde_json::Value,
+) -> Result<usize, String> {
+    snapshot_table_reports(conn, snapshot).map(|(_, gap)| gap.missing_total)
+}
+
+pub(crate) fn snapshot_gap(
+    conn: &Connection,
+    snapshot: &serde_json::Value,
+) -> Result<SnapshotGap, String> {
+    snapshot_table_reports(conn, snapshot).map(|(_, gap)| gap)
+}
+
+fn recovery_table_priority(table: &str) -> usize {
+    match table {
+        "ip_assets" => 0,
+        "tags" => 1,
+        "ip_images" => 2,
+        "ip_character_sheets" => 3,
+        "ip_creations" => 4,
+        "ip_sticker_packs" => 5,
+        "ip_sticker_pack_platforms" => 6,
+        "ip_emojis" => 7,
+        "ip_image_relations" => 8,
+        "ip_image_tag_relations" => 9,
+        "ip_relations" => 10,
+        _ => usize::MAX,
+    }
+}
+
+fn history_change_key(change: &SyncChange) -> Result<String, String> {
+    if let Some(data) = change.data.as_deref() {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(data) {
+            if let Ok(key) = snapshot_record_key(&change.table, &value) {
+                return Ok(key);
+            }
+        }
+    }
+
+    match change.table.as_str() {
+        "ip_image_relations" | "ip_image_tag_relations" | "ip_creations" | "ip_relations" => {
+            Err(format!(
+                "完整历史中的 {} 记录 {} 缺少可解析的复合业务键",
+                change.table, change.record_id
+            ))
+        }
+        _ => Ok(change.record_id.clone()),
+    }
+}
+
+pub(crate) fn select_snapshot_recovery_changes(
+    history: &[SyncChange],
+    gap: &SnapshotGap,
+) -> Result<Vec<SyncChange>, String> {
+    let mut latest = HashMap::<(String, String), (usize, SyncChange)>::new();
+
+    for (index, change) in history.iter().enumerate() {
+        let Some(table_missing_keys) = gap.missing_keys.get(&change.table) else {
+            continue;
+        };
+        let key = history_change_key(change)?;
+        if !table_missing_keys.contains(&key) {
+            continue;
+        }
+
+        match change.operation.as_str() {
+            "INSERT" | "UPDATE" => {
+                latest.insert((change.table.clone(), key), (index, change.clone()));
+            }
+            "DELETE" => {
+                latest.remove(&(change.table.clone(), key));
+            }
+            operation => {
+                return Err(format!(
+                    "完整历史包含不支持的同步操作 {}: {} {}",
+                    operation, change.table, change.record_id
+                ));
+            }
+        }
+    }
+
+    if latest.len() != gap.missing_total {
+        return Err(format!(
+            "服务端快照有 {} 条本机缺失记录，但完整历史只能恢复 {} 条",
+            gap.missing_total,
+            latest.len()
+        ));
+    }
+
+    let mut selected: Vec<(usize, SyncChange)> = latest.into_values().collect();
+    selected.sort_by_key(|(history_index, change)| {
+        (recovery_table_priority(&change.table), *history_index)
+    });
+    Ok(selected.into_iter().map(|(_, change)| change).collect())
+}
+
 #[tauri::command]
 pub async fn sync_reconcile_snapshot(db_path: String) -> CommandResult<serde_json::Value> {
     let conn = match Connection::open(Path::new(&db_path)) {
@@ -286,39 +434,16 @@ pub async fn sync_reconcile_snapshot(db_path: String) -> CommandResult<serde_jso
         Err(e) => return CommandResult::err(format!("Fetch sync snapshot failed: {}", e)),
     };
 
-    let tables = match snapshot.get("tables").and_then(|v| v.as_object()) {
-        Some(tables) => tables,
-        None => return CommandResult::err("Snapshot response has no tables object".to_string()),
+    let (table_reports, gap) = match snapshot_table_reports(&conn, &snapshot) {
+        Ok(report) => report,
+        Err(e) => return CommandResult::err(e),
     };
-
-    let mut table_reports = serde_json::Map::new();
-    for (table, rows) in tables {
-        let remote_keys = match remote_snapshot_keys(table, rows) {
-            Ok(keys) => keys,
-            Err(e) => return CommandResult::err(e),
-        };
-        let local_keys = match local_record_keys(&conn, table) {
-            Ok(keys) => keys,
-            Err(e) => return CommandResult::err(format!("Read local {} failed: {}", table, e)),
-        };
-        let missing_local = remote_keys.difference(&local_keys).count();
-        let extra_local = local_keys.difference(&remote_keys).count();
-
-        table_reports.insert(
-            table.clone(),
-            serde_json::json!({
-                "remote_count": remote_keys.len(),
-                "local_count": local_keys.len(),
-                "missing_local": missing_local,
-                "extra_local": extra_local,
-            }),
-        );
-    }
 
     CommandResult::ok(serde_json::json!({
         "latest_version": snapshot.get("latest_version").cloned().unwrap_or(serde_json::Value::Null),
         "generated_at": snapshot.get("generated_at").cloned().unwrap_or(serde_json::Value::Null),
         "tables": table_reports,
+        "missing_local_total": gap.missing_total,
         "remote_object_count": snapshot.get("objects").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
     }))
 }
@@ -356,6 +481,92 @@ mod tests {
 
         let err = remote_snapshot_keys("ip_assets", &rows).unwrap_err();
         assert!(err.contains("not an array"));
+    }
+
+    #[test]
+    fn snapshot_reconciliation_detects_remote_ip_missing_locally() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE ip_assets (id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL);",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO ip_assets (id, name, path) VALUES ('local-ip', '本机 IP', 'local')",
+            [],
+        )
+        .unwrap();
+
+        let snapshot = json!({
+            "tables": {
+                "ip_assets": [
+                    { "id": "local-ip", "name": "本机 IP", "path": "local" },
+                    { "id": "remote-ip", "name": "黑炭头", "path": "heitantou" }
+                ]
+            }
+        });
+
+        assert_eq!(snapshot_missing_local_count(&conn, &snapshot).unwrap(), 1);
+    }
+
+    #[test]
+    fn snapshot_recovery_selects_latest_missing_rows_in_dependency_order() {
+        let gap = SnapshotGap {
+            missing_total: 2,
+            missing_keys: HashMap::from([
+                (
+                    "ip_assets".to_string(),
+                    HashSet::from(["remote-ip".to_string()]),
+                ),
+                (
+                    "ip_images".to_string(),
+                    HashSet::from(["remote-image".to_string()]),
+                ),
+            ]),
+        };
+        let history = vec![
+            SyncChange {
+                domain: "sanIP".to_string(),
+                table: "ip_assets".to_string(),
+                record_id: "remote-ip".to_string(),
+                operation: "INSERT".to_string(),
+                data: Some(json!({ "id": "remote-ip", "name": "旧名称" }).to_string()),
+                changed_at: "1".to_string(),
+            },
+            SyncChange {
+                domain: "sanIP".to_string(),
+                table: "ip_images".to_string(),
+                record_id: "remote-image".to_string(),
+                operation: "INSERT".to_string(),
+                data: Some(
+                    json!({ "id": "remote-image", "ip_id": "remote-ip", "file_hash": "hash" })
+                        .to_string(),
+                ),
+                changed_at: "2".to_string(),
+            },
+            SyncChange {
+                domain: "sanIP".to_string(),
+                table: "ip_assets".to_string(),
+                record_id: "remote-ip".to_string(),
+                operation: "UPDATE".to_string(),
+                data: Some(json!({ "id": "remote-ip", "name": "黑炭头" }).to_string()),
+                changed_at: "3".to_string(),
+            },
+            SyncChange {
+                domain: "sanIP".to_string(),
+                table: "ip_assets".to_string(),
+                record_id: "unrelated-ip".to_string(),
+                operation: "INSERT".to_string(),
+                data: Some(json!({ "id": "unrelated-ip" }).to_string()),
+                changed_at: "4".to_string(),
+            },
+        ];
+
+        let selected = select_snapshot_recovery_changes(&history, &gap).unwrap();
+
+        assert_eq!(selected.len(), 2);
+        assert_eq!(selected[0].table, "ip_assets");
+        assert!(selected[0].data.as_deref().unwrap().contains("黑炭头"));
+        assert_eq!(selected[1].table, "ip_images");
     }
 }
 
