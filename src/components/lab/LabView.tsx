@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Lightbulb,
   Film,
+  FolderKanban,
 } from 'lucide-react';
 import {
   Dialog,
@@ -31,6 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
+const LabsMediaManager = lazy(() => import('./media-manager/LabsMediaManager'));
 const ProductImageMaker = lazy(() => import('./product-image-maker/ProductImageMaker'));
 const ImageSlicer = lazy(() => import('./image-slicer/ImageSlicer'));
 const AiImageEditor = lazy(() => import('./ai-image-editor/AiImageEditor'));
@@ -59,6 +61,21 @@ interface LabTool {
 }
 
 const LAB_TOOLS: LabTool[] = [
+  {
+    id: 'labs-media-manager',
+    name: '媒体管理器',
+    description: '聚合并按小工具筛选 sanLabs 下的所有媒体文件数据',
+    icon: <FolderKanban className="w-4 h-4" />,
+    component: LabsMediaManager,
+    available: true,
+    instructions: [
+      '1. 默认自动深度扫描 sanLabs 根目录下的所有媒体文件（图片、视频、SVG 等）。',
+      '2. 在顶部小工具筛选栏中，点击任意小工具（如 AI P图、高级抠图、Gemini水印修复、动图拆帧等）即可快速过滤出该小工具生成的媒体。',
+      '3. 支持按修改时间（最新/最早）、文件大小或文件名进行排序，以及按导出目录或临时文件分类过滤。',
+      '4. 支持网格缩略图、列表和工具分组三种视图模式自由切换。',
+      '5. 点击缩略图可放大预览图片或直接播放视频；支持一键定位在系统文件夹中打开、复制路径及批量删除。'
+    ]
+  },
   {
     id: 'gif-decomposer',
     name: '动图拆帧',
