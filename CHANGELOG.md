@@ -2,12 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepashangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ### Added
+- sanIP 同步：支持指定特定 IP 进行推送。同步确认弹窗新增可折叠的 IP 复选列表，用户可自由选择需要推送的 IP 角色（Pull 保持全量拉取）。未选中 IP 的变更保留在本地队列中，等待后续同步。
 - sanPrompt: 在模板详情弹窗中新增“上一个/下一个”快捷切换按钮，支持在当前搜索与筛选结果内无缝浏览相邻模板。
 - sanPrompt: 新增 Supabase Storage 直传功能。发布模板时支持自动将本地图片上传至 Supabase，并替换为云端 public URL。
 - 图片自动压缩：上传 Supabase 前通过浏览器 Canvas 自动压缩图片（转为 WebP 格式，最大 1920px 宽），单张图片体积减少 90%+，极大节省云端存储空间。

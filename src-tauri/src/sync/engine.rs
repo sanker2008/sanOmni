@@ -3,7 +3,7 @@ use crate::sync::client::{
 };
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tauri::Emitter;
 use uuid::Uuid;
@@ -113,6 +113,115 @@ fn collapse_pending_changes(changes: Vec<SyncChange>) -> Vec<SyncChange> {
     collapsed
 }
 
+/// Extract a string field from a SyncChange's data_json.
+fn extract_field_from_data(change: &SyncChange, field: &str) -> Option<String> {
+    change
+        .data
+        .as_deref()
+        .and_then(|data| parse_sync_json(data).ok())
+        .and_then(|json| json.get(field)?.as_str().map(String::from))
+}
+
+/// Determines if a change belongs to any of the specified IP IDs.
+/// Returns true if the change should be included in the filtered push.
+fn change_belongs_to_ips(
+    change: &SyncChange,
+    ip_ids: &HashSet<&str>,
+    conn: &Connection,
+) -> bool {
+    match change.table.as_str() {
+        // Tags are shared across IPs, always include
+        "tags" => true,
+
+        // ip_assets: record_id IS the ip_id
+        "ip_assets" => ip_ids.contains(change.record_id.as_str()),
+
+        // Tables with direct ip_id in data_json
+        "ip_images" | "ip_character_sheets" | "ip_creations"
+        | "ip_emojis" | "ip_sticker_packs" => {
+            extract_field_from_data(change, "ip_id")
+                .map(|id| ip_ids.contains(id.as_str()))
+                .unwrap_or(true) // If can't determine, include to be safe
+        }
+
+        // ip_image_relations: has ip_id directly in data_json
+        "ip_image_relations" => {
+            extract_field_from_data(change, "ip_id")
+                .map(|id| ip_ids.contains(id.as_str()))
+                .unwrap_or(true)
+        }
+
+        // ip_sticker_pack_platforms: look up pack_id -> ip_id
+        "ip_sticker_pack_platforms" => {
+            extract_field_from_data(change, "pack_id")
+                .and_then(|pack_id| {
+                    conn.query_row(
+                        "SELECT ip_id FROM ip_sticker_packs WHERE id = ?",
+                        [&pack_id],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .ok()
+                })
+                .map(|id| ip_ids.contains(id.as_str()))
+                .unwrap_or(true)
+        }
+
+        // ip_image_tag_relations: look up ip_image_id -> ip_id
+        "ip_image_tag_relations" => {
+            extract_field_from_data(change, "ip_image_id")
+                .and_then(|image_id| {
+                    conn.query_row(
+                        "SELECT ip_id FROM ip_images WHERE id = ?",
+                        [&image_id],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .ok()
+                })
+                .map(|id| ip_ids.contains(id.as_str()))
+                .unwrap_or(true)
+        }
+
+        // ip_relations: include if either side matches
+        "ip_relations" => {
+            let a = extract_field_from_data(change, "ip_a_id");
+            let b = extract_field_from_data(change, "ip_b_id");
+            match (a, b) {
+                (Some(a), Some(b)) => {
+                    ip_ids.contains(a.as_str()) || ip_ids.contains(b.as_str())
+                }
+                (Some(a), None) => ip_ids.contains(a.as_str()),
+                (None, Some(b)) => ip_ids.contains(b.as_str()),
+                (None, None) => true,
+            }
+        }
+
+        // Unknown table, include to be safe
+        _ => true,
+    }
+}
+
+/// Compute the normalized key for a change, matching the key used by
+/// collapse_pending_changes. This is needed to map collapsed changes
+/// back to their original pending_ids.
+fn normalized_change_key(change: &SyncChange) -> (String, String) {
+    if change.table == "ip_creations" {
+        if let Some(data_str) = &change.data {
+            if let Ok(json) = parse_sync_json(data_str) {
+                if let (Some(ip_id), Some(image_path)) = (
+                    json.get("ip_id").and_then(|v| v.as_str()),
+                    json.get("image_path").and_then(|v| v.as_str()),
+                ) {
+                    return (
+                        change.table.clone(),
+                        creation_record_id(ip_id, image_path),
+                    );
+                }
+            }
+        }
+    }
+    (change.table.clone(), change.record_id.clone())
+}
+
 fn queue_pending_download(
     db_path: &str,
     file_hash: &str,
@@ -134,7 +243,7 @@ fn queue_pending_download(
     }
 }
 
-pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+pub async fn run_sync(db_path: &str, direction: Option<&str>, ip_ids: Option<&[String]>, app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     // 1. 读库，收集待推送的变更（放入独立的代码块中，确保 Connection 及时被释放）
     let (server_url, api_key, device_id, last_sync_version, pending_ids, changes) = {
         let conn =
@@ -215,6 +324,60 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
     // Only the latest state of each record belongs in this push; otherwise the
     // stale row makes us try to read a file the deletion has already removed.
     let mut changes = collapse_pending_changes(changes);
+
+    // If ip_ids filter is specified, build a mapping from collapsed change keys
+    // to their original pending_ids, then filter changes and track which ids to delete.
+    let ids_to_delete: Vec<i64> = if let Some(ref filter_ids) = ip_ids {
+        if !filter_ids.is_empty() {
+            // Build mapping: normalized (table, record_id) -> [original pending_ids]
+            let mut key_to_ids: HashMap<(String, String), Vec<i64>> = HashMap::new();
+            let lookup_conn = Connection::open(Path::new(db_path))
+                .map_err(|e| format!("打开数据库失败: {}", e))?;
+            {
+                let mut stmt = lookup_conn.prepare(
+                    "SELECT id, table_name, record_id, operation, data_json FROM sync_changelog ORDER BY id ASC"
+                ).map_err(|e| format!("查询同步日志失败: {}", e))?;
+                let rows = stmt.query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        SyncChange {
+                            domain: SANIP_SYNC_DOMAIN.to_string(),
+                            table: row.get(1)?,
+                            record_id: row.get(2)?,
+                            operation: row.get(3)?,
+                            data: row.get(4)?,
+                            changed_at: String::new(),
+                        },
+                    ))
+                }).map_err(|e| format!("读取同步日志失败: {}", e))?;
+                for row in rows.flatten() {
+                    let (id, change) = row;
+                    let key = normalized_change_key(&change);
+                    key_to_ids.entry(key).or_default().push(id);
+                }
+            }
+
+            // Filter changes by IP
+            let ip_id_set: HashSet<&str> = filter_ids.iter().map(|s| s.as_str()).collect();
+            let mut filtered = Vec::new();
+            let mut delete_ids = Vec::new();
+            for change in changes {
+                let key = (change.table.clone(), change.record_id.clone());
+                if change_belongs_to_ips(&change, &ip_id_set, &lookup_conn) {
+                    if let Some(ids) = key_to_ids.get(&key) {
+                        delete_ids.extend(ids);
+                    }
+                    filtered.push(change);
+                }
+            }
+            changes = filtered;
+            delete_ids
+        } else {
+            pending_ids
+        }
+    } else {
+        pending_ids
+    };
 
     let client = SyncClient::new(server_url, api_key)?;
 
@@ -347,7 +510,7 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, app: &tauri::AppHa
                 // 写库清理已推送日志
                 let mut conn = Connection::open(Path::new(db_path)).unwrap();
                 let tx = conn.transaction().unwrap();
-                for id in pending_ids {
+                for id in &ids_to_delete {
                     let _ = tx.execute(
                         "DELETE FROM sync_changelog WHERE id = ?",
                         rusqlite::params![id],
@@ -1504,5 +1667,106 @@ mod tests {
         assert_eq!(changes[1].table, "ip_images");
         assert_eq!(changes[1].operation, "DELETE");
         assert_eq!(changes[1].data.as_deref(), Some(r#"{"id":"image-1"}"#));
+    }
+
+    #[test]
+    fn ip_filter_matches_ip_assets_by_record_id() {
+        let conn = Connection::open_in_memory().unwrap();
+        let ip_ids: HashSet<&str> = ["ip-1"].iter().cloned().collect();
+
+        let c1 = change("ip_assets", "ip-1", "INSERT", Some(r#"{"id":"ip-1"}"#));
+        let c2 = change("ip_assets", "ip-2", "INSERT", Some(r#"{"id":"ip-2"}"#));
+
+        assert!(change_belongs_to_ips(&c1, &ip_ids, &conn));
+        assert!(!change_belongs_to_ips(&c2, &ip_ids, &conn));
+    }
+
+    #[test]
+    fn ip_filter_matches_child_tables_by_data_ip_id() {
+        let conn = Connection::open_in_memory().unwrap();
+        let ip_ids: HashSet<&str> = ["ip-1"].iter().cloned().collect();
+
+        let c_match = change(
+            "ip_images", "img-1", "INSERT",
+            Some(r#"{"id":"img-1","ip_id":"ip-1","filename":"test.png"}"#),
+        );
+        let c_no_match = change(
+            "ip_images", "img-2", "INSERT",
+            Some(r#"{"id":"img-2","ip_id":"ip-2","filename":"test.png"}"#),
+        );
+        let c_delete_match = change(
+            "ip_emojis", "emoji-1", "DELETE",
+            Some(r#"{"id":"emoji-1","ip_id":"ip-1"}"#),
+        );
+
+        assert!(change_belongs_to_ips(&c_match, &ip_ids, &conn));
+        assert!(!change_belongs_to_ips(&c_no_match, &ip_ids, &conn));
+        assert!(change_belongs_to_ips(&c_delete_match, &ip_ids, &conn));
+    }
+
+    #[test]
+    fn ip_filter_always_includes_tags() {
+        let conn = Connection::open_in_memory().unwrap();
+        let ip_ids: HashSet<&str> = ["ip-1"].iter().cloned().collect();
+
+        let c = change("tags", "tag-1", "INSERT", Some(r#"{"id":"tag-1","name":"test"}"#));
+        assert!(change_belongs_to_ips(&c, &ip_ids, &conn));
+    }
+
+    #[test]
+    fn ip_filter_includes_ip_relations_if_either_side_matches() {
+        let conn = Connection::open_in_memory().unwrap();
+        let ip_ids: HashSet<&str> = ["ip-1"].iter().cloned().collect();
+
+        let c_a_match = change(
+            "ip_relations", "ip-1|ip-3|friend", "INSERT",
+            Some(r#"{"ip_a_id":"ip-1","ip_b_id":"ip-3","relation_type":"friend"}"#),
+        );
+        let c_b_match = change(
+            "ip_relations", "ip-3|ip-1|sibling", "INSERT",
+            Some(r#"{"ip_a_id":"ip-3","ip_b_id":"ip-1","relation_type":"sibling"}"#),
+        );
+        let c_no_match = change(
+            "ip_relations", "ip-2|ip-3|friend", "INSERT",
+            Some(r#"{"ip_a_id":"ip-2","ip_b_id":"ip-3","relation_type":"friend"}"#),
+        );
+
+        assert!(change_belongs_to_ips(&c_a_match, &ip_ids, &conn));
+        assert!(change_belongs_to_ips(&c_b_match, &ip_ids, &conn));
+        assert!(!change_belongs_to_ips(&c_no_match, &ip_ids, &conn));
+    }
+
+    #[test]
+    fn ip_filter_includes_change_when_ip_id_undetermined() {
+        let conn = Connection::open_in_memory().unwrap();
+        let ip_ids: HashSet<&str> = ["ip-1"].iter().cloned().collect();
+
+        // A delete with no ip_id in data_json (legacy trigger format)
+        let c = change("ip_images", "img-1", "DELETE", Some(r#"{"id":"img-1"}"#));
+        // Should be included (safe fallback)
+        assert!(change_belongs_to_ips(&c, &ip_ids, &conn));
+    }
+
+    #[test]
+    fn ip_filter_sticker_pack_platforms_via_pack_lookup() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE ip_sticker_packs (id TEXT PRIMARY KEY, ip_id TEXT NOT NULL);
+             INSERT INTO ip_sticker_packs (id, ip_id) VALUES ('pack-1', 'ip-1');
+             INSERT INTO ip_sticker_packs (id, ip_id) VALUES ('pack-2', 'ip-2');"
+        ).unwrap();
+        let ip_ids: HashSet<&str> = ["ip-1"].iter().cloned().collect();
+
+        let c_match = change(
+            "ip_sticker_pack_platforms", "plat-1", "INSERT",
+            Some(r#"{"id":"plat-1","pack_id":"pack-1","platform_name":"wechat"}"#),
+        );
+        let c_no_match = change(
+            "ip_sticker_pack_platforms", "plat-2", "INSERT",
+            Some(r#"{"id":"plat-2","pack_id":"pack-2","platform_name":"wechat"}"#),
+        );
+
+        assert!(change_belongs_to_ips(&c_match, &ip_ids, &conn));
+        assert!(!change_belongs_to_ips(&c_no_match, &ip_ids, &conn));
     }
 }

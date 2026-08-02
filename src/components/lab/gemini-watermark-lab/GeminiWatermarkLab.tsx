@@ -1,3 +1,4 @@
+import { extractDroppedFiles } from '@/lib/dragDropUtils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -246,40 +247,34 @@ export default function GeminiWatermarkLab() {
     event.stopPropagation();
     setIsDragOver(false);
 
-    const files = event.dataTransfer.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    const path = (file as any).path;
-
-    if (path && typeof path === 'string') {
-      const ext = path.split('.').pop()?.toLowerCase();
-      if (ext && ['png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(ext)) {
-        await loadFileByPath(path);
-        return;
-      }
-    }
-
-    if (file.type.startsWith('image/')) {
-      try {
-        const buffer = await file.arrayBuffer();
-        const labsRoot = await getLabsRoot();
-        const tempDir = await join(labsRoot, 'gemini_watermark_lab', 'temp');
-        await ensureDirectory(tempDir);
-        const tempPath = await join(tempDir, `temp_drop_${Date.now()}_${file.name}`);
-        await writeFile(tempPath, new Uint8Array(buffer));
-        await loadFileByPath(tempPath);
-      } catch (err: any) {
-        toast({
-          title: '文件加载失败',
-          description: err?.message || String(err),
-          variant: 'destructive',
-        });
-      }
-    } else {
+    const dropped = extractDroppedFiles(event, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length === 0) {
       toast({
         title: '不支持的文件格式',
         description: '请拖入图片文件（PNG, JPG, WEBP等）',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const { file, path } = dropped[0];
+    if (path) {
+      await loadFileByPath(path);
+      return;
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const labsRoot = await getLabsRoot();
+      const tempDir = await join(labsRoot, 'gemini_watermark_lab', 'temp');
+      await ensureDirectory(tempDir);
+      const tempPath = await join(tempDir, `temp_drop_${Date.now()}_${file.name}`);
+      await writeFile(tempPath, new Uint8Array(buffer));
+      await loadFileByPath(tempPath);
+    } catch (err: any) {
+      toast({
+        title: '文件加载失败',
+        description: err?.message || String(err),
         variant: 'destructive',
       });
     }

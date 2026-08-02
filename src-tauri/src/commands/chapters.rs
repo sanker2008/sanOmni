@@ -60,7 +60,7 @@ fn get_chapter_characters(
         )
         .map_err(|e| e.to_string())?;
 
-    stmt.query_map(params![chapter_id], |row| {
+    let result = stmt.query_map(params![chapter_id], |row| {
         Ok(ChapterCharacterRelation {
             character_id: row.get(0)?,
             note: row.get(1)?,
@@ -68,7 +68,8 @@ fn get_chapter_characters(
     })
     .map_err(|e| e.to_string())?
     .collect::<Result<Vec<_>, _>>()
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string());
+    result
 }
 
 fn get_chapter_by_id_with_conn(

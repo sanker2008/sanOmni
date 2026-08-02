@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getDbPath } from "@/services/tauri";
+import { getDbPath, ipApi } from "@/services/tauri";
+import { type IpAsset } from "@/stores";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "@/hooks/useToast";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 export default function SyncButton() {
   const [syncing, setSyncing] = useState(false);
@@ -13,6 +15,11 @@ export default function SyncButton() {
   const [enabled, setEnabled] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [direction, setDirection] = useState<"both" | "push" | "pull">("both");
+
+  // IP selection state
+  const [ipList, setIpList] = useState<IpAsset[]>([]);
+  const [selectedIpIds, setSelectedIpIds] = useState<string[] | null>(null); // null = all IPs
+  const [ipSectionOpen, setIpSectionOpen] = useState(false);
 
   const checkStatus = async () => {
     try {
@@ -45,14 +52,77 @@ export default function SyncButton() {
     };
   }, []);
 
+  // Load IP list when dialog opens
+  const handleOpenDialog = async () => {
+    setConfirmOpen(true);
+    try {
+      const data = await ipApi.getAll();
+      setIpList(data);
+    } catch (e) {
+      console.error("Failed to load IPs for sync:", e);
+      setIpList([]);
+    }
+  };
+
+  // Toggle individual IP selection
+  const toggleIp = (ipId: string) => {
+    if (selectedIpIds === null) {
+      // Currently "all" → switch to all-except-this-one
+      const allExcept = ipList.map(ip => ip.id).filter(id => id !== ipId);
+      setSelectedIpIds(allExcept);
+    } else {
+      if (selectedIpIds.includes(ipId)) {
+        const newList = selectedIpIds.filter(id => id !== ipId);
+        setSelectedIpIds(newList.length === 0 ? [] : newList);
+      } else {
+        const newList = [...selectedIpIds, ipId];
+        // If all are selected, go back to null (all)
+        setSelectedIpIds(newList.length === ipList.length ? null : newList);
+      }
+    }
+  };
+
+  // Toggle all/none
+  const toggleAll = () => {
+    if (selectedIpIds === null) {
+      setSelectedIpIds([]); // Select none
+    } else {
+      setSelectedIpIds(null); // Select all
+    }
+  };
+
+  const isIpSelected = (ipId: string) => {
+    return selectedIpIds === null || selectedIpIds.includes(ipId);
+  };
+
+  const allSelected = selectedIpIds === null;
+
+  // Label for collapsed IP section
+  const ipSectionLabel = (() => {
+    if (selectedIpIds === null) return "所有 IP";
+    if (selectedIpIds.length === 0) return "未选择";
+    if (selectedIpIds.length === 1) {
+      const ip = ipList.find(ip => ip.id === selectedIpIds[0]);
+      return ip?.name || "1 个 IP";
+    }
+    return `${selectedIpIds.length} 个 IP`;
+  })();
+
   const executeSync = async () => {
     if (syncing) return;
+    // Validate: if push mode with empty selection
+    if (direction !== "pull" && selectedIpIds !== null && selectedIpIds.length === 0) {
+      toast({ title: "请选择至少一个 IP", variant: "destructive" });
+      return;
+    }
     setConfirmOpen(false);
     setSyncing(true);
     setProgress(null);
     try {
       const dbPath = await getDbPath();
-      const res = await invoke<any>("sync_now", { dbPath, direction });
+      // Only pass ipIds for push operations, pull is always full
+      const ipIds = direction === "pull" ? undefined : (selectedIpIds ?? undefined);
+      const res = await invoke<any>("sync_now", { dbPath, direction, ipIds });
       if (res && res.success === false) {
         throw new Error(res.error || "未知错误");
       }
@@ -86,6 +156,14 @@ export default function SyncButton() {
     }
   };
 
+  // Reset IP selection when dialog closes
+  useEffect(() => {
+    if (!confirmOpen) {
+      setSelectedIpIds(null);
+      setIpSectionOpen(false);
+    }
+  }, [confirmOpen]);
+
   if (!enabled) return null;
 
   return (
@@ -98,7 +176,7 @@ export default function SyncButton() {
       <Button 
         variant="outline" 
         size="sm" 
-        onClick={() => setConfirmOpen(true)} 
+        onClick={handleOpenDialog} 
         disabled={syncing}
         className="gap-2 bg-card"
         title="立即同步"
@@ -139,6 +217,64 @@ export default function SyncButton() {
                 <div className="text-xs text-muted-foreground">不上传本地的修改，只把云端最新的数据拉下来。</div>
               </div>
             </label>
+
+            {/* IP Selection - hidden when pull-only since pull is always full */}
+            {direction !== "pull" && ipList.length > 1 && (
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 w-full p-2.5 text-left hover:bg-muted/50 transition-colors"
+                  onClick={() => setIpSectionOpen(!ipSectionOpen)}
+                >
+                  {ipSectionOpen
+                    ? <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                    : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  }
+                  <span className="text-sm font-medium">推送范围</span>
+                  <span className="text-xs text-muted-foreground ml-auto">{ipSectionLabel}</span>
+                </button>
+                {ipSectionOpen && (
+                  <div className="border-t px-2 py-1.5 space-y-0.5 max-h-48 overflow-y-auto">
+                    {/* Select all / none toggle */}
+                    <label className="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-muted/50 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleAll}
+                        className="w-3.5 h-3.5 rounded"
+                        ref={(el) => {
+                          if (el) el.indeterminate = !allSelected && (selectedIpIds?.length ?? 0) > 0;
+                        }}
+                      />
+                      <span className="text-sm font-medium text-muted-foreground">全选</span>
+                    </label>
+                    <div className="border-b my-1" />
+                    {ipList.map(ip => (
+                      <label key={ip.id} className="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-muted/50 cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={isIpSelected(ip.id)}
+                          onChange={() => toggleIp(ip.id)}
+                          className="w-3.5 h-3.5 rounded"
+                        />
+                        {ip.avatar_path ? (
+                          <img
+                            src={convertFileSrc(ip.avatar_path)}
+                            alt={ip.name}
+                            className="w-5 h-5 rounded-full object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center shrink-0">
+                            <span className="text-[10px] text-muted-foreground">{ip.name[0]}</span>
+                          </div>
+                        )}
+                        <span className="text-sm truncate">{ip.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>取消</Button>

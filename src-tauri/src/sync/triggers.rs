@@ -45,7 +45,7 @@ CREATE TRIGGER IF NOT EXISTS sync_ip_images_update AFTER UPDATE ON ip_images BEG
     INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_images', NEW.id, 'UPDATE', json_object('id', NEW.id, 'filename', NEW.filename, 'original_filename', NEW.original_filename, 'ip_id', NEW.ip_id, 'relative_path', NEW.relative_path, 'absolute_path', NEW.absolute_path, 'status', NEW.status, 'file_size', NEW.file_size, 'width', NEW.width, 'height', NEW.height, 'file_hash', NEW.file_hash, 'format', NEW.format, 'has_watermark', NEW.has_watermark, 'watermark_platform', NEW.watermark_platform, 'watermark_detected', NEW.watermark_detected, 'watermark_removed', NEW.watermark_removed, 'created_at', NEW.created_at, 'imported_at', NEW.imported_at, 'archived_at', NEW.archived_at));
 END;
 CREATE TRIGGER IF NOT EXISTS sync_ip_images_delete AFTER DELETE ON ip_images BEGIN
-    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_images', OLD.id, 'DELETE', json_object('id', OLD.id));
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_images', OLD.id, 'DELETE', json_object('id', OLD.id, 'ip_id', OLD.ip_id));
 END;
 
 -- ip_image_relations
@@ -86,7 +86,7 @@ CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_packs_update AFTER UPDATE ON ip_sti
     INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_packs', NEW.id, 'UPDATE', json_object('id', NEW.id, 'ip_id', NEW.ip_id, 'name', NEW.name, 'path', NEW.path, 'description', NEW.description, 'cover_path', NEW.cover_path, 'banner_path', NEW.banner_path, 'icon_path', NEW.icon_path, 'reward_guide_path', NEW.reward_guide_path, 'reward_thanks_path', NEW.reward_thanks_path, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at));
 END;
 CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_packs_delete AFTER DELETE ON ip_sticker_packs BEGIN
-    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_packs', OLD.id, 'DELETE', json_object('id', OLD.id));
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_packs', OLD.id, 'DELETE', json_object('id', OLD.id, 'ip_id', OLD.ip_id));
 END;
 
 -- ip_sticker_pack_platforms
@@ -97,7 +97,7 @@ CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_pack_platforms_update AFTER UPDATE 
     INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_pack_platforms', NEW.id, 'UPDATE', json_object('id', NEW.id, 'pack_id', NEW.pack_id, 'platform_name', NEW.platform_name, 'pack_name_on_platform', NEW.pack_name_on_platform, 'emoji_size_spec', NEW.emoji_size_spec, 'status', NEW.status, 'publish_url', NEW.publish_url, 'downloads_count', NEW.downloads_count, 'updated_at', NEW.updated_at));
 END;
 CREATE TRIGGER IF NOT EXISTS sync_ip_sticker_pack_platforms_delete AFTER DELETE ON ip_sticker_pack_platforms BEGIN
-    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_pack_platforms', OLD.id, 'DELETE', json_object('id', OLD.id));
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_sticker_pack_platforms', OLD.id, 'DELETE', json_object('id', OLD.id, 'pack_id', OLD.pack_id));
 END;
 
 -- ip_emojis
@@ -108,7 +108,7 @@ CREATE TRIGGER IF NOT EXISTS sync_ip_emojis_update AFTER UPDATE ON ip_emojis BEG
     INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_emojis', NEW.id, 'UPDATE', json_object('id', NEW.id, 'ip_id', NEW.ip_id, 'pack_id', NEW.pack_id, 'image_path', NEW.image_path, 'trigger_word', NEW.trigger_word, 'sort_order', NEW.sort_order, 'created_at', NEW.created_at));
 END;
 CREATE TRIGGER IF NOT EXISTS sync_ip_emojis_delete AFTER DELETE ON ip_emojis BEGIN
-    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_emojis', OLD.id, 'DELETE', json_object('id', OLD.id));
+    INSERT INTO sync_changelog (table_name, record_id, operation, data_json) VALUES ('ip_emojis', OLD.id, 'DELETE', json_object('id', OLD.id, 'ip_id', OLD.ip_id));
 END;
 
 -- ip_character_sheets

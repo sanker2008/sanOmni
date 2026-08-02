@@ -58,6 +58,21 @@
 
 2026-07-29 已补齐此前遗漏的 `ip_character_sheets`、`ip_creations` 和 `ip_relations`。
 
+## 5½. 选择性 IP 推送不变量
+
+> 最后更新：2026-08-02
+
+客户端 Push 支持按 IP ID 过滤 `sync_changelog` 中的待推送变更：
+
+- 过滤仅在 Push 阶段生效；Pull 始终全量拉取，不影响版本游标语义。
+- 过滤后，只有匹配指定 IP 的变更被推送并从 `sync_changelog` 中删除。
+- 未匹配的变更必须保留在 `sync_changelog` 中，不得被清理。
+- `tags` 表的变更始终包含在任何 IP 过滤集中（共享资源）。
+- `ip_relations` 只要任一侧 (`ip_a_id` 或 `ip_b_id`) 匹配即包含。
+- 间接关联表（如 `ip_sticker_pack_platforms`、`ip_image_tag_relations`）通过查询父表确定 IP 归属。
+- 无法从 `data_json` 或数据库查询确定 IP 归属的变更，必须安全回退为"包含"，不得默认排除。
+- 不传入 `ip_ids` 参数时，行为必须与过滤前完全一致（向后兼容）。
+
 ## 6. 文件一致性不变量
 
 - Push 前读取本地文件失败、远端缺失检查失败、上传失败或服务端返回哈希不一致时，本轮 Push 必须失败；不能清理对应的本地待推送日志。
