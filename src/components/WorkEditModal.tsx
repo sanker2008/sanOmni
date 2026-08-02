@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/useToast";
 import { Upload, X, Check } from "lucide-react";
 import { tagApi } from "@/services/tauri";
+import { extractDroppedFiles, fileToDataUrl } from "@/lib/dragDropUtils";
 import { pickSingleFile } from "@/lib/tauriFilePicker";
 
 interface WorkEditModalProps {
@@ -155,7 +156,43 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
     }
   };
 
+  const [isDragOver, setIsDragOver] = useState(false);
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length === 0) {
+      toast({ title: "格式错误", description: "请拖入图片文件", variant: "destructive" });
+      return;
+    }
+
+    const { file, path } = dropped[0];
+    try {
+      let dataUrl = path;
+      if (!dataUrl) {
+        dataUrl = await fileToDataUrl(file);
+      }
+      setCoverFile(file);
+      setCoverPreview(dataUrl);
+    } catch (err) {
+      console.error('Failed to read cover image:', err);
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -260,8 +297,20 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-4">
           {/* Cover image upload pane */}
-          <div className="flex flex-col items-center justify-center gap-3 border rounded-lg p-4 bg-muted/40 aspect-[3/4] max-w-[200px] mx-auto md:mx-0 w-full relative">
-
+          <div
+            className="flex flex-col items-center justify-center gap-3 border rounded-lg p-4 bg-muted/40 aspect-[3/4] max-w-[200px] mx-auto md:mx-0 w-full relative overflow-hidden"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {isDragOver && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg pointer-events-none transition-all p-2 text-center">
+                <div className="flex flex-col items-center gap-1 text-primary font-medium text-xs">
+                  <Upload className="h-6 w-6 animate-bounce" />
+                  <span>松开设置封面</span>
+                </div>
+              </div>
+            )}
             {coverPreview ? (
               <div className="w-full h-full relative group rounded overflow-hidden border bg-background flex items-center justify-center">
                 <img src={coverPreview} className={`w-full h-full ${showFullImage ? "object-contain bg-background/50" : "object-cover"}`} alt="Cover Preview" />

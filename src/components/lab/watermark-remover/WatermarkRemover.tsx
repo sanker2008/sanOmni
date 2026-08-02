@@ -3,6 +3,7 @@ import { generateInpaint } from '../ai-image-editor/api';
 import { saveFile, getDefaultExportPath } from '../image-compressor/fs';
 import { toast } from '@/hooks/useToast';
 import { Upload, Eraser, Download, Paintbrush, PlayCircle, Loader2 } from 'lucide-react';
+import { extractDroppedFiles, fileToDataUrl } from '@/lib/dragDropUtils';
 import { pickSingleFile } from '@/lib/tauriFilePicker';
 
 export default function WatermarkRemover() {
@@ -10,6 +11,7 @@ export default function WatermarkRemover() {
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [brushSize, setBrushSize] = useState(20);
+  const [isDragOver, setIsDragOver] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -31,6 +33,43 @@ export default function WatermarkRemover() {
       console.error('Failed to pick image:', error);
     }
   }, []);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length === 0) {
+      toast({ title: '格式错误', description: '请上传图片文件', variant: 'destructive' });
+      return;
+    }
+
+    const { file, path } = dropped[0];
+    try {
+      let dataUrl = path;
+      if (!dataUrl) {
+        dataUrl = await fileToDataUrl(file);
+      }
+      setImage(dataUrl);
+      setResultImage(null);
+    } catch (err) {
+      console.error('Failed to handle dropped file:', err);
+      toast({ title: '读取失败', description: '无法加载拖拽的图片', variant: 'destructive' });
+    }
+  };
 
   const getCanvasPos = (e: React.MouseEvent) => {
     const canvas = canvasRef.current;
@@ -210,7 +249,20 @@ export default function WatermarkRemover() {
       </div>
 
       {/* Main Workspace */}
-      <div className="flex-1 flex overflow-hidden bg-slate-900/5 dark:bg-black/10">
+      <div
+        className="relative flex-1 flex overflow-hidden bg-slate-900/5 dark:bg-black/10"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDragOver && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary m-3 rounded-lg pointer-events-none transition-all">
+            <div className="flex flex-col items-center gap-2 text-primary font-medium">
+              <Upload className="h-10 w-10 animate-bounce" />
+              <span>{image ? '松开鼠标替换当前图片' : '松开鼠标加载图片'}</span>
+            </div>
+          </div>
+        )}
         {!image ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 select-none">
             <div

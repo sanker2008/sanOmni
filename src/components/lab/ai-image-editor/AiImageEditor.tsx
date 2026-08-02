@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAiImageEditorStore } from './useAiImageEditorStore';
 import NodeCanvas from './NodeCanvas';
 import MaskEditor from './MaskEditor';
+import { extractDroppedFiles } from '@/lib/dragDropUtils';
 import { openOutputFolder, saveInputImage } from './fs';
 import { toast } from '@/hooks/useToast';
 import {
@@ -125,47 +126,43 @@ export default function AiImageEditor() {
     }
   }, [addSourceNode]);
 
-  // ─── 导入图片（通过 HTML FileList，用于拖拽） ─────────────
-  const handleImageImport = useCallback((files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
-      const reader = new FileReader();
-      reader.onerror = () => {
-        toast({ title: '读取失败', description: `无法读取 ${file.name}`, variant: 'destructive' });
-      };
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        if (!dataUrl) return;
-        const img = new Image();
-        img.onerror = () => {
-          toast({ title: '图片加载失败', description: `无法解析 ${file.name}`, variant: 'destructive' });
-        };
-        img.onload = () => {
-          (async () => {
-            try {
-              const filePath = await saveInputImage(dataUrl, file.name);
-              addSourceNode(dataUrl, file.name, img.width, img.height, filePath);
-            } catch (e) {
-              console.error('[AI Editor] Failed to save dragged image to inputs:', e);
-              // Fallback without filePath
-              addSourceNode(dataUrl, file.name, img.width, img.height);
-            }
-            toast({ title: '图片已添加', description: `${file.name} (${img.width}×${img.height})` });
-          })();
-        };
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(file);
-    }
-  }, [addSourceNode]);
-
   // ─── 拖拽导入 ────────────────────────────────────────────
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    handleImageImport(e.dataTransfer.files);
-  }, [handleImageImport]);
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length > 0) {
+      const files = dropped.map((d) => d.file);
+      // Create a DataTransfer like array
+      for (const file of files) {
+        const reader = new FileReader();
+        reader.onerror = () => {
+          toast({ title: '读取失败', description: `无法读取 ${file.name}`, variant: 'destructive' });
+        };
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          if (!dataUrl) return;
+          const img = new Image();
+          img.onerror = () => {
+            toast({ title: '图片加载失败', description: `无法解析 ${file.name}`, variant: 'destructive' });
+          };
+          img.onload = () => {
+            (async () => {
+              try {
+                const filePath = await saveInputImage(dataUrl, file.name);
+                addSourceNode(dataUrl, file.name, img.width, img.height, filePath);
+              } catch (e) {
+                addSourceNode(dataUrl, file.name, img.width, img.height);
+              }
+              toast({ title: '图片已添加', description: `${file.name} (${img.width}×${img.height})` });
+            })();
+          };
+          img.src = dataUrl;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  }, [addSourceNode]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();

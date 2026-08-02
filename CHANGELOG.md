@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 跨平台拖拽（Drag & Drop）上传图片/视频：在 macOS 与 Windows 下为 sanOmni 及 sanLabs 所有图片/视频上传区域提供全面的拖拽支持。实现统一的拖拽解析与类型/后缀名兜底校验引擎 `dragDropUtils`，并在拖拽悬浮时提供直观的高亮反馈。覆盖范围包括：
+  - **sanLabs 工具**：Gemini 水印高级修复、Gemini 视频水印修复（拖入 MP4）、高级抠图 Pro、PNG 转 SVG、水印消除、动图拆帧（支持播放中拖入替换）、图片压缩（支持单图/批量追加）、图片切割、AI P图及产品图制作（拖入画布自动新建图片图层）。
+  - **应用弹窗**：作品编辑弹窗封面选择框、角色人设编辑弹窗剧照/设定图管理（支持批量拖入）。
 - sanIP 同步：支持指定特定 IP 进行推送。同步确认弹窗新增可折叠的 IP 复选列表，用户可自由选择需要推送的 IP 角色（Pull 保持全量拉取）。未选中 IP 的变更保留在本地队列中，等待后续同步。
 - sanPrompt: 在模板详情弹窗中新增“上一个/下一个”快捷切换按钮，支持在当前搜索与筛选结果内无缝浏览相邻模板。
 - sanPrompt: 新增 Supabase Storage 直传功能。发布模板时支持自动将本地图片上传至 Supabase，并替换为云端 public URL。

@@ -4,6 +4,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
 import { saveSvg, openOutputFolder } from './fs';
+import { extractDroppedFiles, fileToDataUrl } from '@/lib/dragDropUtils';
 import { pickSingleFile } from '@/lib/tauriFilePicker';
 // @ts-ignore
 import ImageTracer from 'imagetracerjs';
@@ -41,7 +42,6 @@ export default function PngToSvg() {
   const [minColorRatio, setMinColorRatio] = useState<number>(0.02);
   const [colorQuantCycles, setColorQuantCycles] = useState<number>(3);
 
-
   const handlePickImage = useCallback(async () => {
     try {
       const picked = await pickSingleFile({
@@ -59,6 +59,48 @@ export default function PngToSvg() {
       console.error('Failed to pick image:', error);
     }
   }, []);
+
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length === 0) {
+      toast({ title: '格式错误', description: '请上传图片文件', variant: 'destructive' });
+      return;
+    }
+
+    const { file, path } = dropped[0];
+    try {
+      let dataUrl = path;
+      if (!dataUrl) {
+        dataUrl = await fileToDataUrl(file);
+      }
+      setSelectedFile(file);
+      setImageUrl(dataUrl);
+      setSvgContent(null);
+      setOriginalZoom(1);
+      setSvgZoom(1);
+    } catch (err) {
+      console.error('Failed to handle dropped file:', err);
+      toast({ title: '读取失败', description: '无法加载拖拽的图片', variant: 'destructive' });
+    }
+  };
 
   const processImage = () => {
     if (!imageUrl) return;
@@ -238,7 +280,20 @@ export default function PngToSvg() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Main Content Preview */}
-        <div className="flex-1 flex flex-col bg-slate-900/5 dark:bg-black/10 overflow-hidden">
+        <div
+          className="relative flex-1 flex flex-col bg-slate-900/5 dark:bg-black/10 overflow-hidden"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {isDragOver && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary m-3 rounded-lg pointer-events-none transition-all">
+              <div className="flex flex-col items-center gap-2 text-primary font-medium">
+                <Upload className="h-10 w-10 animate-bounce" />
+                <span>{imageUrl ? '松开鼠标替换当前图片' : '松开鼠标加载图片'}</span>
+              </div>
+            </div>
+          )}
           {imageUrl ? (
             <div className="flex-1 p-4 grid grid-cols-2 gap-4 h-full min-h-0">
               <div className="flex flex-col gap-2 min-h-0">

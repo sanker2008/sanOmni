@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { extractDroppedFiles } from '@/lib/dragDropUtils';
 import { pickSingleFile } from '@/lib/tauriFilePicker';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { readFile, remove } from '@/services/secureFs';
@@ -195,11 +196,31 @@ export default function ImageSlicer() {
     }
   }, [applyImageSrc]);
 
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleImageFile(e.dataTransfer.files[0]);
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length === 0) {
+      toast({ title: '格式错误', description: '请拖入图片文件', variant: 'destructive' });
+      return;
     }
+    handleImageFile(dropped[0].file);
   };
 
   const handleOpenHistory = async () => {
@@ -490,7 +511,20 @@ export default function ImageSlicer() {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background">
+    <div
+      className="relative h-full flex flex-col overflow-hidden bg-background"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary m-3 rounded-lg pointer-events-none transition-all">
+          <div className="flex flex-col items-center gap-2 text-primary font-medium">
+            <Upload className="h-10 w-10 animate-bounce" />
+            <span>{imageSrc ? '松开鼠标替换当前图片' : '松开鼠标加载图片'}</span>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar / Header */}
       {imageSrc && (

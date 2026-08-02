@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import { Upload, X, Star, Search, ChevronDown, Check } from "lucide-react";
+import { extractDroppedFiles, fileToDataUrl } from "@/lib/dragDropUtils";
 import { pickFiles } from "@/lib/tauriFilePicker";
 
 interface CharacterEditModalProps {
@@ -143,6 +144,55 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
       }
     } catch (error) {
       console.error('Failed to pick images:', error);
+    }
+  };
+
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length === 0) {
+      toast({ title: "格式错误", description: "请拖入图片文件", variant: "destructive" });
+      return;
+    }
+
+    const newItems: { type: 'new'; url: string; file: File }[] = [];
+    for (const d of dropped) {
+      let dataUrl = d.path;
+      if (!dataUrl) {
+        try {
+          dataUrl = await fileToDataUrl(d.file);
+        } catch (err) {
+          console.error(err);
+          continue;
+        }
+      }
+      newItems.push({
+        type: 'new' as const,
+        url: dataUrl,
+        file: d.file,
+      });
+    }
+
+    if (newItems.length > 0) {
+      setImages((prev) => [...prev, ...newItems]);
+      toast({ title: "图片已添加", description: `已添加 ${newItems.length} 张图片` });
     }
   };
 
@@ -386,7 +436,20 @@ export default function CharacterEditModal({ workId, character, open, onOpenChan
             <label className="text-xs font-semibold text-muted-foreground">剧照 / 设定图图片管理（支持多图）</label>
             
 
-            <div className="flex flex-wrap gap-3 items-center">
+            <div
+              className="relative flex flex-wrap gap-3 items-center p-2 border border-dashed border-border/80 rounded-lg min-h-[110px]"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              {isDragOver && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg pointer-events-none transition-all p-2 text-center">
+                  <div className="flex flex-col items-center gap-1 text-primary font-medium text-xs">
+                    <Upload className="h-5 w-5 animate-bounce" />
+                    <span>松开添加设剧照 / 设定图</span>
+                  </div>
+                </div>
+              )}
               {/* Uploder card */}
               <div
                 onClick={triggerFileSelect}

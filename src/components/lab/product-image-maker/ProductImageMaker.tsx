@@ -16,6 +16,7 @@ import { ensureToolDirectories, saveProject, loadProject, saveExport, listProjec
 import { Download, RotateCcw, Save, FolderOpen, FileCode2, ChevronDown, Undo2, Redo2, Edit2 } from 'lucide-react';
 import { toast } from '@/hooks/useToast';
 import { useUIStore } from '@/stores';
+import { extractDroppedFiles, fileToDataUrl } from '@/lib/dragDropUtils';
 import { pickFiles } from '@/lib/tauriFilePicker';
 import {
   Dialog,
@@ -276,6 +277,49 @@ export default function ProductImageMaker() {
       toast({ title: '选择图片失败', description: String(error), variant: 'destructive' });
     }
   }, [addImageLayer, updateLayer]);
+
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length === 0) {
+      toast({ title: '格式错误', description: '请拖入图片文件', variant: 'destructive' });
+      return;
+    }
+
+    for (const d of dropped) {
+      try {
+        let dataUrl = d.path;
+        if (!dataUrl) {
+          dataUrl = await fileToDataUrl(d.file);
+        }
+        const img = new Image();
+        img.onload = () => {
+          addImageLayer(dataUrl!, d.name, img.width, img.height);
+          toast({ title: '图片已添加', description: d.name });
+        };
+        img.src = dataUrl;
+      } catch (err) {
+        console.error('Failed to read dropped image:', err);
+      }
+    }
+  };
 
   const handleReplaceImage = useCallback(
     (layerId: string) => {
@@ -690,7 +734,20 @@ export default function ProductImageMaker() {
       />
 
       {/* Main area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div
+        className="relative flex-1 flex overflow-hidden"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDragOver && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary m-3 rounded-lg pointer-events-none transition-all">
+            <div className="flex flex-col items-center gap-2 text-primary font-medium">
+              <Download className="h-10 w-10 animate-bounce rotate-180" />
+              <span>松开鼠标添加为新图层</span>
+            </div>
+          </div>
+        )}
         {/* Left: Canvas preview */}
         <CanvasPreview
           canvas={canvas}

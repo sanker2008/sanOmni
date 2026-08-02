@@ -17,6 +17,7 @@ import {
 import { decodeAnimatedImage, DecodedAnimation } from './decoder';
 import { saveFrameImage, openOutputFolder } from './fs';
 import { toast } from '@/hooks/useToast';
+import { extractDroppedFiles } from '@/lib/dragDropUtils';
 import { pickSingleFile } from '@/lib/tauriFilePicker';
 
 const CHECKERED_BG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath fill='%23e5e7eb' d='M0 0h8v8H0zM8 8h8v8H8z'/%3E%3C/svg%3E")`;
@@ -114,11 +115,31 @@ export default function GifDecomposer() {
     }
   };
 
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleLoadFile(e.dataTransfer.files[0]);
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['gif', 'webp', 'png', 'jpg', 'jpeg', 'apng']);
+    if (dropped.length === 0) {
+      toast({ title: '格式错误', description: '请拖入 GIF / APNG / WebP 动图或图片文件', variant: 'destructive' });
+      return;
     }
+    handleLoadFile(dropped[0].file);
   };
 
   // Playback Loop
@@ -377,7 +398,20 @@ export default function GifDecomposer() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div
+      className="relative h-full flex flex-col bg-background"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary m-3 rounded-lg pointer-events-none transition-all">
+          <div className="flex flex-col items-center gap-2 text-primary font-medium">
+            <Film className="h-10 w-10 animate-bounce" />
+            <span>{animation ? '松开鼠标替换当前动图' : '松开鼠标加载动图'}</span>
+          </div>
+        </div>
+      )}
       {/* Top Toolbar */}
       {animation && (
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/40 shrink-0 select-none">

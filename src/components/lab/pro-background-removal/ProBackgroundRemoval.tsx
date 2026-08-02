@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from '@/hooks/useToast';
 import { Upload, Eraser, Download, PlayCircle, Loader2, ZoomIn, ZoomOut, Maximize, FolderOpen, ChevronDown, ChevronRight, RotateCcw, HelpCircle, Brush, Undo2, Redo2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { extractDroppedFiles } from '@/lib/dragDropUtils';
 import { pickSingleFile } from '@/lib/tauriFilePicker';
 import { revealFileInFolder, openPath, getLabsRoot } from '@/lib/pathUtils';
 import { mkdir, writeFile, exists } from '@/services/secureFs';
@@ -330,17 +331,17 @@ export default function ProBackgroundRemoval() {
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-    
-    if (!file.type.startsWith('image/')) {
+
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'svg']);
+    if (dropped.length === 0) {
       toast({ title: '格式错误', description: '请上传图片文件', variant: 'destructive' });
       return;
     }
 
+    const { file, path } = dropped[0];
     try {
-      const path = (file as any).path;
       if (path) {
         setImage(path);
         setInitialImage(path);

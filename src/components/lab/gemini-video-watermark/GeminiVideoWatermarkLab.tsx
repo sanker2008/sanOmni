@@ -15,6 +15,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { extractDroppedFiles } from '@/lib/dragDropUtils';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/useToast';
 import { openPath } from '@/lib/pathUtils';
@@ -243,8 +244,54 @@ export default function GeminiVideoWatermarkLab() {
           ? '当前环境无法编码 H.264'
           : '本机 WebCodecs 可处理';
 
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['mp4', 'webm', 'mov', 'm4v']);
+    if (dropped.length === 0) {
+      toast({
+        title: '不支持的文件格式',
+        description: '请拖入 MP4 / 视频文件',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const { file, path } = dropped[0];
+    await loadFile(file, path);
+  };
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div
+      className="relative flex h-full min-h-0 flex-col bg-background"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary m-3 rounded-lg pointer-events-none transition-all">
+          <div className="flex flex-col items-center gap-2 text-primary font-medium">
+            <Film className="h-10 w-10 animate-bounce" />
+            <span>{selected ? '松开鼠标替换当前视频' : '松开鼠标加载视频'}</span>
+          </div>
+        </div>
+      )}
       <input
         ref={inputRef}
         type="file"

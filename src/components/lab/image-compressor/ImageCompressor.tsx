@@ -7,6 +7,7 @@ import { geminiWatermarkApi, isGeminiWatermarkRemovalSuccessful } from '@/servic
 import { authorizeFsPaths, readFile } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
 import { getLabsRoot } from '@/lib/pathUtils';
+import { extractDroppedFiles } from '@/lib/dragDropUtils';
 import { pickFiles } from '@/lib/tauriFilePicker';
 import {
   Upload,
@@ -127,11 +128,32 @@ export default function ImageCompressor() {
     }
   }, []);
 
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files);
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const dropped = extractDroppedFiles(e, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg']);
+    if (dropped.length === 0) {
+      toast({ title: '格式错误', description: '请拖入图片文件', variant: 'destructive' });
+      return;
     }
+    const fileList = dropped.map((d) => d.file);
+    handleFiles(fileList);
   };
 
   const removeFile = (id: string) => {
@@ -308,7 +330,20 @@ export default function ImageCompressor() {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background">
+    <div
+      className="relative h-full flex flex-col overflow-hidden bg-background"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary m-3 rounded-lg pointer-events-none transition-all">
+          <div className="flex flex-col items-center gap-2 text-primary font-medium">
+            <Upload className="h-10 w-10 animate-bounce" />
+            <span>松开鼠标添加/压缩图片</span>
+          </div>
+        </div>
+      )}
 
       {files.length > 0 && (
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/40 shrink-0 select-none">
