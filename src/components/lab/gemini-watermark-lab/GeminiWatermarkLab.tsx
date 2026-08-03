@@ -319,10 +319,42 @@ export default function GeminiWatermarkLab() {
   const resizeManualRegion = (size: number) => {
     setManualRegionSize(size);
     setManualRegion((region) => {
-      if (!region) return region;
+      let currentRegion = region;
+
+      // 如果还没有手动框选，但有自动处理结果，则继承自动处理找到的位置
+      if (!currentRegion && result?.method) {
+        const pairs = parseMethod(result.method);
+        const autoX = pairs.find((p) => p.startsWith('x:'))?.split(':')[1].trim();
+        const autoY = pairs.find((p) => p.startsWith('y:'))?.split(':')[1].trim();
+        const autoSize = pairs.find((p) => p.startsWith('size:'))?.split(':')[1].trim();
+        if (autoX && autoY && autoSize) {
+          currentRegion = {
+            x: parseInt(autoX, 10),
+            y: parseInt(autoY, 10),
+            width: parseInt(autoSize, 10),
+            height: parseInt(autoSize, 10),
+          };
+        }
+      }
+
+      // 如果依然没有框选，按照 Gemini 标准比例（右/下边距通常为尺寸的 2 倍）自动定位在右下角
+      if (!currentRegion) {
+        if (imageSize.width > 0 && imageSize.height > 0) {
+          const margin = size * 2;
+          return {
+            x: Math.max(0, imageSize.width - size - margin),
+            y: Math.max(0, imageSize.height - size - margin),
+            width: size,
+            height: size,
+          };
+        }
+        return region;
+      }
+
+      // 保持中心点不变进行缩放
       const center = {
-        x: region.x + region.width / 2,
-        y: region.y + region.height / 2,
+        x: currentRegion.x + currentRegion.width / 2,
+        y: currentRegion.y + currentRegion.height / 2,
       };
       return buildCenteredRegion(center, size);
     });

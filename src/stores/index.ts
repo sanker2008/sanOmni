@@ -525,7 +525,7 @@ applyThemeColors(loadSettings());
 applyTheme(loadTheme());
 
 interface UIStore {
-  activeTab: "prompt" | "ip" | "labs";
+  activeTab: "prompt" | "ip" | "labs" | "know";
   promptTab: "inbox" | "archived" | "templates";
   ipTab: "inbox" | "archived" | "works";
   searchQuery: string;
@@ -544,7 +544,7 @@ interface UIStore {
   viewMode: ViewMode;
   selectedIpId: string | null;
 
-  setActiveTab: (tab: "prompt" | "ip" | "labs") => void;
+  setActiveTab: (tab: "prompt" | "ip" | "labs" | "know") => void;
   setPromptTab: (tab: "inbox" | "archived" | "templates") => void;
   setIpTab: (tab: "inbox" | "archived" | "works") => void;
   setSearchQuery: (query: string) => void;

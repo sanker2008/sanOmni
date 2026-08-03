@@ -65,7 +65,7 @@ export async function publishPromptToWeb(groupId: string, config: PublishConfig)
       .replace(/(^-|-$)+/g, '');
 
     const syncImages = images
-      .filter((image) => image.is_sync_enabled !== false && image.role !== "hidden")
+      .filter((image) => image.is_sync_enabled !== false && image.role !== "hidden" && image.status === "archived")
       .map((image, index) => {
         let variantJson: unknown;
         if (image.variant_json) {

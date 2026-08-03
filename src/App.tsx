@@ -11,13 +11,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Settings, Sun, Moon, Monitor, LayoutTemplate, Users, FlaskConical } from "lucide-react";
+import { Settings, Sun, Moon, Monitor, LayoutTemplate, Users, FlaskConical, BookOpenCheck } from "lucide-react";
 import UpdateChecker from "@/components/UpdateChecker";
 import type { Theme } from "@/stores";
 
 const PromptDomainView = lazy(() => import("@/components/PromptDomainView"));
 const IpDomainView = lazy(() => import("@/components/IpDomainView"));
 const LabView = lazy(() => import("@/components/lab/LabView"));
+const KnowDomainView = lazy(() => import("@/components/KnowDomainView"));
 const QuickEditModal = lazy(() => import("@/components/QuickEditModal"));
 const ImageViewer = lazy(() => import("@/components/ImageViewer"));
 const SettingsView = lazy(() => import("@/components/settings/SettingsView"));
@@ -118,6 +119,15 @@ function App() {
                     <FlaskConical className="w-4 h-4" />
                     sanLabs
                   </Button>
+                  <Button
+                    variant={activeTab === "know" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setActiveTab("know")}
+                    className="gap-2"
+                  >
+                    <BookOpenCheck className="w-4 h-4" />
+                    sanKnow
+                  </Button>
                 </>
               )}
             </nav>
@@ -156,6 +166,8 @@ function App() {
               <PromptDomainView />
             ) : activeTab === "ip" ? (
               <IpDomainView />
+            ) : activeTab === "know" ? (
+              <KnowDomainView />
             ) : (
               <LabView />
             )}

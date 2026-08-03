@@ -1,5 +1,24 @@
 # 图片不显示问题排查指南
 
+## 最近修复：sanKnow v6 数据库迁移导致启动失败
+
+### 现象
+
+启动开发版时，Rust 后端在打印 `knowledge_web_collections` 建表 SQL 后退出，常见日志包含 `at offset ...`、`sanomni.exe (exit code: 101)`。随后出现的 PostCSS 警告或 `Chrome_WidgetWin` 注销错误，是进程异常退出后的伴随日志，不是根因。
+
+### 根因
+
+已有用户数据库仍是 `settings.db_version = 5`。启动顺序会先执行初始建表 SQL，再执行增量迁移；若初始 SQL 在 v6 字段 `source_url` 和 `source_collection_id` 尚未添加前，就创建依赖它们的索引，数据库初始化会被中断，v6 迁移也不会写入版本号。
+
+### 修复与恢复流程
+
+1. 使用包含该修复的版本重新启动应用；不要删除 `database.sqlite`。
+2. 初始化阶段只创建与旧表结构兼容的表和索引。
+3. `run_migrations` 再执行 v5 → v6：添加两个来源字段、创建网页文档集表和相关索引，最后把 `db_version` 更新为 `6`。
+4. 数据库初始化前会自动保留最近三份 `database_backup_*.sqlite` 备份；若升级仍失败，保留完整 Rust 错误日志后再排查，不要自行降级或重建数据库。
+
+详见 [sanKnow 开发知识库](../features/KNOWLEDGE_BASE.md)。
+
 ## 问题描述
 图片卡片显示为占位符图标，而不是实际的图片内容。
 

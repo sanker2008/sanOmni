@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X, ChevronLeft, ChevronRight, LayoutGrid, List, AlertTriangle, Activity, Loader2 } from "lucide-react";
+import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X, ChevronLeft, ChevronRight, LayoutGrid, List, AlertTriangle, Activity, Loader2, Upload, Download } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { SmartPromptRenderer } from "./SmartPromptRenderer";
@@ -21,6 +21,14 @@ import {
   PROMPT_TEMPLATE_CATEGORIES,
   getPromptCategoryLabel,
 } from "@/lib/promptTaxonomy";
+import {
+  getPromptTemplateImportExample,
+  parsePromptTemplateImport,
+  promptTemplateImportToFormData,
+  PromptTemplateImportError,
+} from "@/lib/promptTemplateImport";
+import { authorizeFsPaths, readTextFile, writeTextFile } from "@/services/secureFs";
+import { open, save } from "@tauri-apps/plugin-dialog";
 
 interface PromptGroupWithImages {
   group: PromptGroup;
@@ -43,6 +51,7 @@ interface PromptGroupWithImages {
     is_sync_enabled?: boolean;
     sync_status?: string;
     remote_url?: string;
+    status: "inbox" | "tagged" | "archived";
   }>;
 }
 
@@ -324,6 +333,68 @@ export function PromptGroupsView() {
     setImageSearch("");
     setFormTab("base");
     setIsFormOpen(true);
+  };
+
+  const handleImportTemplate = async () => {
+    try {
+      const selectedPath = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "sanOmni Prompt 模板", extensions: ["json"] }],
+      });
+      if (!selectedPath || Array.isArray(selectedPath)) return;
+
+      setIsLoading(true);
+      await authorizeFsPaths([selectedPath]);
+      const imported = parsePromptTemplateImport(await readTextFile(selectedPath));
+      setForm({
+        ...EMPTY_FORM,
+        ...promptTemplateImportToFormData(imported),
+      });
+      setImageSearch("");
+      setFormTab("base");
+      setIsFormOpen(true);
+      toast({
+        title: "✓ 模板已通过校验",
+        description: "请确认内容并关联图片后，再创建 Prompt。",
+      });
+    } catch (error) {
+      const description = error instanceof PromptTemplateImportError
+        ? error.issues.join("；")
+        : String(error);
+      console.error("导入 Prompt 模板失败:", error);
+      toast({
+        title: "✗ 导入失败",
+        description,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDownloadImportExample = async () => {
+    try {
+      const savePath = await save({
+        defaultPath: "sanomni-prompt-template.v1.example.json",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!savePath) return;
+
+      await authorizeFsPaths([savePath]);
+      await writeTextFile(savePath, `${JSON.stringify(getPromptTemplateImportExample(), null, 2)}\n`);
+      toast({
+        title: "✓ 已保存导入示例",
+        description: "将该 JSON 交给 Agent 按相同结构生成新模板即可。",
+      });
+    } catch (error) {
+      console.error("保存 Prompt 导入示例失败:", error);
+      toast({
+        title: "✗ 保存示例失败",
+        description: String(error),
+        variant: "destructive",
+      });
+    }
   };
 
   const openEditDialog = async (groupId: string) => {
@@ -942,6 +1013,30 @@ export function PromptGroupsView() {
               </TooltipTrigger>
               <TooltipContent>
                 <p>刷新</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" onClick={() => void handleDownloadImportExample()} disabled={isLoading} className="h-9 shrink-0 gap-1.5">
+                  <Download className="h-4 w-4" />
+                  下载示例
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>下载导入示例</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" onClick={() => void handleImportTemplate()} disabled={isLoading} className="h-9 shrink-0 gap-1.5">
+                  <Upload className="h-4 w-4" />
+                  导入模板
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>导入模板</p>
               </TooltipContent>
             </Tooltip>
 

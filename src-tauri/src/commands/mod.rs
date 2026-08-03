@@ -95,6 +95,7 @@ pub mod classifier;
 pub mod fs;
 pub mod ip_assets;
 pub mod ip_images;
+pub mod knowledge;
 pub mod prompt_groups;
 pub mod scanner;
 pub mod settings;

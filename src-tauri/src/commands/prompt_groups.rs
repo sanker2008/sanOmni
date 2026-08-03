@@ -190,7 +190,7 @@ pub async fn get_prompt_group_with_images(
                 i.width, i.height, i.created_at,
                 ipgr.role, ipgr.is_cover, ipgr.sort_order, ipgr.caption,
                 ipgr.variant_key, ipgr.variant_json, ipgr.is_sync_enabled,
-                ipgr.sync_status, ipgr.remote_url
+                ipgr.sync_status, ipgr.remote_url, i.status
              FROM images i
              INNER JOIN image_prompt_group_relations ipgr ON i.id = ipgr.image_id
              INNER JOIN models m ON i.primary_model_id = m.id
@@ -221,6 +221,7 @@ pub async fn get_prompt_group_with_images(
                 "is_sync_enabled": row.get::<_, bool>(15)?,
                 "sync_status": row.get::<_, Option<String>>(16)?.unwrap_or_else(|| "local".to_string()),
                 "remote_url": row.get::<_, Option<String>>(17)?,
+                "status": row.get::<_, Option<String>>(18)?.unwrap_or_else(|| "inbox".to_string()),
             }))
         })
         .map_err(|e| e.to_string())?

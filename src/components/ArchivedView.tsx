@@ -16,6 +16,7 @@ import {
   FolderTree,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   Image as ImageIcon,
   Undo2,
   Loader2,
@@ -77,6 +78,9 @@ export default function ArchivedView() {
   const [isQuickImporting, setIsQuickImporting] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     void loadVendors();
@@ -288,6 +292,11 @@ export default function ArchivedView() {
     clearSelection();
   }, [selectedVendor, selectedModel, clearSelection]);
 
+  // Reset pagination to page 1 on filter/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedVendor, selectedModel, filterHasPrompt, filterHasTags, filterHasWatermark]);
+
   const loadArchivedImages = async () => {
     setLoading(true);
     try {
@@ -378,6 +387,28 @@ export default function ArchivedView() {
     return result;
   }, [filteredImages, sortBy, sortOrder]);
 
+  const paginatedImages = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedImages.slice(start, start + pageSize);
+  }, [sortedImages, currentPage, pageSize]);
+
+  // 当翻页时，滚动到顶部
+  useEffect(() => {
+    if (gridRef.current) {
+      const viewport = gridRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  }, [currentPage, gridRef]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(sortedImages.length / pageSize));
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [sortedImages.length, currentPage, pageSize]);
+
   const headerTitle = useMemo(() => {
     if (selectedModel && selectedVendor) {
       const vendorName = selectedVendor === "unknown"
@@ -410,8 +441,8 @@ export default function ArchivedView() {
   const getModelCount = (modelId: string) =>
     archivedImages.filter((img) => img.primary_model_id === modelId).length;
 
-  const isAllSelected = sortedImages.length > 0 &&
-    sortedImages.every((img) => selectedImages.includes(img.id));
+  const isAllSelected = paginatedImages.length > 0 &&
+    paginatedImages.every((img) => selectedImages.includes(img.id));
 
   const handleUnarchive = async () => {
     if (selectedImages.length === 0) return;
@@ -904,7 +935,7 @@ export default function ArchivedView() {
             <div className="flex items-center gap-4">
               <button
                 onClick={() =>
-                  isAllSelected ? clearSelection() : selectAll(sortedImages.map((img) => img.id))
+                  isAllSelected ? clearSelection() : selectAll(paginatedImages.map((img) => img.id))
                 }
                 className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
               >
@@ -1045,7 +1076,7 @@ export default function ArchivedView() {
                   className="p-4 grid gap-4"
                   style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
                 >
-                  {sortedImages.map((image) => (
+                  {paginatedImages.map((image) => (
                     <ImageCard 
                       key={image.id} 
                       image={image}
@@ -1056,7 +1087,7 @@ export default function ArchivedView() {
                 </div>
               ) : (
                 <div className="p-4 space-y-2">
-                  {sortedImages.map((image) => (
+                  {paginatedImages.map((image) => (
                     <ImageCard
                       key={image.id}
                       image={image}
@@ -1070,6 +1101,53 @@ export default function ArchivedView() {
             </ScrollArea>
           )}
         </div>
+
+        {/* Pagination Footer */}
+        {filteredImages.length > 0 && (
+          <div className="flex items-center justify-between border-t p-3 bg-card shadow-sm z-10 text-sm">
+            <div className="text-muted-foreground flex items-center gap-3">
+              <span>共 {filteredImages.length} 张图片</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="h-7 rounded-md border border-input bg-background px-2 py-0.5 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground focus:text-foreground cursor-pointer"
+              >
+                <option value={50}>50 条/页</option>
+                <option value={100}>100 条/页</option>
+                <option value={200}>200 条/页</option>
+                <option value={500}>500 条/页</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="h-8"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                上一页
+              </Button>
+              <div className="text-muted-foreground px-2">
+                第 {currentPage} / {Math.max(1, Math.ceil(filteredImages.length / pageSize))} 页
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(Math.ceil(filteredImages.length / pageSize), p + 1))}
+                disabled={currentPage >= Math.ceil(filteredImages.length / pageSize) || Math.ceil(filteredImages.length / pageSize) === 0}
+                className="h-8"
+              >
+                下一页
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
       {/* Batch Edit Modal */}
       <BatchEditModal open={showBatchEdit} onClose={() => setShowBatchEdit(false)} />

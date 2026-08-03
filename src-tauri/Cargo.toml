@@ -1,6 +1,6 @@
 [package]
 name = "sanomni"
-version = "1.4.3"
+version = "1.4.5"
 description = "sanOmni - Manage AI-generated images"
 authors = ["you"]
 edition = "2021"
@@ -38,12 +38,14 @@ notify = "7"
 tokio = { version = "1", features = ["fs", "full"] }
 anyhow = "1"
 reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
+scraper = "0.27"
 semver = "1"
 thiserror = "1"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 zip = "2.4"
 futures-util = "0.3.32"
+url = "2.5"
 
 # Reduce memory usage during compilation
 [profile.dev]

@@ -53,6 +53,30 @@
   }
 }
 
+/* sanKnow uses source-boundary panels as a primary part of the search UI.
+   Keep this scoped override so the legacy borderless product surfaces remain unchanged. */
+@layer components {
+  .san-know .border {
+    border-width: 1px !important;
+  }
+
+  .san-know .border-t {
+    border-top-width: 1px !important;
+  }
+
+  .san-know .border-r {
+    border-right-width: 1px !important;
+  }
+
+  .san-know .border-b {
+    border-bottom-width: 1px !important;
+  }
+
+  .san-know .border-l {
+    border-left-width: 1px !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

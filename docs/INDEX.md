@@ -1,6 +1,6 @@
 # 文档索引
 
-> sanOmni 包含 **sanPrompt**、**sanIP** 和 **sanLabs** 三大功能域，文档已按内容分类组织。
+> sanOmni 包含 **sanPrompt**、**sanIP**、**sanLabs** 和 **sanKnow** 四大功能域，文档已按内容分类组织。
 
 ## 🏗️ 架构设计 (`architecture/`)
 - [架构文档](./architecture/ARCHITECTURE.md) - 说明模块化设计与未来拆分规划
@@ -27,6 +27,7 @@
 - [列表模式更新](./features/LIST_MODE_UPDATE.md) - 列表显示模式
 - [IP 作品合集](./features/IP_WORKS_COLLECTION.md) - IP 作品管理
 - [通用作品集与叙事章节](./features/WORKS_COLLECTION_STRUCTURE.md) - 图片、歌曲、专辑、剧本等作品的结构与章节管理
+- [sanKnow 开发知识库](./features/KNOWLEDGE_BASE.md) - 本地项目索引、手动记录与网页文档集
 - [图片切割 (Lab)](./features/LAB_IMAGE_SLICER.md) - 可视化图片切割工具
 - [产品图制作 (Lab)](./features/LAB_PRODUCT_IMAGE_MAKER.md) - 产品图推广制作工具
 - [模板商品化说明](./features/template.md) - 统一分类、图片证据与发布流
@@ -52,4 +53,4 @@
 发版说明及历史大功能变更日志，请查阅 `docs/release-notes/` 目录。
 
 ---
-**最后更新**: 2026-07-31
+**最后更新**: 2026-08-03

@@ -204,8 +204,86 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         set_db_version(conn, 4)?;
     }
 
+    if current_version < 5 {
+        // v4 -> v5: local developer knowledge base. Source-derived entries are
+        // intentionally separate from sanPrompt/sanIP data and are not added to
+        // the existing cloud-sync triggers in this first local-only release.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS knowledge_projects (
+                id              TEXT PRIMARY KEY,
+                name            TEXT NOT NULL,
+                root_path       TEXT NOT NULL UNIQUE,
+                last_indexed_at TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS knowledge_entries (
+                id              TEXT PRIMARY KEY,
+                project_id      TEXT NOT NULL,
+                title           TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                entry_type      TEXT NOT NULL,
+                source_path     TEXT,
+                source_language TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES knowledge_projects(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_knowledge_entries_project
+                ON knowledge_entries(project_id, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_knowledge_entries_type
+                ON knowledge_entries(project_id, entry_type);
+            CREATE INDEX IF NOT EXISTS idx_knowledge_entries_source
+                ON knowledge_entries(project_id, source_path);
+            "#,
+        )?;
+
+        set_db_version(conn, 5)?;
+    }
+
+    if current_version < 6 {
+        // v5 -> v6: local web document collections. Each collected page keeps
+        // its original URL and collection ID, while remaining outside the
+        // existing sanIP cloud-sync triggers.
+        let _ = conn.execute(
+            "ALTER TABLE knowledge_entries ADD COLUMN source_url TEXT",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE knowledge_entries ADD COLUMN source_collection_id TEXT",
+            [],
+        );
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS knowledge_web_collections (
+                id              TEXT PRIMARY KEY,
+                project_id      TEXT NOT NULL,
+                name            TEXT NOT NULL,
+                entry_url       TEXT NOT NULL,
+                last_crawled_at TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                UNIQUE(project_id, entry_url),
+                FOREIGN KEY (project_id) REFERENCES knowledge_projects(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_knowledge_entries_source_url
+                ON knowledge_entries(project_id, source_url);
+            CREATE INDEX IF NOT EXISTS idx_knowledge_entries_collection
+                ON knowledge_entries(source_collection_id, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_knowledge_web_collections_project
+                ON knowledge_web_collections(project_id, updated_at DESC);
+            "#,
+        )?;
+
+        set_db_version(conn, 6)?;
+    }
+
     // Future migrations go here:
-    // if current_version < 5 { ... set_db_version(conn, 5)?; }
+    // if current_version < 7 { ... set_db_version(conn, 7)?; }
 
     Ok(())
 }
@@ -624,6 +702,49 @@ CREATE INDEX IF NOT EXISTS idx_work_tags_tag_id ON work_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_work_chapters_work_order ON work_chapters(work_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_work_chapters_deleted_at ON work_chapters(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_chapter_character_relations_character ON chapter_character_relations(character_id);
+
+-- sanKnow local developer knowledge base
+CREATE TABLE IF NOT EXISTS knowledge_projects (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    root_path       TEXT NOT NULL UNIQUE,
+    last_indexed_at TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_entries (
+    id              TEXT PRIMARY KEY,
+    project_id      TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    entry_type      TEXT NOT NULL,
+    source_path     TEXT,
+    source_url      TEXT,
+    source_collection_id TEXT,
+    source_language TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES knowledge_projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_project ON knowledge_entries(project_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_type ON knowledge_entries(project_id, entry_type);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_source ON knowledge_entries(project_id, source_path);
+
+CREATE TABLE IF NOT EXISTS knowledge_web_collections (
+    id              TEXT PRIMARY KEY,
+    project_id      TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    entry_url       TEXT NOT NULL,
+    last_crawled_at TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    UNIQUE(project_id, entry_url),
+    FOREIGN KEY (project_id) REFERENCES knowledge_projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_web_collections_project ON knowledge_web_collections(project_id, updated_at DESC);
 "#;
 
 fn migrate_ip_images(conn: &Connection) -> Result<()> {

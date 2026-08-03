@@ -302,6 +302,7 @@ interface PromptGroupWithImages {
     is_sync_enabled?: boolean;
     sync_status?: string;
     remote_url?: string;
+    status: "inbox" | "tagged" | "archived";
   }>;
 }
 
@@ -1542,3 +1543,99 @@ export async function uploadCharacterImages(
 export async function getIpCharacters(ipId: string): Promise<CharacterWithRelations[]> {
   return await invoke("get_ip_characters", { ipId });
 }
+
+// ==================== sanKnow API ====================
+
+export interface KnowledgeProject {
+  id: string;
+  name: string;
+  root_path: string;
+  last_indexed_at?: string | null;
+  entry_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  project_id: string;
+  title: string;
+  content: string;
+  entry_type: string;
+  source_path?: string | null;
+  source_url?: string | null;
+  source_collection_id?: string | null;
+  source_collection_name?: string | null;
+  source_language?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeSearchResult {
+  entry: KnowledgeEntry;
+  snippet: string;
+  match_line?: number | null;
+}
+
+export interface KnowledgeIndexResult {
+  project: KnowledgeProject;
+  indexed_files: number;
+  skipped_files: number;
+  curated_entries: number;
+}
+
+export interface KnowledgeWebCollectionImportResult {
+  collection_name: string;
+  imported_pages: number;
+  skipped_pages: number;
+}
+
+export const knowledgeApi = {
+  listProjects(): Promise<KnowledgeProject[]> {
+    return invoke("list_knowledge_projects");
+  },
+
+  indexProject(rootPath: string, displayName?: string): Promise<KnowledgeIndexResult> {
+    return invoke("index_knowledge_project", { rootPath, displayName });
+  },
+
+  importWebCollection(
+    projectId: string,
+    collectionName: string,
+    entryUrl: string,
+  ): Promise<KnowledgeWebCollectionImportResult> {
+    return invoke("import_knowledge_web_collection", { projectId, collectionName, entryUrl });
+  },
+
+  search(
+    projectId: string | null,
+    query: string,
+    entryType: string | null = null,
+    limit = 30,
+  ): Promise<KnowledgeSearchResult[]> {
+    return invoke("search_knowledge", {
+      projectId,
+      query,
+      entryType,
+      limit,
+    });
+  },
+
+  getEntry(entryId: string): Promise<KnowledgeEntry> {
+    return invoke("get_knowledge_entry", { entryId });
+  },
+
+  createEntry(
+    projectId: string,
+    title: string,
+    content: string,
+    entryType = "手动笔记",
+  ): Promise<KnowledgeEntry> {
+    return invoke("create_knowledge_entry", {
+      projectId,
+      title,
+      content,
+      entryType,
+    });
+  },
+};
