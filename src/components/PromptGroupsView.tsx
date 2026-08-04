@@ -26,8 +26,10 @@ import {
   parsePromptTemplateImport,
   promptTemplateImportToFormData,
   PromptTemplateImportError,
+  type ParsedPromptTemplateImport,
 } from "@/lib/promptTemplateImport";
 import { authorizeFsPaths, readTextFile, writeTextFile } from "@/services/secureFs";
+import { dirname } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
 interface PromptGroupWithImages {
@@ -66,6 +68,20 @@ interface PromptFormState {
   tags: string;
   price: string;
   imageIds: string[];
+}
+
+interface ImportSuccessNotice {
+  fileName: string;
+  templateName: string;
+  tagCount: number;
+  variableCount: number;
+}
+
+interface BatchImportResult {
+  index: number;
+  name: string;
+  status: "pending" | "success" | "error";
+  message?: string;
 }
 
 const EMPTY_FORM: PromptFormState = {
@@ -128,6 +144,14 @@ export function PromptGroupsView() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importCandidate, setImportCandidate] = useState<ParsedPromptTemplateImport | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isBatchImporting, setIsBatchImporting] = useState(false);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [batchImportResults, setBatchImportResults] = useState<BatchImportResult[]>([]);
+  const [importSuccess, setImportSuccess] = useState<ImportSuccessNotice | null>(null);
   const [formTab, setFormTab] = useState<"base" | "template">("base");
   const [form, setForm] = useState<PromptFormState>(EMPTY_FORM);
   const [imageSearch, setImageSearch] = useState("");
@@ -141,6 +165,15 @@ export function PromptGroupsView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  const validImportTemplates = importCandidate?.items.flatMap((item) => (
+    item.template ? [{ index: item.index, template: item.template }] : []
+  )) ?? [];
+  const invalidImportCount = importCandidate
+    ? importCandidate.items.length - validImportTemplates.length
+    : 0;
+  const isSingleTemplateImport = importCandidate?.items.length === 1 && validImportTemplates.length === 1;
+  const isImportBusy = isImporting || isBatchImporting;
 
   // Publish Status State
   const [publishStatuses, setPublishStatuses] = useState<Map<string, PublishConfig>>(new Map());
@@ -329,14 +362,33 @@ export function PromptGroupsView() {
   };
 
   const openCreateDialog = () => {
+    setImportSuccess(null);
     setForm(EMPTY_FORM);
     setImageSearch("");
     setFormTab("base");
     setIsFormOpen(true);
   };
 
-  const handleImportTemplate = async () => {
+  const openImportDialog = () => {
+    setImportCandidate(null);
+    setImportError(null);
+    setImportFileName(null);
+    setBatchImportResults([]);
+    setIsImportDialogOpen(true);
+  };
+
+  const closeImportDialog = () => {
+    if (isImportBusy) return;
+    setIsImportDialogOpen(false);
+    setImportCandidate(null);
+    setImportError(null);
+    setImportFileName(null);
+    setBatchImportResults([]);
+  };
+
+  const handleSelectImportFile = async () => {
     try {
+      setImportError(null);
       const selectedPath = await open({
         multiple: false,
         directory: false,
@@ -344,32 +396,101 @@ export function PromptGroupsView() {
       });
       if (!selectedPath || Array.isArray(selectedPath)) return;
 
-      setIsLoading(true);
+      setIsImporting(true);
+      setImportFileName(selectedPath.split(/[\\/]/).pop() || selectedPath);
+      setImportCandidate(null);
+      setBatchImportResults([]);
       await authorizeFsPaths([selectedPath]);
       const imported = parsePromptTemplateImport(await readTextFile(selectedPath));
-      setForm({
-        ...EMPTY_FORM,
-        ...promptTemplateImportToFormData(imported),
-      });
-      setImageSearch("");
-      setFormTab("base");
-      setIsFormOpen(true);
-      toast({
-        title: "✓ 模板已通过校验",
-        description: "请确认内容并关联图片后，再创建 Prompt。",
-      });
+      setImportCandidate(imported);
     } catch (error) {
       const description = error instanceof PromptTemplateImportError
         ? error.issues.join("；")
         : String(error);
       console.error("导入 Prompt 模板失败:", error);
+      setImportCandidate(null);
+      setImportError(description);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleConfirmSingleImport = () => {
+    const imported = validImportTemplates[0];
+    if (!importCandidate || !imported || !isSingleTemplateImport) return;
+
+    setForm({
+      ...EMPTY_FORM,
+      ...promptTemplateImportToFormData(imported.template),
+    });
+    setImageSearch("");
+    setFormTab("base");
+    setImportSuccess({
+      fileName: importFileName || "已选择的 JSON 文件",
+      templateName: imported.template.name,
+      tagCount: imported.template.tags.length,
+      variableCount: imported.template.template_schema.variables.length,
+    });
+    setIsImportDialogOpen(false);
+    setImportCandidate(null);
+    setImportError(null);
+    setImportFileName(null);
+    setBatchImportResults([]);
+    setIsFormOpen(true);
+    toast({
+      title: "✓ 模板已导入",
+      description: "请确认内容并按需要关联图片后，创建 Prompt。",
+    });
+  };
+
+  const handleConfirmBatchImport = async () => {
+    if (!importCandidate || validImportTemplates.length === 0) return;
+
+    const templatesToImport = validImportTemplates;
+    setBatchImportResults(templatesToImport.map(({ index, template }) => ({
+      index,
+      name: template.name,
+      status: "pending",
+    })));
+    setIsBatchImporting(true);
+
+    let successCount = 0;
+    await Promise.all(templatesToImport.map(async ({ index, template }) => {
+      try {
+        await promptApi.create({
+          prompt: template.prompt,
+          negativePrompt: template.negative_prompt,
+          name: template.name,
+          description: template.description,
+          templateSchema: JSON.stringify(template.template_schema, null, 2),
+          category: template.category,
+          tags: JSON.stringify(template.tags),
+          price: template.price,
+          imageIds: [],
+        });
+        successCount += 1;
+        setBatchImportResults((current) => current.map((result) => (
+          result.index === index ? { ...result, status: "success" } : result
+        )));
+      } catch (error) {
+        console.error(`批量导入模板 ${template.name} 失败:`, error);
+        setBatchImportResults((current) => current.map((result) => (
+          result.index === index
+            ? { ...result, status: "error", message: String(error) }
+            : result
+        )));
+      }
+    }));
+
+    try {
+      if (successCount > 0) await loadGroups();
       toast({
-        title: "✗ 导入失败",
-        description,
-        variant: "destructive",
+        title: successCount === templatesToImport.length ? "✓ 批量导入完成" : "批量导入完成，部分模板失败",
+        description: `成功 ${successCount} 个，失败 ${templatesToImport.length - successCount} 个。详情请查看本窗口。`,
+        variant: successCount === templatesToImport.length ? "default" : "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setIsBatchImporting(false);
     }
   };
 
@@ -381,7 +502,7 @@ export function PromptGroupsView() {
       });
       if (!savePath) return;
 
-      await authorizeFsPaths([savePath]);
+      await authorizeFsPaths([await dirname(savePath)]);
       await writeTextFile(savePath, `${JSON.stringify(getPromptTemplateImportExample(), null, 2)}\n`);
       toast({
         title: "✓ 已保存导入示例",
@@ -400,6 +521,7 @@ export function PromptGroupsView() {
   const openEditDialog = async (groupId: string) => {
     try {
       setIsLoading(true);
+      setImportSuccess(null);
       const result = await promptApi.getOne(groupId);
       setForm({
         id: result.group.id,
@@ -1018,19 +1140,7 @@ export function PromptGroupsView() {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={() => void handleDownloadImportExample()} disabled={isLoading} className="h-9 shrink-0 gap-1.5">
-                  <Download className="h-4 w-4" />
-                  下载示例
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>下载导入示例</p>
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={() => void handleImportTemplate()} disabled={isLoading} className="h-9 shrink-0 gap-1.5">
+                <Button variant="outline" size="sm" onClick={openImportDialog} disabled={isLoading} className="h-9 shrink-0 gap-1.5">
                   <Upload className="h-4 w-4" />
                   导入模板
                 </Button>
@@ -1252,8 +1362,31 @@ export function PromptGroupsView() {
               <ChevronLeft className="w-4 h-4 mr-1" />
               上一页
             </Button>
-            <div className="text-muted-foreground px-2">
-              第 {currentPage} / {Math.max(1, Math.ceil(filteredGroups.length / pageSize))} 页
+            <div className="flex items-center text-muted-foreground px-2 text-sm">
+              第
+              <input
+                key={currentPage}
+                type="number"
+                min={1}
+                max={Math.max(1, Math.ceil(filteredGroups.length / pageSize))}
+                defaultValue={currentPage}
+                onBlur={(e) => {
+                  let val = parseInt(e.target.value);
+                  const maxPage = Math.max(1, Math.ceil(filteredGroups.length / pageSize));
+                  if (isNaN(val)) val = currentPage;
+                  if (val < 1) val = 1;
+                  if (val > maxPage) val = maxPage;
+                  setCurrentPage(val);
+                  e.target.value = val.toString();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                className="mx-1 h-7 w-12 rounded-md border border-input bg-background px-1 py-0.5 text-center text-foreground focus:outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              / {Math.max(1, Math.ceil(filteredGroups.length / pageSize))} 页
             </div>
             <Button
               variant="outline"
@@ -1268,6 +1401,170 @@ export function PromptGroupsView() {
           </div>
         </div>
       )}
+
+      <Dialog open={isImportDialogOpen} onOpenChange={(open) => (open ? setIsImportDialogOpen(true) : closeImportDialog())}>
+        <DialogContent className="max-h-[90vh] max-w-2xl flex flex-col">
+          <DialogHeader>
+            <DialogTitle>导入 Prompt 模板</DialogTitle>
+            <DialogDescription>
+              选择一个 JSON 文件。文件可包含多个模板；每项都会先校验，批量导入时逐项显示写入结果。
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[64vh] pr-4">
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                <p className="font-medium">导入进度</p>
+                <div className="mt-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-start gap-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${importFileName ? "bg-primary text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground"}`}>
+                        {importFileName ? <Check className="h-3.5 w-3.5" /> : "1"}
+                      </span>
+                      <span className="font-medium">选择文件</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground break-all">{importFileName ? `已选择：${importFileName}` : "选择 Agent 生成的 JSON 文件"}</p>
+                  </div>
+                  <div className="mt-3 h-px w-5 bg-border" />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${isImporting ? "bg-primary text-primary-foreground" : importCandidate && invalidImportCount === 0 ? "bg-primary text-primary-foreground" : importCandidate ? "bg-amber-500 text-white" : importError ? "bg-destructive text-destructive-foreground" : "bg-muted-foreground/15 text-muted-foreground"}`}>
+                        {isImporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : importCandidate && invalidImportCount === 0 ? <Check className="h-3.5 w-3.5" /> : importCandidate || importError ? <AlertTriangle className="h-3.5 w-3.5" /> : "2"}
+                      </span>
+                      <span className="font-medium">完整性校验</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {isImporting
+                        ? "正在读取并校验字段"
+                        : importCandidate
+                          ? `通过 ${validImportTemplates.length} 个，需修正 ${invalidImportCount} 个`
+                          : importError ? "文件格式需要修正" : "等待选择文件"}
+                    </p>
+                  </div>
+                  <div className="mt-3 h-px w-5 bg-border" />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${isBatchImporting ? "bg-primary text-primary-foreground" : batchImportResults.length > 0 && batchImportResults.every((result) => result.status === "success") ? "bg-primary text-primary-foreground" : batchImportResults.length > 0 ? "bg-amber-500 text-white" : validImportTemplates.length > 0 ? "bg-primary text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground"}`}>
+                        {isBatchImporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : batchImportResults.length > 0 && batchImportResults.every((result) => result.status === "success") ? <Check className="h-3.5 w-3.5" /> : batchImportResults.length > 0 ? <AlertTriangle className="h-3.5 w-3.5" /> : "3"}
+                      </span>
+                      <span className="font-medium">确认导入</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {isBatchImporting ? "正在逐个写入模板库" : batchImportResults.length > 0 ? "写入结果已显示在下方" : isSingleTemplateImport ? "确认后进入编辑器" : validImportTemplates.length > 0 ? "确认后逐项写入模板库" : "没有可导入模板"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => void handleDownloadImportExample()} disabled={isImportBusy}>
+                  <Download className="mr-1.5 h-4 w-4" />
+                  下载 JSON 示例
+                </Button>
+                <Button type="button" onClick={() => void handleSelectImportFile()} disabled={isImportBusy}>
+                  {isImporting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
+                  {isImporting ? "校验中..." : "选择 JSON 文件"}
+                </Button>
+              </div>
+
+              {importError && (
+                <div role="alert" className="flex gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="font-medium">文件格式未通过校验</p>
+                    <p className="mt-1 break-words text-xs leading-relaxed">{importError}</p>
+                  </div>
+                </div>
+              )}
+
+              {importCandidate && (
+                <div className={`rounded-lg border p-4 ${invalidImportCount > 0 ? "border-amber-500/40 bg-amber-500/10" : "border-primary/30 bg-primary/5"}`}>
+                  <div className={`flex items-center gap-2 text-sm font-medium ${invalidImportCount > 0 ? "text-amber-700 dark:text-amber-400" : "text-primary"}`}>
+                    {invalidImportCount > 0 ? <AlertTriangle className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                    文件共 {importCandidate.items.length} 个模板，{validImportTemplates.length} 个可导入，{invalidImportCount} 个需要修正
+                  </div>
+                  {importCandidate.sourceFormat === "legacy-template" && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      这是旧版单模板文件，已兼容读取；下次请让 Agent 使用新版 <code>templates</code> 数组格式。
+                    </p>
+                  )}
+                  {importCandidate.items.length > 1 && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      批量导入会直接写入模板库，不关联图片；可在导入完成后逐个编辑关联图片。
+                    </p>
+                  )}
+                  <div className="mt-3 space-y-2">
+                    {importCandidate.items.map((item) => item.template ? (
+                      <div key={item.index} className="rounded-md border border-primary/20 bg-background/70 p-3 text-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium break-words">#{item.index + 1} {item.template.name}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{getPromptCategoryLabel(item.template.category)} · {item.template.template_schema.variables.length} 个变量 · {formatPromptPrice(item.template.price)}</p>
+                          </div>
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {item.template.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={item.index} className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="font-medium">#{item.index + 1} 模板未通过校验，不会导入</p>
+                            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-relaxed">
+                              {item.issues.map((issue) => <li key={issue} className="break-words">{issue}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {batchImportResults.length > 0 && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">写入结果</p>
+                  {invalidImportCount > 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">另有 {invalidImportCount} 个模板未通过校验，未进入写入步骤。</p>
+                  )}
+                  <div className="mt-3 space-y-2">
+                    {batchImportResults.map((result) => (
+                      <div key={result.index} className="flex items-start gap-2 rounded-md bg-muted/40 p-2.5 text-sm">
+                        {result.status === "pending" ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" /> : result.status === "success" ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />}
+                        <div className="min-w-0">
+                          <p className="font-medium break-words">#{result.index + 1} {result.name}</p>
+                          <p className={`mt-0.5 text-xs ${result.status === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+                            {result.status === "pending" ? "正在写入模板库..." : result.status === "success" ? "已写入模板库" : `写入失败：${result.message || "未知错误"}`}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={closeImportDialog} disabled={isImportBusy}>
+              {batchImportResults.length > 0 ? "关闭" : "取消"}
+            </Button>
+            {isSingleTemplateImport ? (
+              <Button type="button" onClick={handleConfirmSingleImport} disabled={isImportBusy}>
+                导入到编辑器
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => void handleConfirmBatchImport()} disabled={validImportTemplates.length === 0 || isImportBusy || batchImportResults.length > 0}>
+                {isBatchImporting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                {isBatchImporting ? "正在批量导入..." : validImportTemplates.length === 0 ? "没有可导入模板" : `批量导入 ${validImportTemplates.length} 个模板`}
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-h-[90vh] max-w-6xl">
@@ -1402,6 +1699,18 @@ export function PromptGroupsView() {
               独立管理 Prompt，并手动关联已有图片。
             </DialogDescription>
           </DialogHeader>
+
+          {importSuccess && (
+            <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div>
+                <p className="font-medium text-primary">已导入到编辑器：{importSuccess.templateName}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  来源 {importSuccess.fileName} · {importSuccess.tagCount} 个标签 · {importSuccess.variableCount} 个变量。请确认内容并按需要关联图片后创建。
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="flex space-x-4 border-b mb-4 mt-2">
             <button

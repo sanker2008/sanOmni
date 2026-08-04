@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Users } from "lucide-react";
+import { Check, Image as ImageIcon, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,13 +8,16 @@ import {
   type ChapterStatus,
   type ChapterWithCharacters,
   type CharacterWithRelations,
+  type WorkImage,
   useChaptersStore,
 } from "@/stores";
 import { getCharacters } from "@/services/tauri";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 interface ChapterEditModalProps {
   workId: string;
   chapter: ChapterWithCharacters | null;
+  workImages: WorkImage[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -30,9 +33,9 @@ function countCharacters(text: string) {
   return Array.from(text.replace(/\s/g, "")).length;
 }
 
-export default function ChapterEditModal({ workId, chapter, open, onOpenChange }: ChapterEditModalProps) {
+export default function ChapterEditModal({ workId, chapter, workImages, open, onOpenChange }: ChapterEditModalProps) {
   const { toast } = useToast();
-  const { createChapter, updateChapter, setChapterCharacters } = useChaptersStore();
+  const { createChapter, updateChapter, setChapterCharacters, setChapterImages } = useChaptersStore();
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<ChapterStatus>("outline");
   const [summary, setSummary] = useState("");
@@ -41,6 +44,7 @@ export default function ChapterEditModal({ workId, chapter, open, onOpenChange }
   const [characters, setCharacters] = useState<CharacterWithRelations[]>([]);
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([]);
   const [characterNotes, setCharacterNotes] = useState<Record<string, string>>({});
+  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -66,6 +70,7 @@ export default function ChapterEditModal({ workId, chapter, open, onOpenChange }
         (chapter?.characters || []).map((item) => [item.character_id, item.note || ""]),
       ),
     );
+    setSelectedImageIds(chapter?.images.map((item) => item.work_image_id) || []);
   }, [open, chapter]);
 
   const wordCount = useMemo(() => countCharacters(content), [content]);
@@ -75,6 +80,14 @@ export default function ChapterEditModal({ workId, chapter, open, onOpenChange }
       current.includes(characterId)
         ? current.filter((id) => id !== characterId)
         : [...current, characterId]
+    ));
+  };
+
+  const toggleImage = (imageId: string) => {
+    setSelectedImageIds((current) => (
+      current.includes(imageId)
+        ? current.filter((id) => id !== imageId)
+        : [...current, imageId]
     ));
   };
 
@@ -110,6 +123,7 @@ export default function ChapterEditModal({ workId, chapter, open, onOpenChange }
           note: characterNotes[character_id]?.trim() || null,
         })),
       );
+      await setChapterImages(saved.id, selectedImageIds);
 
       toast({
         title: chapter ? "章节已更新" : "章节已创建",
@@ -188,7 +202,7 @@ export default function ChapterEditModal({ workId, chapter, open, onOpenChange }
             本章登场人物
           </div>
           {characters.length === 0 ? (
-            <p className="text-xs text-muted-foreground">还没有人物设定。可先在“人物设定”标签页添加人物，再回到这里关联。</p>
+            <p className="text-xs text-muted-foreground">还没有人物设定。可先在作品详情右侧添加人物，再回到这里关联。</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {characters.map((character) => {
@@ -209,6 +223,43 @@ export default function ChapterEditModal({ workId, chapter, open, onOpenChange }
                       />
                     )}
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <ImageIcon className="w-4 h-4 text-primary" />
+            本章关联图片
+          </div>
+          {workImages.length === 0 ? (
+            <p className="text-xs text-muted-foreground">作品图片库还没有图片。请先在作品详情左侧添加概念图、分镜或剧照。</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {workImages.map((image) => {
+                const selected = selectedImageIds.includes(image.id);
+                return (
+                  <label key={image.id} className={`group relative cursor-pointer overflow-hidden rounded-md border ${selected ? "border-primary ring-1 ring-primary/40" : "border-border"}`}>
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={selected}
+                      onChange={() => toggleImage(image.id)}
+                    />
+                    <img
+                      src={`${convertFileSrc(image.file_path)}?t=${new Date(image.updated_at).getTime()}`}
+                      alt={image.original_name || "作品图片"}
+                      className="aspect-square w-full object-cover"
+                    />
+                    <span className="absolute inset-x-0 bottom-0 truncate bg-background/90 px-2 py-1 text-[10px] text-foreground">
+                      {image.is_cover ? "封面 · " : ""}{image.original_name || "作品图片"}
+                    </span>
+                    <span className={`absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-80"}`}>
+                      <Check className="h-3 w-3" />
+                    </span>
+                  </label>
                 );
               })}
             </div>

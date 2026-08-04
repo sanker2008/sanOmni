@@ -1331,6 +1331,7 @@ import type {
   Work,
   WorkWithRelations,
   WorkFilters,
+  WorkImage,
   Character,
   CharacterWithRelations,
   ChapterCharacterInput,
@@ -1411,6 +1412,27 @@ export async function deleteWorkCover(workId: string): Promise<void> {
   return await invoke("delete_work_cover", { workId });
 }
 
+export async function uploadWorkImage(
+  workId: string,
+  imageData: number[],
+  extension: string,
+  originalName?: string,
+): Promise<string> {
+  return await invoke("upload_work_image", { workId, imageData, extension, originalName });
+}
+
+export async function getWorkImages(workId: string): Promise<WorkImage[]> {
+  return await invoke("get_work_images", { workId });
+}
+
+export async function setWorkImageAsCover(workId: string, workImageId: string): Promise<void> {
+  return await invoke("set_work_image_as_cover", { workId, workImageId });
+}
+
+export async function deleteWorkImage(workImageId: string): Promise<void> {
+  return await invoke("delete_work_image", { workImageId });
+}
+
 export async function addWorkTag(workId: string, tagId: string): Promise<void> {
   return await invoke("add_work_tag", { workId, tagId });
 }
@@ -1473,6 +1495,10 @@ export async function setChapterCharacters(
   characters: ChapterCharacterInput[],
 ): Promise<ChapterWithCharacters> {
   return await invoke("set_chapter_characters", { chapterId, characters });
+}
+
+export async function setChapterImages(chapterId: string, workImageIds: string[]): Promise<ChapterWithCharacters> {
+  return await invoke("set_chapter_images", { chapterId, workImageIds });
 }
 
 // Characters API

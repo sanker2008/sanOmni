@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- sanPrompt: 新增模板 JSON 导入。每次选择一个文件，文件可通过 `templates` 数组批量导入多个英文模板；系统逐项校验字段、变量与占位符一致性，并在弹窗中显示每项写入结果。详见 [Prompt 模板导入格式](docs/prompt-template-import.md)。
 - 跨平台拖拽（Drag & Drop）上传图片/视频：在 macOS 与 Windows 下为 sanOmni 及 sanLabs 所有图片/视频上传区域提供全面的拖拽支持。实现统一的拖拽解析与类型/后缀名兜底校验引擎 `dragDropUtils`，并在拖拽悬浮时提供直观的高亮反馈。覆盖范围包括：
   - **sanLabs 工具**：Gemini 水印高级修复、Gemini 视频水印修复（拖入 MP4）、高级抠图 Pro、PNG 转 SVG、水印消除、动图拆帧（支持播放中拖入替换）、图片压缩（支持单图/批量追加）、图片切割、AI P图及产品图制作（拖入画布自动新建图片图层）。
   - **应用弹窗**：作品编辑弹窗封面选择框、角色人设编辑弹窗剧照/设定图管理（支持批量拖入）。

@@ -155,6 +155,20 @@ pub struct WorkWithRelations {
     pub character_count: usize,
 }
 
+/// A reusable image stored in a work's local media library.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkImage {
+    pub id: String,
+    pub work_id: String,
+    pub file_path: String,
+    pub original_name: Option<String>,
+    pub is_cover: bool,
+    pub sort_order: i32,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Character {
     pub id: String,
@@ -215,10 +229,16 @@ pub struct ChapterCharacterRelation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChapterImageRelation {
+    pub work_image_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChapterWithCharacters {
     #[serde(flatten)]
     pub chapter: Chapter,
     pub characters: Vec<ChapterCharacterRelation>,
+    pub images: Vec<ChapterImageRelation>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

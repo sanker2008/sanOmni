@@ -1132,8 +1132,31 @@ export default function ArchivedView() {
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 上一页
               </Button>
-              <div className="text-muted-foreground px-2">
-                第 {currentPage} / {Math.max(1, Math.ceil(filteredImages.length / pageSize))} 页
+              <div className="flex items-center text-muted-foreground px-2 text-sm">
+                第
+                <input
+                  key={currentPage}
+                  type="number"
+                  min={1}
+                  max={Math.max(1, Math.ceil(filteredImages.length / pageSize))}
+                  defaultValue={currentPage}
+                  onBlur={(e) => {
+                    let val = parseInt(e.target.value);
+                    const maxPage = Math.max(1, Math.ceil(filteredImages.length / pageSize));
+                    if (isNaN(val)) val = currentPage;
+                    if (val < 1) val = 1;
+                    if (val > maxPage) val = maxPage;
+                    setCurrentPage(val);
+                    e.target.value = val.toString();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  className="mx-1 h-7 w-12 rounded-md border border-input bg-background px-1 py-0.5 text-center text-foreground focus:outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                / {Math.max(1, Math.ceil(filteredImages.length / pageSize))} 页
               </div>
               <Button
                 variant="outline"

@@ -6,7 +6,8 @@ use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
 use crate::models::{
-    Chapter, ChapterCharacterInput, ChapterCharacterRelation, ChapterWithCharacters,
+    Chapter, ChapterCharacterInput, ChapterCharacterRelation, ChapterImageRelation,
+    ChapterWithCharacters,
 };
 
 fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
@@ -72,6 +73,30 @@ fn get_chapter_characters(
     result
 }
 
+fn get_chapter_images(
+    conn: &Connection,
+    chapter_id: &str,
+) -> Result<Vec<ChapterImageRelation>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT relation.work_image_id
+             FROM chapter_image_relations relation
+             INNER JOIN work_images image ON image.id = relation.work_image_id
+             WHERE relation.chapter_id = ?1 AND image.deleted_at IS NULL
+             ORDER BY relation.created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    stmt.query_map(params![chapter_id], |row| {
+        Ok(ChapterImageRelation {
+            work_image_id: row.get(0)?,
+        })
+    })
+    .map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|e| e.to_string())
+}
+
 fn get_chapter_by_id_with_conn(
     conn: &Connection,
     id: &str,
@@ -101,10 +126,12 @@ fn get_chapter_by_id_with_conn(
         )
         .map_err(|e| e.to_string())?;
     let characters = get_chapter_characters(conn, id)?;
+    let images = get_chapter_images(conn, id)?;
 
     Ok(ChapterWithCharacters {
         chapter,
         characters,
+        images,
     })
 }
 
@@ -351,6 +378,64 @@ pub async fn set_chapter_characters(
              (chapter_id, character_id, note, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![chapter_id, character.character_id, character.note, now, now,],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+
+    get_chapter_by_id_with_conn(&conn, &chapter_id)
+}
+
+#[tauri::command]
+pub async fn set_chapter_images(
+    app_handle: AppHandle,
+    chapter_id: String,
+    work_image_ids: Vec<String>,
+) -> Result<ChapterWithCharacters, String> {
+    let mut seen = HashSet::new();
+    if work_image_ids.iter().any(|id| !seen.insert(id.as_str())) {
+        return Err("同一图片只能关联一次".to_string());
+    }
+
+    let mut conn = get_connection(&app_handle)?;
+    let work_id: String = conn
+        .query_row(
+            "SELECT work_id FROM work_chapters WHERE id = ?1 AND deleted_at IS NULL",
+            params![chapter_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| "章节不存在或已删除".to_string())?;
+
+    for work_image_id in &work_image_ids {
+        let exists: i64 = conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM work_images
+                    WHERE id = ?1 AND work_id = ?2 AND deleted_at IS NULL
+                 )",
+                params![work_image_id, work_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        if exists != 1 {
+            return Err("只能关联当前作品中未删除的图片".to_string());
+        }
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM chapter_image_relations WHERE chapter_id = ?1",
+        params![chapter_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    for work_image_id in &work_image_ids {
+        tx.execute(
+            "INSERT INTO chapter_image_relations
+             (chapter_id, work_image_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![chapter_id, work_image_id, now, now],
         )
         .map_err(|e| e.to_string())?;
     }

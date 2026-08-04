@@ -1050,8 +1050,29 @@ export default function LabsMediaManager() {
               <ChevronLeft className="w-3.5 h-3.5" />
             </Button>
 
-            <span className="text-xs font-mono px-2 text-muted-foreground">
-              {currentPage} / {totalPages}
+            <span className="flex items-center text-xs font-mono px-2 text-muted-foreground">
+              <input
+                key={currentPage}
+                type="number"
+                min={1}
+                max={totalPages}
+                defaultValue={currentPage}
+                onBlur={(e) => {
+                  let val = parseInt(e.target.value);
+                  if (isNaN(val)) val = currentPage;
+                  if (val < 1) val = 1;
+                  if (val > totalPages) val = totalPages;
+                  setCurrentPage(val);
+                  e.target.value = val.toString();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                className="mr-1 h-6 w-10 rounded-sm border border-input bg-background px-1 py-0.5 text-center text-foreground focus:outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              / {totalPages}
             </span>
 
             <Button

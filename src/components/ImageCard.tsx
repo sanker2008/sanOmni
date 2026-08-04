@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import ConfirmDialog from "./ConfirmDialog";
-import { CheckCircle2, Circle, Eye, Edit, Archive, Image as ImageIcon, Loader2, Eraser, Trash2, FolderOpen, Undo2, Minimize } from "lucide-react";
+import { CheckCircle2, Circle, Eye, Edit, Archive, Image as ImageIcon, Loader2, Eraser, Trash2, FolderOpen, Undo2, Minimize, Film } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -22,7 +22,7 @@ import {
 import { watermarkApi, geminiWatermarkApi, imageApi, ipImageApi, ipApi, isGeminiWatermarkRemovalSuccessful } from "@/services/tauri";
 import { convertIpImageToWebp, convertIpImageToPng, convertImageToWebp, convertImageToPng } from "@/lib/webpConverter";
 import { revealFileInFolder } from "@/lib/pathUtils";
-import { exists, mkdir, rename } from "@/services/secureFs";
+import { authorizeFsPaths, exists, isAnimatedImage, mkdir, rename } from "@/services/secureFs";
 
 type AnyImage = ImageWithRelations | IpImageWithRelations;
 const isPromptImage = (img: AnyImage): img is ImageWithRelations => "models" in img;
@@ -33,6 +33,82 @@ interface ImageCardProps {
   onDelete?: (imageId: string) => void;
   onArchive?: (imageId: string) => void;
   listMode?: boolean;
+}
+
+const ANIMATED_IMAGE_CANDIDATE_EXTENSIONS = new Set(["gif", "webp", "png", "apng"]);
+const imagePathAuthorizationRequests = new Map<string, Promise<void>>();
+
+function getFileExtension(filename: string): string {
+  return filename.split(".").pop()?.toLowerCase() || "";
+}
+
+function authorizeImagePath(path: string): Promise<void> {
+  const normalizedPath = path.replace(/\\/g, "/");
+  const directory = normalizedPath.slice(0, normalizedPath.lastIndexOf("/"));
+  const existingRequest = imagePathAuthorizationRequests.get(directory);
+  if (existingRequest) return existingRequest;
+
+  const request = authorizeFsPaths([path]).catch((error) => {
+    imagePathAuthorizationRequests.delete(directory);
+    throw error;
+  });
+  imagePathAuthorizationRequests.set(directory, request);
+  return request;
+}
+
+function getImageMimeType(extension: string): string {
+  if (extension === "gif") return "image/gif";
+  if (extension === "png" || extension === "apng") return "image/png";
+  return "image/webp";
+}
+
+async function createFirstFramePreview(source: string, extension: string): Promise<string> {
+  const ImageDecoderConstructor = (window as Window & { ImageDecoder?: any }).ImageDecoder;
+  if (!ImageDecoderConstructor) {
+    throw new Error("当前 WebView 不支持 ImageDecoder");
+  }
+
+  const response = await fetch(source);
+  if (!response.ok) {
+    throw new Error(`无法读取动图（${response.status}）`);
+  }
+
+  const decoder = new ImageDecoderConstructor({
+    data: await response.arrayBuffer(),
+    type: getImageMimeType(extension),
+  });
+  let frame: any;
+
+  try {
+    await decoder.tracks.ready;
+    const decoded = await decoder.decode({ frameIndex: 0 });
+    frame = decoded.image;
+
+    // 列表卡片不会以原图尺寸显示；限制临时预览尺寸可显著降低首屏内存占用。
+    const maxPreviewSide = 512;
+    const scale = Math.min(1, maxPreviewSide / Math.max(frame.displayWidth, frame.displayHeight));
+    const width = Math.max(1, Math.round(frame.displayWidth * scale));
+    const height = Math.max(1, Math.round(frame.displayHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("无法创建预览画布");
+    }
+    context.drawImage(frame, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result);
+        else reject(new Error("无法生成动图首帧预览"));
+      }, "image/webp", 0.82);
+    });
+    return URL.createObjectURL(blob);
+  } finally {
+    frame?.close?.();
+    decoder.close?.();
+  }
 }
 
 export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchive, listMode = false }: ImageCardProps) {
@@ -56,6 +132,58 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
   const [isUpdatingWatermark, setIsUpdatingWatermark] = useState(false);
   const [imageTimestamp, setImageTimestamp] = useState(Date.now());
   const [convertingToWebp, setConvertingToWebp] = useState(false);
+  const originalImageSource = `${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`;
+  const imageExtension = getFileExtension(image.filename || image.absolute_path);
+  const isAnimatedImageCandidate = ANIMATED_IMAGE_CANDIDATE_EXTENSIONS.has(imageExtension);
+  const [previewSource, setPreviewSource] = useState<string | null>(
+    isAnimatedImageCandidate ? null : originalImageSource
+  );
+  const [isAnimatedPreview, setIsAnimatedPreview] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let generatedPreviewSource: string | null = null;
+
+    setImageLoaded(false);
+    setImageError(false);
+    setNaturalDisplaySize(null);
+    setIsAnimatedPreview(false);
+
+    if (!isAnimatedImageCandidate) {
+      setPreviewSource(originalImageSource);
+      return;
+    }
+
+    setPreviewSource(null);
+    void (async () => {
+      try {
+        await authorizeImagePath(image.absolute_path);
+        const animated = await isAnimatedImage(image.absolute_path);
+        if (!animated) {
+          if (!cancelled) setPreviewSource(originalImageSource);
+          return;
+        }
+        if (!cancelled) setIsAnimatedPreview(true);
+
+        generatedPreviewSource = await createFirstFramePreview(originalImageSource, imageExtension);
+        if (cancelled) {
+          URL.revokeObjectURL(generatedPreviewSource);
+          return;
+        }
+        setPreviewSource(generatedPreviewSource);
+      } catch (error) {
+        // Older WebViews may not expose ImageDecoder. Preserve access to the
+        // original file instead of leaving a card permanently blank.
+        console.warn("无法生成动图首帧预览，回退到原图：", error);
+        if (!cancelled) setPreviewSource(originalImageSource);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (generatedPreviewSource) URL.revokeObjectURL(generatedPreviewSource);
+    };
+  }, [image.absolute_path, imageExtension, imageTimestamp, isAnimatedImageCandidate, originalImageSource]);
 
   const handleConvertFormat = async (e: React.MouseEvent, format: 'webp' | 'png') => {
     e.stopPropagation();
@@ -540,16 +668,17 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
               <div className="w-full h-full flex items-center justify-center">
                 <ImageIcon className="w-5 h-5 text-muted-foreground" />
               </div>
-            ) : (
+            ) : previewSource ? (
               <img
-                src={`${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`}
+                src={previewSource}
                 alt={image.filename}
                 className={`${imageSizingClass} transition-opacity ${imageLoaded ? "opacity-100" : "opacity-0"}`}
                 style={naturalImageStyle}
                 onLoad={handleImageLoad}
                 onError={() => setImageError(true)}
+                loading="lazy"
               />
-            )}
+            ) : null}
           </div>
 
           {/* Filename + meta */}
@@ -559,6 +688,12 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               {getStatusBadge()}
+              {isAnimatedPreview && (
+                <Badge className="bg-sky-600 hover:bg-sky-600 text-white font-semibold text-[10px] py-0.5 px-2 shadow-sm pointer-events-none select-none border-none">
+                  <Film className="mr-1 h-3 w-3" aria-hidden="true" />
+                  动图
+                </Badge>
+              )}
               {isAvatar && (
                 <Badge className="bg-primary text-primary-foreground font-semibold text-[10px] py-0.5 px-2 shadow-sm pointer-events-none select-none">
                   头像
@@ -744,6 +879,15 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
 
       {/* Watermark and Avatar indicators */}
       <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1.5">
+        {isAnimatedPreview && (
+          <Badge
+            className="bg-sky-600 hover:bg-sky-600 text-white pointer-events-none select-none text-[10px] py-0.5 px-2 shadow-sm font-semibold border-none animate-in fade-in zoom-in-95 duration-150"
+            title="动图（列表中显示首帧）"
+          >
+            <Film className="mr-1 h-3 w-3" aria-hidden="true" />
+            动图
+          </Badge>
+        )}
         {isAvatar && (
           <Badge className="bg-primary hover:bg-primary text-primary-foreground pointer-events-none select-none text-[10px] py-0.5 px-2 shadow-sm font-semibold">
             头像
@@ -820,9 +964,9 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
             <div className="absolute inset-0 flex items-center justify-center bg-muted">
               <ImageIcon className="w-8 h-8 text-muted-foreground" />
             </div>
-          ) : (
+          ) : previewSource ? (
             <img
-              src={`${convertFileSrc(image.absolute_path)}?t=${imageTimestamp}`}
+              src={previewSource}
               alt={image.filename}
               className={`${imageSizingClass} transition-opacity ${
                 imageLoaded ? "opacity-100" : "opacity-0"
@@ -830,8 +974,9 @@ export default function ImageCard({ image, onWatermarkRemoved, onDelete, onArchi
               style={naturalImageStyle}
               onLoad={handleImageLoad}
               onError={() => setImageError(true)}
+              loading="lazy"
             />
-          )}
+          ) : null}
           
           {/* Format, Models & Tags badges */}
           <div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-end gap-1.5 z-10 pointer-events-none px-1">

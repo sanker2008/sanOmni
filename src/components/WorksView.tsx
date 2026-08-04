@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Film, Search, Filter, SortDesc, SortAsc, X, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Film, Search, Filter, SortDesc, SortAsc, X, Check, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -114,6 +114,10 @@ export function WorksView() {
     setIsEditOpen(true);
   };
 
+  const handleRefresh = async () => {
+    await Promise.all([fetchWorks(), loadSystemTags()]);
+  };
+
   const handleEditWork = (work: WorkWithRelations) => {
     setEditingWork(work);
     setIsEditOpen(true);
@@ -221,6 +225,11 @@ export function WorksView() {
               {sortOrder === "desc" ? <SortDesc className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />}
             </Button>
           </div>
+
+          <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleRefresh} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            刷新
+          </Button>
 
           {/* Create Button */}
           <Button onClick={handleCreateNew} size="sm" className="h-9 gap-1.5 shadow-sm">

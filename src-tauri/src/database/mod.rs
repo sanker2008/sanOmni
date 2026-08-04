@@ -282,8 +282,58 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         set_db_version(conn, 6)?;
     }
 
+    if current_version < 7 {
+        // v6 -> v7: reusable work media and chapter-to-image relations.
+        // Existing cover files become the first image in each work's library,
+        // so upgrades retain all prior artwork without copying files.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS work_images (
+                id              TEXT PRIMARY KEY,
+                work_id         TEXT NOT NULL,
+                file_path       TEXT NOT NULL,
+                original_name   TEXT,
+                is_cover        INTEGER NOT NULL DEFAULT 0,
+                sort_order      INTEGER NOT NULL DEFAULT 0,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                deleted_at      TEXT,
+                FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS chapter_image_relations (
+                chapter_id      TEXT NOT NULL,
+                work_image_id   TEXT NOT NULL,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                PRIMARY KEY (chapter_id, work_image_id),
+                FOREIGN KEY (chapter_id) REFERENCES work_chapters(id) ON DELETE CASCADE,
+                FOREIGN KEY (work_image_id) REFERENCES work_images(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_work_images_work_order
+                ON work_images(work_id, is_cover DESC, sort_order, created_at);
+            CREATE INDEX IF NOT EXISTS idx_work_images_deleted_at
+                ON work_images(deleted_at);
+            CREATE INDEX IF NOT EXISTS idx_chapter_image_relations_image
+                ON chapter_image_relations(work_image_id);
+            "#,
+        )?;
+
+        conn.execute(
+            "INSERT OR IGNORE INTO work_images
+             (id, work_id, file_path, original_name, is_cover, sort_order, created_at, updated_at)
+             SELECT 'cover-' || id, id, cover_path, '封面', 1, 0, created_at, updated_at
+             FROM works
+             WHERE cover_path IS NOT NULL AND deleted_at IS NULL",
+            [],
+        )?;
+
+        set_db_version(conn, 7)?;
+    }
+
     // Future migrations go here:
-    // if current_version < 7 { ... set_db_version(conn, 7)?; }
+    // if current_version < 8 { ... set_db_version(conn, 8)?; }
 
     Ok(())
 }
@@ -664,6 +714,19 @@ CREATE TABLE IF NOT EXISTS work_tags (
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS work_images (
+    id                  TEXT PRIMARY KEY,
+    work_id             TEXT NOT NULL,
+    file_path           TEXT NOT NULL,
+    original_name       TEXT,
+    is_cover            INTEGER NOT NULL DEFAULT 0,
+    sort_order          INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    deleted_at          TEXT,
+    FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS work_chapters (
     id                  TEXT PRIMARY KEY,
     work_id             TEXT NOT NULL,
@@ -690,6 +753,16 @@ CREATE TABLE IF NOT EXISTS chapter_character_relations (
     FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chapter_image_relations (
+    chapter_id          TEXT NOT NULL,
+    work_image_id       TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    PRIMARY KEY (chapter_id, work_image_id),
+    FOREIGN KEY (chapter_id) REFERENCES work_chapters(id) ON DELETE CASCADE,
+    FOREIGN KEY (work_image_id) REFERENCES work_images(id) ON DELETE CASCADE
+);
+
 -- Indexes for Works Collection
 CREATE INDEX IF NOT EXISTS idx_works_work_type ON works(work_type);
 CREATE INDEX IF NOT EXISTS idx_works_status ON works(status);
@@ -699,9 +772,12 @@ CREATE INDEX IF NOT EXISTS idx_characters_ip_id ON characters(ip_id);
 CREATE INDEX IF NOT EXISTS idx_characters_display_order ON characters(work_id, display_order);
 CREATE INDEX IF NOT EXISTS idx_characters_deleted_at ON characters(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_work_tags_tag_id ON work_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_work_images_work_order ON work_images(work_id, is_cover DESC, sort_order, created_at);
+CREATE INDEX IF NOT EXISTS idx_work_images_deleted_at ON work_images(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_work_chapters_work_order ON work_chapters(work_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_work_chapters_deleted_at ON work_chapters(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_chapter_character_relations_character ON chapter_character_relations(character_id);
+CREATE INDEX IF NOT EXISTS idx_chapter_image_relations_image ON chapter_image_relations(work_image_id);
 
 -- sanKnow local developer knowledge base
 CREATE TABLE IF NOT EXISTS knowledge_projects (

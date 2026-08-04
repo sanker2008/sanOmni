@@ -2,8 +2,7 @@ use super::CommandResult;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
-use std::io;
-use std::io::Write;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -116,6 +115,148 @@ fn require_authorized_paths(
         .iter()
         .map(|path| require_authorized_path(app, state, path))
         .collect()
+}
+
+/// Detect whether an image container has more than one frame without decoding
+/// the image pixels.  This keeps the asset-grid fast when it only needs to
+/// decide whether to request a static first-frame preview.
+fn is_animated_image_file(path: &Path) -> Result<bool, String> {
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    let mut file = fs::File::open(path)
+        .map_err(|e| format!("Failed to open image '{}': {}", path.display(), e))?;
+
+    match extension.as_str() {
+        "webp" => {
+            let mut header = [0u8; 12];
+            file.read_exact(&mut header)
+                .map_err(|e| format!("Failed to read WebP header: {}", e))?;
+            if &header[..4] != b"RIFF" || &header[8..] != b"WEBP" {
+                return Ok(false);
+            }
+
+            loop {
+                let mut chunk_header = [0u8; 8];
+                match file.read_exact(&mut chunk_header) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => return Ok(false),
+                    Err(error) => return Err(format!("Failed to inspect WebP chunks: {}", error)),
+                }
+
+                if &chunk_header[..4] == b"ANIM" || &chunk_header[..4] == b"ANMF" {
+                    return Ok(true);
+                }
+
+                let chunk_size = u32::from_le_bytes(chunk_header[4..8].try_into().unwrap()) as i64;
+                // RIFF chunks are padded to an even byte boundary.
+                file.seek(SeekFrom::Current(chunk_size + (chunk_size % 2)))
+                    .map_err(|e| format!("Failed to skip WebP chunk: {}", e))?;
+            }
+        }
+        "png" | "apng" => {
+            let mut signature = [0u8; 8];
+            file.read_exact(&mut signature)
+                .map_err(|e| format!("Failed to read PNG header: {}", e))?;
+            if signature != [137, 80, 78, 71, 13, 10, 26, 10] {
+                return Ok(false);
+            }
+
+            loop {
+                let mut chunk_header = [0u8; 8];
+                match file.read_exact(&mut chunk_header) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => return Ok(false),
+                    Err(error) => return Err(format!("Failed to inspect PNG chunks: {}", error)),
+                }
+
+                let chunk_size = u32::from_be_bytes(chunk_header[..4].try_into().unwrap()) as i64;
+                if &chunk_header[4..] == b"acTL" {
+                    return Ok(true);
+                }
+                if &chunk_header[4..] == b"IEND" {
+                    return Ok(false);
+                }
+
+                // Skip chunk payload and its CRC.
+                file.seek(SeekFrom::Current(chunk_size + 4))
+                    .map_err(|e| format!("Failed to skip PNG chunk: {}", e))?;
+            }
+        }
+        "gif" => {
+            let mut header = [0u8; 13];
+            file.read_exact(&mut header)
+                .map_err(|e| format!("Failed to read GIF header: {}", e))?;
+            if (&header[..6] != b"GIF87a" && &header[..6] != b"GIF89a") {
+                return Ok(false);
+            }
+
+            // Skip the global color table when present.
+            if header[10] & 0b1000_0000 != 0 {
+                let table_size = 3_i64 * (1_i64 << ((header[10] & 0b0000_0111) + 1));
+                file.seek(SeekFrom::Current(table_size))
+                    .map_err(|e| format!("Failed to skip GIF global color table: {}", e))?;
+            }
+
+            let mut frame_count = 0;
+            loop {
+                let mut marker = [0u8; 1];
+                match file.read_exact(&mut marker) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => return Ok(false),
+                    Err(error) => return Err(format!("Failed to inspect GIF blocks: {}", error)),
+                }
+
+                match marker[0] {
+                    0x2C => {
+                        // Image descriptor, optional local color table, LZW data sub-blocks.
+                        let mut descriptor = [0u8; 9];
+                        file.read_exact(&mut descriptor)
+                            .map_err(|e| format!("Failed to read GIF image descriptor: {}", e))?;
+                        if descriptor[8] & 0b1000_0000 != 0 {
+                            let table_size = 3_i64 * (1_i64 << ((descriptor[8] & 0b0000_0111) + 1));
+                            file.seek(SeekFrom::Current(table_size)).map_err(|e| {
+                                format!("Failed to skip GIF local color table: {}", e)
+                            })?;
+                        }
+                        // LZW minimum code size, then data sub-blocks.
+                        file.seek(SeekFrom::Current(1))
+                            .map_err(|e| format!("Failed to skip GIF LZW size: {}", e))?;
+                        skip_gif_sub_blocks(&mut file)?;
+                        frame_count += 1;
+                        if frame_count > 1 {
+                            return Ok(true);
+                        }
+                    }
+                    0x21 => {
+                        // Extension label, followed by one or more data sub-blocks.
+                        file.seek(SeekFrom::Current(1))
+                            .map_err(|e| format!("Failed to skip GIF extension label: {}", e))?;
+                        skip_gif_sub_blocks(&mut file)?;
+                    }
+                    0x3B => return Ok(false),
+                    _ => return Ok(false),
+                }
+            }
+        }
+        _ => Ok(false),
+    }
+}
+
+fn skip_gif_sub_blocks(file: &mut fs::File) -> Result<(), String> {
+    loop {
+        let mut size = [0u8; 1];
+        file.read_exact(&mut size)
+            .map_err(|e| format!("Failed to read GIF sub-block size: {}", e))?;
+        if size[0] == 0 {
+            return Ok(());
+        }
+        file.seek(SeekFrom::Current(i64::from(size[0])))
+            .map_err(|e| format!("Failed to skip GIF sub-block: {}", e))?;
+    }
 }
 
 fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
@@ -545,6 +686,21 @@ pub fn secure_fs_read_file(
             Err(e) => CommandResult::err(format!("Failed to read file: {}", e)),
         },
         Err(e) => CommandResult::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn secure_fs_is_animated_image(
+    app: tauri::AppHandle,
+    state: tauri::State<FsAccessState>,
+    path: String,
+) -> CommandResult<bool> {
+    match require_authorized_path(&app, &state, &path) {
+        Ok(path) => match is_animated_image_file(&path) {
+            Ok(is_animated) => CommandResult::ok(is_animated),
+            Err(error) => CommandResult::err(error),
+        },
+        Err(error) => CommandResult::err(error),
     }
 }
 

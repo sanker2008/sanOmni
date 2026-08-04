@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, FileText, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Image as ImageIcon, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/useToast";
-import { type ChapterWithCharacters, useChaptersStore } from "@/stores";
+import { type ChapterWithCharacters, type WorkImage, useChaptersStore } from "@/stores";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import ConfirmDialog from "./ConfirmDialog";
 import ChapterEditModal from "./ChapterEditModal";
 
 interface NarrativeChaptersPanelProps {
   workId: string;
+  workImages: WorkImage[];
+  refreshToken?: number;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -30,7 +33,7 @@ function wordCount(content?: string) {
   return Array.from((content || "").replace(/\s/g, "")).length;
 }
 
-export default function NarrativeChaptersPanel({ workId }: NarrativeChaptersPanelProps) {
+export default function NarrativeChaptersPanel({ workId, workImages, refreshToken = 0 }: NarrativeChaptersPanelProps) {
   const { chapters, loading, fetchChapters, deleteChapter, updateOrder } = useChaptersStore();
   const { toast } = useToast();
   const [editingChapter, setEditingChapter] = useState<ChapterWithCharacters | null>(null);
@@ -40,7 +43,7 @@ export default function NarrativeChaptersPanel({ workId }: NarrativeChaptersPane
 
   useEffect(() => {
     fetchChapters(workId);
-  }, [fetchChapters, workId]);
+  }, [fetchChapters, refreshToken, workId]);
 
   const openCreate = () => {
     setEditingChapter(null);
@@ -117,6 +120,9 @@ export default function NarrativeChaptersPanel({ workId }: NarrativeChaptersPane
               {chapters.map((chapter, index) => {
                 const charactersCount = chapter.characters.length;
                 const actualWords = wordCount(chapter.content);
+                const relatedImages = (chapter.images || [])
+                  .map((relation) => workImages.find((image) => image.id === relation.work_image_id))
+                  .filter((image): image is WorkImage => Boolean(image));
                 return (
                   <article key={chapter.id} className="rounded-xl border bg-card p-4 shadow-sm transition-colors hover:border-primary/35">
                     <div className="flex items-start gap-3">
@@ -132,7 +138,23 @@ export default function NarrativeChaptersPanel({ workId }: NarrativeChaptersPane
                         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                           <span>正文 {actualWords} 字{chapter.target_word_count ? ` / 目标 ${chapter.target_word_count} 字` : ""}</span>
                           <span className="inline-flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {charactersCount} 位登场人物</span>
+                          {relatedImages.length > 0 && <span className="inline-flex items-center gap-1"><ImageIcon className="w-3.5 h-3.5" /> {relatedImages.length} 张关联图片</span>}
                         </div>
+                        {relatedImages.length > 0 && (
+                          <div className="mt-3 flex -space-x-2 overflow-hidden py-0.5">
+                            {relatedImages.slice(0, 5).map((image) => (
+                              <img
+                                key={image.id}
+                                src={`${convertFileSrc(image.file_path)}?t=${new Date(image.updated_at).getTime()}`}
+                                alt={image.original_name || "章节关联图片"}
+                                className="h-9 w-9 rounded-md border-2 border-card object-cover"
+                              />
+                            ))}
+                            {relatedImages.length > 5 && (
+                              <span className="flex h-9 w-9 items-center justify-center rounded-md border-2 border-card bg-muted text-[10px] font-medium text-muted-foreground">+{relatedImages.length - 5}</span>
+                            )}
+                          </div>
+                        )}
                       </button>
                       <div className="flex shrink-0 items-center gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveChapter(index, -1)} disabled={index === 0} title="上移章节"><ArrowUp className="w-4 h-4" /></Button>
@@ -149,7 +171,7 @@ export default function NarrativeChaptersPanel({ workId }: NarrativeChaptersPane
         </div>
       </ScrollArea>
 
-      <ChapterEditModal workId={workId} chapter={editingChapter} open={isEditorOpen} onOpenChange={setIsEditorOpen} />
+      <ChapterEditModal workId={workId} chapter={editingChapter} workImages={workImages} open={isEditorOpen} onOpenChange={setIsEditorOpen} />
       <ConfirmDialog
         open={Boolean(chapterToDelete)}
         title="删除章节？"

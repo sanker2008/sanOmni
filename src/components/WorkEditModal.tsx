@@ -287,15 +287,16 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border shadow-xl">
-        <DialogHeader>
+      <DialogContent className="!flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden bg-card p-0 shadow-xl">
+        <DialogHeader className="flex-none border-b px-6 py-5 pr-14">
           <DialogTitle>{work ? "编辑作品信息" : "新建作品"}</DialogTitle>
           <DialogDescription>
             编辑或录入作品的核心设定，并可以为此作品上传精美封面。
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6">
+          <div className="grid grid-cols-1 gap-6 py-4 md:grid-cols-3">
           {/* Cover image upload pane */}
           <div
             className="flex flex-col items-center justify-center gap-3 border rounded-lg p-4 bg-muted/40 aspect-[3/4] max-w-[200px] mx-auto md:mx-0 w-full relative overflow-hidden"
@@ -457,52 +458,53 @@ export default function WorkEditModal({ work, open, onOpenChange }: WorkEditModa
               />
             </div>
           </div>
-        </div>
+          </div>
 
-        {/* Description textarea */}
-        <div className="flex flex-col gap-1.5 py-1">
-          <label className="text-xs font-semibold text-muted-foreground">
-            {structureMode === "narrative" ? "剧本总纲 / 世界观" : "作品简介 / 创作说明"}
-          </label>
-          <textarea
-            placeholder={structureMode === "narrative" ? "输入剧本总纲、世界观或核心设定…" : "输入作品的创作说明、背景或特征设定…"}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-950"
-          />
-        </div>
+          {/* Description textarea */}
+          <div className="flex flex-col gap-1.5 py-1">
+            <label className="text-xs font-semibold text-muted-foreground">
+              {structureMode === "narrative" ? "剧本总纲 / 世界观" : "作品简介 / 创作说明"}
+            </label>
+            <textarea
+              placeholder={structureMode === "narrative" ? "输入剧本总纲、世界观或核心设定…" : "输入作品的创作说明、背景或特征设定…"}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-950"
+            />
+          </div>
 
-        {/* Tags management */}
-        <div className="flex flex-col gap-2 py-2">
-          <label className="text-xs font-semibold text-muted-foreground">作品标签关联</label>
-          <div className="flex flex-wrap gap-1.5 border rounded-lg p-3 bg-muted/20 min-h-[60px] max-h-[140px] overflow-y-auto">
-            {uniqueTagGroups.length === 0 ? (
-              <span className="text-xs text-muted-foreground italic">暂无系统预设标签</span>
-            ) : (
-              uniqueTagGroups.map((group) => {
-                const isSelected = group.ids.some((id) => selectedTagIds.includes(id));
-                return (
-                  <Badge
-                    key={group.name}
-                    variant={isSelected ? "default" : "outline"}
-                    className="cursor-pointer transition-all hover:scale-105 active:scale-95 flex items-center gap-1 select-none text-xs"
-                    style={{
-                      backgroundColor: isSelected && group.color ? group.color : undefined,
-                      borderColor: !isSelected && group.color ? `${group.color}60` : undefined,
-                      color: !isSelected && group.color ? group.color : undefined,
-                    }}
-                    onClick={() => handleToggleTagGroup(group)}
-                  >
-                    {group.name}
-                    {isSelected && <Check className="w-3 h-3 ml-0.5" />}
-                  </Badge>
-                );
-              })
-            )}
+          {/* Tags management */}
+          <div className="flex flex-col gap-2 py-2 pb-4">
+            <label className="text-xs font-semibold text-muted-foreground">作品标签关联</label>
+            <div className="flex max-h-[140px] min-h-[60px] flex-wrap gap-1.5 overflow-y-auto rounded-lg border bg-muted/20 p-3">
+              {uniqueTagGroups.length === 0 ? (
+                <span className="text-xs text-muted-foreground italic">暂无系统预设标签</span>
+              ) : (
+                uniqueTagGroups.map((group) => {
+                  const isSelected = group.ids.some((id) => selectedTagIds.includes(id));
+                  return (
+                    <Badge
+                      key={group.name}
+                      variant={isSelected ? "default" : "outline"}
+                      className="cursor-pointer transition-all hover:scale-105 active:scale-95 flex items-center gap-1 select-none text-xs"
+                      style={{
+                        backgroundColor: isSelected && group.color ? group.color : undefined,
+                        borderColor: !isSelected && group.color ? `${group.color}60` : undefined,
+                        color: !isSelected && group.color ? group.color : undefined,
+                      }}
+                      onClick={() => handleToggleTagGroup(group)}
+                    >
+                      {group.name}
+                      {isSelected && <Check className="w-3 h-3 ml-0.5" />}
+                    </Badge>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
 
-        <DialogFooter className="mt-4">
+        <DialogFooter className="mt-0 flex-none border-t px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             取消
           </Button>

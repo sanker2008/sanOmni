@@ -3,7 +3,7 @@ use rusqlite::{Connection, params};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-use crate::models::{CharacterWithRelations, Tag, Work, WorkFilters, WorkWithRelations};
+use crate::models::{CharacterWithRelations, Tag, Work, WorkFilters, WorkImage, WorkWithRelations};
 
 fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
     let default_app_data_dir = app_handle
@@ -99,6 +99,134 @@ fn resolve_relative_paths_json(
     } else {
         None
     }
+}
+
+fn normalize_image_extension(extension: &str) -> Result<String, String> {
+    let normalized = extension.trim().trim_start_matches('.').to_ascii_lowercase();
+    match normalized.as_str() {
+        "png" | "jpg" | "jpeg" | "webp" | "gif" | "avif" => Ok(normalized),
+        _ => Err("不支持的图片格式".to_string()),
+    }
+}
+
+fn get_work_images_internal(
+    conn: &Connection,
+    work_id: &str,
+    app_data_dir: &std::path::Path,
+) -> Result<Vec<WorkImage>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, work_id, file_path, original_name, is_cover, sort_order,
+                    created_at, updated_at, deleted_at
+             FROM work_images
+             WHERE work_id = ?1 AND deleted_at IS NULL
+             ORDER BY is_cover DESC, sort_order ASC, created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    stmt.query_map(params![work_id], |row| {
+        let file_path: String = row.get(2)?;
+        Ok(WorkImage {
+            id: row.get(0)?,
+            work_id: row.get(1)?,
+            file_path: app_data_dir.join(file_path).to_string_lossy().to_string(),
+            original_name: row.get(3)?,
+            is_cover: row.get(4)?,
+            sort_order: row.get(5)?,
+            created_at: row.get(6)?,
+            updated_at: row.get(7)?,
+            deleted_at: row.get(8)?,
+        })
+    })
+    .map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|e| e.to_string())
+}
+
+fn save_work_image(
+    conn: &Connection,
+    app_data_dir: &std::path::Path,
+    work_id: &str,
+    image_data: &[u8],
+    extension: &str,
+    original_name: Option<&str>,
+    is_cover: bool,
+) -> Result<String, String> {
+    let extension = normalize_image_extension(extension)?;
+    let path_ident: String = conn
+        .query_row(
+            "SELECT path FROM works WHERE id = ?1 AND deleted_at IS NULL",
+            params![work_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| "作品不存在或已删除".to_string())?;
+    let image_id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let sort_order: i32 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1
+             FROM work_images WHERE work_id = ?1 AND deleted_at IS NULL",
+            params![work_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let image_dir = app_data_dir.join("works").join(&path_ident).join("images");
+    std::fs::create_dir_all(&image_dir).map_err(|e| e.to_string())?;
+    let filename = format!("{}.{}", image_id, extension);
+    let absolute_path = image_dir.join(&filename);
+    std::fs::write(&absolute_path, image_data).map_err(|e| e.to_string())?;
+    let relative_path = format!("works/{}/images/{}", path_ident, filename);
+
+    let result = (|| -> Result<(), String> {
+        if is_cover {
+            conn.execute(
+                "UPDATE work_images SET is_cover = 0, updated_at = ?1
+                 WHERE work_id = ?2 AND deleted_at IS NULL",
+                params![now, work_id],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        conn.execute(
+            "INSERT INTO work_images
+             (id, work_id, file_path, original_name, is_cover, sort_order, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                image_id,
+                work_id,
+                relative_path,
+                original_name.map(str::trim).filter(|name| !name.is_empty()),
+                is_cover,
+                sort_order,
+                now,
+                now,
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+
+        if is_cover {
+            conn.execute(
+                "UPDATE works SET cover_path = ?1, updated_at = ?2 WHERE id = ?3",
+                params![relative_path, now, work_id],
+            )
+            .map_err(|e| e.to_string())?;
+        } else {
+            conn.execute(
+                "UPDATE works SET updated_at = ?1 WHERE id = ?2",
+                params![now, work_id],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })();
+
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(&absolute_path);
+        return Err(error);
+    }
+
+    Ok(absolute_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -403,6 +531,19 @@ pub async fn update_work(
                 )
                 .map_err(|e| e.to_string())?;
             }
+
+            conn.execute(
+                "UPDATE work_images
+                 SET file_path = REPLACE(file_path, ?1, ?2), updated_at = ?3
+                 WHERE work_id = ?4 AND deleted_at IS NULL",
+                params![
+                    format!("works/{}/", old_path),
+                    format!("works/{}/", final_path),
+                    now,
+                    id,
+                ],
+            )
+            .map_err(|e| e.to_string())?;
         }
 
         // Build update query
@@ -508,6 +649,12 @@ pub async fn delete_work(app_handle: AppHandle, id: String) -> Result<(), String
     )
     .map_err(|e| e.to_string())?;
 
+    conn.execute(
+        "UPDATE work_images SET deleted_at = ?1, updated_at = ?1 WHERE work_id = ?2 AND deleted_at IS NULL",
+        params![now, id],
+    )
+    .map_err(|e| e.to_string())?;
+
     // Clean up files
     cleanup_work_files(&app_handle, &id)?;
 
@@ -516,7 +663,7 @@ pub async fn delete_work(app_handle: AppHandle, id: String) -> Result<(), String
 
 #[cfg(test)]
 mod tests {
-    use super::work_sort_clause;
+    use super::{normalize_image_extension, work_sort_clause};
 
     #[test]
     fn work_sort_clause_accepts_allowlisted_columns_and_directions() {
@@ -541,6 +688,12 @@ mod tests {
             " ORDER BY name DESC"
         );
     }
+
+    #[test]
+    fn image_extension_is_allowlisted() {
+        assert_eq!(normalize_image_extension(".WEBP").unwrap(), "webp");
+        assert!(normalize_image_extension("../../sqlite").is_err());
+    }
 }
 
 #[tauri::command]
@@ -556,65 +709,146 @@ pub async fn upload_work_cover(
         .map_err(|e| e.to_string())?;
     let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
 
-    // Resolve path identifier
     let conn = get_connection(&app_handle)?;
-    let (path_ident, old_cover_path): (String, Option<String>) = conn
-        .query_row(
-            "SELECT path, cover_path FROM works WHERE id = ?",
-            params![work_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
+    save_work_image(
+        &conn,
+        &app_data_dir,
+        &work_id,
+        &image_data,
+        &extension,
+        Some("封面"),
+        true,
+    )
+}
+
+#[tauri::command]
+pub async fn upload_work_image(
+    app_handle: AppHandle,
+    work_id: String,
+    image_data: Vec<u8>,
+    extension: String,
+    original_name: Option<String>,
+) -> Result<String, String> {
+    let base_app_data_dir = app_handle
+        .path()
+        .app_data_dir()
         .map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
+    let conn = get_connection(&app_handle)?;
+    save_work_image(
+        &conn,
+        &app_data_dir,
+        &work_id,
+        &image_data,
+        &extension,
+        original_name.as_deref(),
+        false,
+    )
+}
 
-    let work_dir = app_data_dir.join("works").join(&path_ident);
-    std::fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
+#[tauri::command]
+pub async fn get_work_images(
+    app_handle: AppHandle,
+    work_id: String,
+) -> Result<Vec<WorkImage>, String> {
+    let conn = get_connection(&app_handle)?;
+    let base_app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
+    get_work_images_internal(&conn, &work_id, &app_data_dir)
+}
 
-    // Delete old cover file if it exists and has a different extension
-    if let Some(ref path) = old_cover_path {
-        let abs_old_path = app_data_dir.join(
-            &path
-                .replace('/', &std::path::MAIN_SEPARATOR.to_string())
-                .replace('\\', &std::path::MAIN_SEPARATOR.to_string()),
-        );
-        if abs_old_path.exists() {
-            let _ = std::fs::remove_file(&abs_old_path);
-        }
-    }
-
-    // Check if there are other cover files in the directory and delete them (e.g. cover.png, cover.jpg)
-    // This handles the case where we convert to webp and need to delete the original png
-    if let Ok(entries) = std::fs::read_dir(&work_dir) {
-        for entry in entries.flatten() {
-            if let Ok(file_type) = entry.file_type() {
-                if file_type.is_file() {
-                    let path = entry.path();
-                    if let Some(file_name) = path.file_stem().and_then(|s| s.to_str()) {
-                        if file_name == "cover" {
-                            let _ = std::fs::remove_file(&path);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let cover_path = work_dir.join(format!("cover.{}", extension));
-    std::fs::write(&cover_path, image_data).map_err(|e| e.to_string())?;
-
-    let relative_path = format!("works/{}/cover.{}", path_ident, extension);
-
-    // Update database
-    conn.execute(
-        "UPDATE works SET cover_path = ?1, updated_at = ?2 WHERE id = ?3",
-        params![relative_path, Utc::now().to_rfc3339(), work_id],
+#[tauri::command]
+pub async fn set_work_image_as_cover(
+    app_handle: AppHandle,
+    work_id: String,
+    work_image_id: String,
+) -> Result<(), String> {
+    let mut conn = get_connection(&app_handle)?;
+    let file_path: String = conn
+        .query_row(
+            "SELECT file_path FROM work_images
+             WHERE id = ?1 AND work_id = ?2 AND deleted_at IS NULL",
+            params![work_image_id, work_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| "图片不存在或不属于当前作品".to_string())?;
+    let now = Utc::now().to_rfc3339();
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute(
+        "UPDATE work_images SET is_cover = 0, updated_at = ?1
+         WHERE work_id = ?2 AND deleted_at IS NULL",
+        params![now, work_id],
     )
     .map_err(|e| e.to_string())?;
+    tx.execute(
+        "UPDATE work_images SET is_cover = 1, updated_at = ?1 WHERE id = ?2",
+        params![now, work_image_id],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute(
+        "UPDATE works SET cover_path = ?1, updated_at = ?2 WHERE id = ?3 AND deleted_at IS NULL",
+        params![file_path, now, work_id],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
 
-    let absolute_path = app_data_dir
-        .join(&relative_path)
-        .to_string_lossy()
-        .to_string();
-    Ok(absolute_path)
+#[tauri::command]
+pub async fn delete_work_image(app_handle: AppHandle, work_image_id: String) -> Result<(), String> {
+    let mut conn = get_connection(&app_handle)?;
+    let (work_id, file_path, is_cover): (String, String, bool) = conn
+        .query_row(
+            "SELECT work_id, file_path, is_cover FROM work_images
+             WHERE id = ?1 AND deleted_at IS NULL",
+            params![work_image_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|_| "图片不存在或已删除".to_string())?;
+    let base_app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
+    let absolute_path = app_data_dir.join(
+        file_path
+            .replace('/', &std::path::MAIN_SEPARATOR.to_string())
+            .replace('\\', &std::path::MAIN_SEPARATOR.to_string()),
+    );
+    if absolute_path.exists() {
+        std::fs::remove_file(&absolute_path).map_err(|e| e.to_string())?;
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute(
+        "UPDATE work_images SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2",
+        params![now, work_image_id],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM chapter_image_relations WHERE work_image_id = ?1",
+        params![work_image_id],
+    )
+    .map_err(|e| e.to_string())?;
+    if is_cover {
+        tx.execute(
+            "UPDATE works SET cover_path = NULL, updated_at = ?1 WHERE id = ?2",
+            params![now, work_id],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        tx.execute(
+            "UPDATE works SET updated_at = ?1 WHERE id = ?2",
+            params![now, work_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -650,34 +884,15 @@ pub async fn remove_work_tag(
 #[tauri::command]
 pub async fn delete_work_cover(app_handle: AppHandle, work_id: String) -> Result<(), String> {
     let conn = get_connection(&app_handle)?;
-    let base_app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
-    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
-
-    let cover_raw: Option<String> = conn
-        .query_row(
-            "SELECT cover_path FROM works WHERE id = ?",
-            params![work_id],
-            |row| row.get(0),
-        )
-        .ok()
-        .flatten();
-
-    if let Some(ref path) = cover_raw {
-        let abs_path = app_data_dir.join(
-            &path
-                .replace('/', &std::path::MAIN_SEPARATOR.to_string())
-                .replace('\\', &std::path::MAIN_SEPARATOR.to_string()),
-        );
-        if abs_path.exists() {
-            let _ = std::fs::remove_file(&abs_path);
-        }
-    }
-
     conn.execute(
         "UPDATE works SET cover_path = NULL, updated_at = ?1 WHERE id = ?2",
+        params![Utc::now().to_rfc3339(), work_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE work_images SET is_cover = 0, updated_at = ?1
+         WHERE work_id = ?2 AND deleted_at IS NULL",
         params![Utc::now().to_rfc3339(), work_id],
     )
     .map_err(|e| e.to_string())?;

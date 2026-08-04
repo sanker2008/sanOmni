@@ -31,6 +31,7 @@
 - [图片切割 (Lab)](./features/LAB_IMAGE_SLICER.md) - 可视化图片切割工具
 - [产品图制作 (Lab)](./features/LAB_PRODUCT_IMAGE_MAKER.md) - 产品图推广制作工具
 - [模板商品化说明](./features/template.md) - 统一分类、图片证据与发布流
+- [Prompt 模板导入格式](./prompt-template-import.md) - 单 JSON 文件批量导入、英文校验与写入结果
 - [模板 Schema 说明](./features/template_schema.md)
 
 ## 💧 水印专题 (`watermark/`)
@@ -53,4 +54,4 @@
 发版说明及历史大功能变更日志，请查阅 `docs/release-notes/` 目录。
 
 ---
-**最后更新**: 2026-08-03
+**最后更新**: 2026-08-04

@@ -72,6 +72,12 @@ export async function readFile(path: string): Promise<Uint8Array> {
   return new Uint8Array(unwrap(result, "Failed to read file"));
 }
 
+/** Returns whether GIF, WebP, or PNG contains more than one animation frame. */
+export async function isAnimatedImage(path: string): Promise<boolean> {
+  const result = await invoke<CommandResult<boolean>>("secure_fs_is_animated_image", { path });
+  return unwrap(result, "Failed to inspect image animation");
+}
+
 export async function readTextFile(path: string): Promise<string> {
   const data = await readFile(path);
   return new TextDecoder().decode(data);

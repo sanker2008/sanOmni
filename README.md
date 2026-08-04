@@ -22,6 +22,7 @@ sanOmni 是一个专注于 AI 创作者工作流的跨平台桌面客户端应�
 - 📝 **Prompt 管理** - 记录和管理图片生成提示词
 - ✨ **Prompt 对比** - 对比同一 prompt 在不同模型下的效果
 - 📦 **Prompt 商品化** - 支持 template_schema、统一分类、价格、上下架和云端发布状态
+- 📥 **模板 JSON 导入** - 单文件承载多个英文模板，逐项校验并显示批量写入结果
 - 🖼️ **模板图库编排** - 支持封面、画廊排序、图片说明、模型变体证据
 - 🗂️ **归档系统** - 待整理 → 标记 → 归档的工作流程
 - 🔧 **厂商管理** - 自由管理 AI 厂商和模型
@@ -65,6 +66,7 @@ sanOmni 是一个专注于 AI 创作者工作流的跨平台桌面客户端应�
 - 📝 **Prompt 管理** - 记录和管理图片生成提示词
 - ✨ **Prompt 对比** - 对比同一 prompt 在不同模型下的效果
 - 📦 **Prompt 商品化** - 支持 template_schema、统一分类、价格、上下架和云端发布状态
+- 📥 **模板 JSON 导入** - 单文件承载多个英文模板，逐项校验并显示批量写入结果
 - 🖼️ **模板图库编排** - 支持封面、画廊排序、图片说明、模型变体证据
 - 🗂️ **归档系统** - 待整理 → 标记 → 归档的工作流程
 - 🔧 **厂商管理** - 自由管理 AI 厂商和模型
@@ -112,6 +114,7 @@ sanOmni 是一个专注于 AI 创作者工作流的跨平台桌面客户端应�
 - [架构文档](./docs/architecture/ARCHITECTURE.md) - 双域架构设计与模块划分
 - [Omni-Manager (超级后台) 架构](./docs/architecture/OMNI_MANAGER_ARCHITECTURE.md) - 为什么放弃网页后台，将桌面端作为商品总控 🆕
 - [模板商品化说明](./docs/features/template.md) - Prompt 模板、统一分类、图片证据与发布流
+- [Prompt 模板导入格式](./docs/prompt-template-import.md) - 单 JSON 文件批量导入与字段校验
 - [sanKnow 开发知识库](./docs/features/KNOWLEDGE_BASE.md) - 本地开发资料的收录、搜索与边界
 
 ### 🎯 快速开始

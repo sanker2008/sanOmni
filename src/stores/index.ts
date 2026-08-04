@@ -709,6 +709,18 @@ export interface WorkWithRelations extends Work {
   character_count: number;
 }
 
+export interface WorkImage {
+  id: string;
+  work_id: string;
+  file_path: string;
+  original_name?: string;
+  is_cover: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
 export interface WorkFilters {
   search?: string;
   work_type?: WorkType;
@@ -741,8 +753,13 @@ export interface ChapterCharacterInput {
 
 export interface ChapterCharacterRelation extends ChapterCharacterInput {}
 
+export interface ChapterImageRelation {
+  work_image_id: string;
+}
+
 export interface ChapterWithCharacters extends Chapter {
   characters: ChapterCharacterRelation[];
+  images: ChapterImageRelation[];
 }
 
 // Works Store
@@ -975,6 +992,7 @@ interface ChaptersStore {
   deleteChapter: (id: string) => Promise<void>;
   updateOrder: (chapterIds: string[]) => Promise<void>;
   setChapterCharacters: (chapterId: string, characters: ChapterCharacterInput[]) => Promise<ChapterWithCharacters>;
+  setChapterImages: (chapterId: string, workImageIds: string[]) => Promise<ChapterWithCharacters>;
 }
 
 export const useChaptersStore = create<ChaptersStore>((set) => ({
@@ -1032,6 +1050,15 @@ export const useChaptersStore = create<ChaptersStore>((set) => ({
   setChapterCharacters: async (chapterId, characters) => {
     const { setChapterCharacters } = await import("@/services/tauri");
     const chapter = await setChapterCharacters(chapterId, characters);
+    set((state) => ({
+      chapters: state.chapters.map((item) => item.id === chapter.id ? chapter : item),
+    }));
+    return chapter;
+  },
+
+  setChapterImages: async (chapterId, workImageIds) => {
+    const { setChapterImages } = await import("@/services/tauri");
+    const chapter = await setChapterImages(chapterId, workImageIds);
     set((state) => ({
       chapters: state.chapters.map((item) => item.id === chapter.id ? chapter : item),
     }));

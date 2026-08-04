@@ -1839,9 +1839,30 @@ export default function IpArchivedView() {
                             上一页
                           </Button>
                           <div className="flex items-center gap-1">
-                            <span className="text-sm px-2">
-                              {currentPage} / {totalPages}
-                            </span>
+                            <div className="flex items-center text-sm px-2">
+                              <input
+                                key={currentPage}
+                                type="number"
+                                min={1}
+                                max={totalPages}
+                                defaultValue={currentPage}
+                                onBlur={(e) => {
+                                  let val = parseInt(e.target.value);
+                                  if (isNaN(val)) val = currentPage;
+                                  if (val < 1) val = 1;
+                                  if (val > totalPages) val = totalPages;
+                                  setCurrentPage(val);
+                                  e.target.value = val.toString();
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.currentTarget.blur();
+                                  }
+                                }}
+                                className="mx-1 h-7 w-12 rounded-md border border-input bg-background px-1 py-0.5 text-center text-foreground focus:outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                              / {totalPages}
+                            </div>
                           </div>
                           <Button
                             variant="outline"

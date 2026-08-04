@@ -7,9 +7,22 @@
 本地端负责：
 
 - 创建和维护模板主体：`name`、`prompt`、`negative_prompt`、`description`、`template_schema`
+- 通过单个 JSON 文件导入一个或多个结构化模板，并在写入前逐项校验
 - 维护商业字段：`category`、`tags`、`price`、`is_published`、`publish_status`
 - 维护云端同步字段：`remote_slug`、`remote_url`、`last_published_at`
 - 维护图片与模板之间的展示关系，用于网站封面、详情画廊、模型效果证明
+
+## 模板导入
+
+模板管理页提供“导入模板”入口。它用于把 Agent 按固定格式生成的模板安全写入本地库，避免模板基础字段与 `template_schema` 中的数据不完整或不一致。
+
+- 每次只选择**一个 JSON 文件**；文件顶层使用 `templates` 数组，因此可一次包含多个模板。
+- 模板文本值必须为英文，不得包含中文字符；校验范围包括名称、说明、提示词、标签、变量标签、默认值和选项。
+- 每个模板都会独立校验分类、价格、标签、变量定义、占位符，以及外层字段和 `template_schema` 的一致性。错误会标示到具体数组位置，例如 `templates[1].price`。
+- 单个合格模板会先导入编辑器，以便确认内容并关联图片；多个合格模板会直接逐项写入 `prompt_groups`，弹窗会保留每项成功或失败结果。批量导入不关联图片，之后可逐个编辑补充。
+- 旧版顶层 `template` 单模板文件仅为兼容用途；新文件必须使用 `templates` 数组。
+
+完整 JSON 格式、示例与全部校验规则见：[Prompt 模板导入格式](../prompt-template-import.md)。
 
 ## 分类规划
 
