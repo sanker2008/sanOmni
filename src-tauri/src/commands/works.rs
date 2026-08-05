@@ -124,23 +124,25 @@ fn get_work_images_internal(
         )
         .map_err(|e| e.to_string())?;
 
-    stmt.query_map(params![work_id], |row| {
-        let file_path: String = row.get(2)?;
-        Ok(WorkImage {
-            id: row.get(0)?,
-            work_id: row.get(1)?,
-            file_path: app_data_dir.join(file_path).to_string_lossy().to_string(),
-            original_name: row.get(3)?,
-            is_cover: row.get(4)?,
-            sort_order: row.get(5)?,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
-            deleted_at: row.get(8)?,
+    let result = stmt
+        .query_map(params![work_id], |row| {
+            let file_path: String = row.get(2)?;
+            Ok(WorkImage {
+                id: row.get(0)?,
+                work_id: row.get(1)?,
+                file_path: app_data_dir.join(file_path).to_string_lossy().to_string(),
+                original_name: row.get(3)?,
+                is_cover: row.get(4)?,
+                sort_order: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+                deleted_at: row.get(8)?,
+            })
         })
-    })
-    .map_err(|e| e.to_string())?
-    .collect::<Result<Vec<_>, _>>()
-    .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    result
 }
 
 fn save_work_image(

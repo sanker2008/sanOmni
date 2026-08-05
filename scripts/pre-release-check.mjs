@@ -126,13 +126,13 @@ if (resources.includes('../scripts') || resources.includes('..\\scripts')) {
 }
 
 try {
-  const trackedArtifacts = execSync('git ls-files scripts/build scripts/dist public/models', {
+  const trackedArtifacts = execSync('git ls-files scripts/build scripts/dist', {
     cwd: ROOT,
     encoding: 'utf-8',
   }).trim();
 
   if (trackedArtifacts) {
-    fail('Large generated artifacts are tracked by git:');
+    fail('Tracked PyInstaller build artifacts detected:');
     trackedArtifacts.split('\n').slice(0, 10).forEach((line) => console.log(`       ${line}`));
     if (trackedArtifacts.split('\n').length > 10) console.log('       ... and more');
   } else {

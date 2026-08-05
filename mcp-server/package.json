@@ -1,0 +1,25 @@
+{
+  "name": "sanomni-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server for SanOmni — exposes sanIP, sanPrompt, sanWorks, sanKnow data operations as MCP tools",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc --watch",
+    "test": "node --test build/test/mcp-server.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "better-sqlite3": "^11.9.1",
+    "uuid": "^11.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.15.21",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.8.3"
+  }
+}

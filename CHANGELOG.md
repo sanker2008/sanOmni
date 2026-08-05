@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-05
+
+### Added
+- MCP Server: 新增独立的 Model Context Protocol (MCP) 服务（`mcp-server`），为 Antigravity、Cursor、Codex 等 Agent 提供 33 个本地 SQLite 数据工具，支持 sanIP、sanPrompt、sanWorks、sanKnow、标签与厂商管理。
+- MCP 工具的列表查询统一支持 `limit`（1-100）与 `offset` 分页；章节仅可操作未删除的叙事型（`narrative`）作品，作品结构仅允许 `single`、`collection`、`narrative`。
+
+### Fixed
+- 修复 Rust 章节和作品图片查询中 `rusqlite` 语句借用在临时值析构时超过 `stmt` 生命周期的问题。
+- 修复 GIF 头校验中多余的条件括号告警。
+
+### Notes
+- MCP 与 Tauri 使用 SQLite WAL 并发读写。现有同步触发器只覆盖 sanIP 和标签；作品、角色、章节、提示词组和知识库的 MCP 写入仅保存到本地 SQLite，不会自动同步到云端。
+- Windows MCP 配置必须使用 Windows Node.js 构建和测试原生 `better-sqlite3` 依赖，WSL 不能作为 Windows 运行验收。
+
 ### Added
 - sanPrompt: 新增模板 JSON 导入。每次选择一个文件，文件可通过 `templates` 数组批量导入多个英文模板；系统逐项校验字段、变量与占位符一致性，并在弹窗中显示每项写入结果。详见 [Prompt 模板导入格式](docs/prompt-template-import.md)。
 - 跨平台拖拽（Drag & Drop）上传图片/视频：在 macOS 与 Windows 下为 sanOmni 及 sanLabs 所有图片/视频上传区域提供全面的拖拽支持。实现统一的拖拽解析与类型/后缀名兜底校验引擎 `dragDropUtils`，并在拖拽悬浮时提供直观的高亮反馈。覆盖范围包括：

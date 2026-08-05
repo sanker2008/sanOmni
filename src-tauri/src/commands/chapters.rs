@@ -87,14 +87,16 @@ fn get_chapter_images(
         )
         .map_err(|e| e.to_string())?;
 
-    stmt.query_map(params![chapter_id], |row| {
-        Ok(ChapterImageRelation {
-            work_image_id: row.get(0)?,
+    let result = stmt
+        .query_map(params![chapter_id], |row| {
+            Ok(ChapterImageRelation {
+                work_image_id: row.get(0)?,
+            })
         })
-    })
-    .map_err(|e| e.to_string())?
-    .collect::<Result<Vec<_>, _>>()
-    .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    result
 }
 
 fn get_chapter_by_id_with_conn(

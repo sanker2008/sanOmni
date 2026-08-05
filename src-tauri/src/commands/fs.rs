@@ -190,7 +190,7 @@ fn is_animated_image_file(path: &Path) -> Result<bool, String> {
             let mut header = [0u8; 13];
             file.read_exact(&mut header)
                 .map_err(|e| format!("Failed to read GIF header: {}", e))?;
-            if (&header[..6] != b"GIF87a" && &header[..6] != b"GIF89a") {
+            if &header[..6] != b"GIF87a" && &header[..6] != b"GIF89a" {
                 return Ok(false);
             }
 

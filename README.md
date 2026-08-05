@@ -93,6 +93,11 @@ sanOmni 是一个专注于 AI 创作者工作流的跨平台桌面客户端应�
 - 🌐 **网页文档集** - 从入口 URL 收录同域指定范围内的公开文档，保留原始 URL 与文档集名称
 - 📝 **结论沉淀** - 将已验证的故障原因、设计决策和开发规范保存为可搜索记录
 
+### 🤖 MCP Server (Agent 集成)
+- 🔌 **模型上下文协议** - 提供原生的 MCP Server，支持与 Antigravity、Cursor、CodeX 等 Agent 终端无缝集成。
+- 🛠️ **全领域工具集** - 暴露 33 个工具，支持 5 大领域（sanIP, sanPrompt, sanWorks, sanKnow，通用标签与厂商管理）的全面 CRUD 操作。
+- 🔄 **并发与同步边界** - 基于 SQLite WAL 模式，可与 Tauri 客户端并发读写。现有同步触发器仅覆盖 sanIP 与标签；作品、角色、章节、提示词组和知识库的 MCP 写入仅保存到本地 SQLite，不会自动同步到云端。详见 [MCP Server 文档](./mcp-server/README.md)。
+
 ### 🔧 通用功能
 - 💧 **水印检测** - 自动检测和去除图片水印（标准 + Gemini）
 - 👀 **文件扫描** - 自动扫描文件夹缺失或失效图片
@@ -116,6 +121,7 @@ sanOmni 是一个专注于 AI 创作者工作流的跨平台桌面客户端应�
 - [模板商品化说明](./docs/features/template.md) - Prompt 模板、统一分类、图片证据与发布流
 - [Prompt 模板导入格式](./docs/prompt-template-import.md) - 单 JSON 文件批量导入与字段校验
 - [sanKnow 开发知识库](./docs/features/KNOWLEDGE_BASE.md) - 本地开发资料的收录、搜索与边界
+- [MCP Server](./mcp-server/README.md) - Agent 接入、本地数据边界与工具列表
 
 ### 🎯 快速开始
 - [开发进度](./docs/dev/PROGRESS.md) - 查看项目完成情况和功能列表

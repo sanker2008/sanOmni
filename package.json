@@ -1,9 +1,9 @@
 {
   "name": "sanomni",
   "private": true,
-  "version": "1.4.5",
+  "version": "1.5.0",
   "type": "module",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@11.20.0",
   "scripts": {
     "preinstall": "node -e \"const ua=process.env.npm_config_user_agent||''; if(!ua.includes('pnpm')){console.warn('Warning: this repository uses pnpm (recommended). Run: pnpm install');}\"",
     "dev": "node ./node_modules/vite/bin/vite.js",
