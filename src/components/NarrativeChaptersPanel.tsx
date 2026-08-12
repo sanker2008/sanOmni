@@ -9,6 +9,8 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import ConfirmDialog from "./ConfirmDialog";
 import ChapterEditModal from "./ChapterEditModal";
 
+import { cleanEscapedText } from "@/lib/stringUtils";
+
 interface NarrativeChaptersPanelProps {
   workId: string;
   workImages: WorkImage[];
@@ -30,7 +32,8 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 function wordCount(content?: string) {
-  return Array.from((content || "").replace(/\s/g, "")).length;
+  const cleaned = cleanEscapedText(content);
+  return Array.from((cleaned || "").replace(/\s/g, "")).length;
 }
 
 export default function NarrativeChaptersPanel({ workId, workImages, refreshToken = 0 }: NarrativeChaptersPanelProps) {
@@ -133,7 +136,7 @@ export default function NarrativeChaptersPanel({ workId, workImages, refreshToke
                           <Badge variant="outline" className={STATUS_STYLES[chapter.status]}>{STATUS_LABELS[chapter.status] || chapter.status}</Badge>
                         </div>
                         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground line-clamp-2">
-                          {chapter.summary || "尚未填写本章梗概"}
+                          {cleanEscapedText(chapter.summary) || "尚未填写本章梗概"}
                         </p>
                         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                           <span>正文 {actualWords} 字{chapter.target_word_count ? ` / 目标 ${chapter.target_word_count} 字` : ""}</span>

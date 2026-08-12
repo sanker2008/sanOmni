@@ -96,6 +96,7 @@ pub mod fs;
 pub mod ip_assets;
 pub mod ip_images;
 pub mod knowledge;
+pub mod knowledge_graph;
 pub mod prompt_groups;
 pub mod scanner;
 pub mod settings;

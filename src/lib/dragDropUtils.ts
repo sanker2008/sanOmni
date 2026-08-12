@@ -65,16 +65,64 @@ export function preventDragDefaults(event: React.DragEvent | DragEvent) {
   event.stopPropagation();
 }
 
-/**
- * Convert a File object to Data URL.
- */
-export function fileToDataUrl(file: File): Promise<string> {
+import { authorizeFsPaths, readFile } from '@/services/secureFs';
+
+const MIME_MAP: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  tiff: 'image/tiff',
+  svg: 'image/svg+xml',
+};
+
+function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = (err) => reject(err);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
+}
+
+/**
+ * Convert a File object to Data URL, supporting local and WSL/UNC paths safely.
+ */
+export async function fileToDataUrl(file: File, path?: string): Promise<string> {
+  const filePath = path || (file as any).path;
+
+  if (filePath && (filePath.startsWith('\\\\') || filePath.startsWith('//'))) {
+    try {
+      await authorizeFsPaths([filePath]);
+      const bytes = await readFile(filePath);
+      const ext = filePath.split('.').pop()?.toLowerCase() || '';
+      const mime = file.type || MIME_MAP[ext] || 'image/png';
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
+      return await blobToDataUrl(blob);
+    } catch (e) {
+      console.warn(`[fileToDataUrl] secureFs read failed for UNC/WSL path ${filePath}:`, e);
+    }
+  }
+
+  try {
+    return await blobToDataUrl(file);
+  } catch (err) {
+    if (filePath) {
+      try {
+        await authorizeFsPaths([filePath]);
+        const bytes = await readFile(filePath);
+        const ext = filePath.split('.').pop()?.toLowerCase() || '';
+        const mime = file.type || MIME_MAP[ext] || 'image/png';
+        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
+        return await blobToDataUrl(blob);
+      } catch (e) {
+        console.error(`[fileToDataUrl] Fallback secureFs read failed for ${filePath}:`, e);
+      }
+    }
+    throw err;
+  }
 }
 
 /**

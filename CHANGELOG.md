@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-12
+
+### Added
+- sanPrompt 模板管理重构：实现全新列表模式左右分栏结构（左侧固定 Hero 方形大图预览 + 缩略图序列，右侧整合元数据、Prompt 代码块与动作按键）。
+- sanPrompt 模板支持本地批量 JSON 解析校验与直接导入模板库。
+- sanKnow 知识库图谱与章节增强。
+
 ## [1.5.0] - 2026-08-05
 
 ### Added

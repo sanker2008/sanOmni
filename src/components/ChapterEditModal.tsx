@@ -14,6 +14,8 @@ import {
 import { getCharacters } from "@/services/tauri";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
+import { cleanEscapedText } from "@/lib/stringUtils";
+
 interface ChapterEditModalProps {
   workId: string;
   chapter: ChapterWithCharacters | null;
@@ -61,8 +63,8 @@ export default function ChapterEditModal({ workId, chapter, workImages, open, on
     if (!open) return;
     setTitle(chapter?.title || "");
     setStatus(chapter?.status || "outline");
-    setSummary(chapter?.summary || "");
-    setContent(chapter?.content || "");
+    setSummary(cleanEscapedText(chapter?.summary));
+    setContent(cleanEscapedText(chapter?.content));
     setTargetWordCount(chapter?.target_word_count?.toString() || "");
     setSelectedCharacterIds(chapter?.characters.map((item) => item.character_id) || []);
     setCharacterNotes(
@@ -107,8 +109,8 @@ export default function ChapterEditModal({ workId, chapter, workImages, open, on
     try {
       const payload = {
         title: title.trim(),
-        summary: summary.trim() || null,
-        content: content || null,
+        summary: cleanEscapedText(summary).trim() || null,
+        content: cleanEscapedText(content) || null,
         status,
         target_word_count: target,
       };
@@ -177,7 +179,7 @@ export default function ChapterEditModal({ workId, chapter, workImages, open, on
           <label className="text-xs font-semibold text-muted-foreground">本章梗概</label>
           <textarea
             value={summary}
-            onChange={(event) => setSummary(event.target.value)}
+            onChange={(event) => setSummary(cleanEscapedText(event.target.value))}
             placeholder="用几句话记录本章的冲突、转折或目标……"
             className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
@@ -190,7 +192,7 @@ export default function ChapterEditModal({ workId, chapter, workImages, open, on
           </div>
           <textarea
             value={content}
-            onChange={(event) => setContent(event.target.value)}
+            onChange={(event) => setContent(cleanEscapedText(event.target.value))}
             placeholder="开始写这一章的正文……"
             className="min-h-64 rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-7 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />

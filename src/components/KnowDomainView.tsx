@@ -42,6 +42,7 @@ import {
   type KnowledgeSearchResult,
 } from "@/services/tauri";
 import { cn } from "@/lib/utils";
+import { KnowledgeGraphDialog } from "@/components/knowledge/KnowledgeGraphDialog";
 
 const ENTRY_TYPE_FILTERS = [
   { value: "all", label: "全部" },
@@ -94,6 +95,7 @@ export default function KnowDomainView() {
   const [isIndexing, setIsIndexing] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isWebCollectionOpen, setIsWebCollectionOpen] = useState(false);
+  const [isGraphOpen, setIsGraphOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isWebImporting, setIsWebImporting] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -189,8 +191,8 @@ export default function KnowDomainView() {
       toast({
         title: "项目已建立索引",
         description: indexed.curated_entries > 0
-          ? `已收录 ${indexed.indexed_files} 个项目文件，并加入 ${indexed.curated_entries} 条 sanOmni 精选知识。`
-          : `已收录 ${indexed.indexed_files} 个文档、代码或配置文件。`,
+          ? `已收录 ${indexed.indexed_files} 个项目文件，并加入 ${indexed.curated_entries} 条 sanOmni 精选知识。${indexed.truncated ? " 已达到 2,000 个文件上限。" : ""}`
+          : `已收录 ${indexed.indexed_files} 个文档、代码或配置文件。${indexed.truncated ? " 已达到 2,000 个文件上限。" : ""}`,
       });
     } catch (error) {
       toast({
@@ -218,8 +220,8 @@ export default function KnowDomainView() {
       toast({
         title: "索引已更新",
         description: indexed.curated_entries > 0
-          ? `已重新读取 ${indexed.indexed_files} 个项目文件，并更新 ${indexed.curated_entries} 条 sanOmni 精选知识。`
-          : `已重新读取 ${indexed.indexed_files} 个项目文件。`,
+          ? `已重新读取 ${indexed.indexed_files} 个项目文件，并更新 ${indexed.curated_entries} 条 sanOmni 精选知识。${indexed.truncated ? " 已达到 2,000 个文件上限；未扫描的旧索引已保留。" : ""}`
+          : `已重新读取 ${indexed.indexed_files} 个项目文件。${indexed.truncated ? " 已达到 2,000 个文件上限；未扫描的旧索引已保留。" : ""}`,
       });
     } catch (error) {
       toast({
@@ -305,10 +307,10 @@ export default function KnowDomainView() {
         </div>
 
         <div className="space-y-1 border-b p-3">
-          <Button variant="secondary" className="w-full justify-start gap-2" size="sm">
+          <div className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-foreground">
             <Search className="h-4 w-4" />
-            问知识库
-          </Button>
+            搜索与溯源
+          </div>
           <p className="px-2 pt-1 text-xs leading-5 text-muted-foreground">
             输入问题，先看可追溯的项目来源，再决定是否修改代码。
           </p>
@@ -386,6 +388,12 @@ export default function KnowDomainView() {
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => setIsWebCollectionOpen(true)} disabled={isWebImporting}>
                   <Globe2 className="h-4 w-4" />
                   收录网页
+                </Button>
+              )}
+              {selectedProject && (
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => setIsGraphOpen(true)}>
+                  <BookOpenCheck className="h-4 w-4" />
+                  关系图谱
                 </Button>
               )}
               <Button size="sm" className="gap-2" onClick={() => setIsCreateOpen(true)} disabled={!selectedProject}>
@@ -673,6 +681,12 @@ export default function KnowDomainView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <KnowledgeGraphDialog
+        project={selectedProject}
+        open={isGraphOpen}
+        onOpenChange={setIsGraphOpen}
+      />
     </div>
   );
 }

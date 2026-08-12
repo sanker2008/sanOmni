@@ -7,7 +7,7 @@ import { geminiWatermarkApi, isGeminiWatermarkRemovalSuccessful } from '@/servic
 import { authorizeFsPaths, readFile } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
 import { getLabsRoot } from '@/lib/pathUtils';
-import { extractDroppedFiles } from '@/lib/dragDropUtils';
+import { extractDroppedFiles, fileToDataUrl, DroppedFile } from '@/lib/dragDropUtils';
 import { pickFiles } from '@/lib/tauriFilePicker';
 import {
   Upload,
@@ -38,6 +38,8 @@ export default function ImageCompressor() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState('');
 
   // Settings
   const [format, setFormat] = useState<'jpeg' | 'webp' | 'png'>('jpeg');
@@ -61,33 +63,43 @@ export default function ImageCompressor() {
     initPath();
   }, []);
 
-  const handleFiles = useCallback(async (selectedFiles: FileList | File[]) => {
-    const newItems: FileItem[] = [];
-    
-    const readPromises = Array.from(selectedFiles).map((file) => {
-      return new Promise<void>((resolve) => {
-        if (!file.type.startsWith('image/')) {
-          resolve();
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-          newItems.push({
-            id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            file,
-            name: file.name,
-            size: file.size,
-            dataUrl: reader.result as string,
-            status: 'pending'
-          });
-          resolve();
-        };
-        reader.onerror = () => resolve();
-        reader.readAsDataURL(file);
-      });
-    });
+  const handleFiles = useCallback(async (selectedFiles: (File | DroppedFile)[]) => {
+    if (selectedFiles.length === 0) return;
+    setIsLoadingFiles(true);
+    setLoadingStatus(`正在读取 ${selectedFiles.length} 张图片...`);
 
-    await Promise.all(readPromises);
+    // Allow UI to render loading modal
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const newItems: FileItem[] = [];
+    let processed = 0;
+
+    for (const item of selectedFiles) {
+      const file = 'file' in item ? item.file : item;
+      const filePath = 'path' in item ? item.path : (file as any).path;
+      const fileName = item.name || file.name;
+      const ext = fileName.split('.').pop()?.toLowerCase() || '';
+
+      const isImage = file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(ext);
+      if (!isImage) continue;
+
+      try {
+        const dataUrl = await fileToDataUrl(file, filePath);
+        newItems.push({
+          id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          file,
+          name: fileName,
+          size: file.size,
+          dataUrl,
+          status: 'pending',
+        });
+      } catch (e) {
+        console.error('Failed to read image file:', fileName, e);
+      }
+
+      processed++;
+      setLoadingStatus(`正在解析图片 (${processed}/${selectedFiles.length})...`);
+    }
 
     if (newItems.length > 0) {
       setFiles((prev) => [...prev, ...newItems]);
@@ -98,6 +110,8 @@ export default function ImageCompressor() {
     } else {
       toast({ title: '未找到有效图片', variant: 'destructive' });
     }
+
+    setIsLoadingFiles(false);
   }, []);
 
   const handlePickFiles = useCallback(async () => {
@@ -106,9 +120,16 @@ export default function ImageCompressor() {
         multiple: true,
         extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
         filterName: '图片文件',
+        onSelected: (paths) => {
+          setIsLoadingFiles(true);
+          setLoadingStatus(`已选中 ${paths.length} 张图片，正在准备加载...`);
+        },
+        onProgress: (current, total) => {
+          setLoadingStatus(`正在读取图片 (${current}/${total})...`);
+        },
       });
       if (picked.length > 0) {
-        const newItems: FileItem[] = picked.map(p => ({
+        const newItems: FileItem[] = picked.map((p) => ({
           id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           file: p.file,
           name: p.file.name,
@@ -116,7 +137,7 @@ export default function ImageCompressor() {
           dataUrl: p.dataUrl,
           status: 'pending' as const,
         }));
-        setFiles(prev => [...prev, ...newItems]);
+        setFiles((prev) => [...prev, ...newItems]);
         toast({
           title: '图片已加载',
           description: `成功加载 ${newItems.length} 张图片`,
@@ -125,6 +146,8 @@ export default function ImageCompressor() {
     } catch (error) {
       console.error('Failed to pick files:', error);
       toast({ title: '选择图片失败', description: String(error), variant: 'destructive' });
+    } finally {
+      setIsLoadingFiles(false);
     }
   }, []);
 
@@ -152,8 +175,7 @@ export default function ImageCompressor() {
       toast({ title: '格式错误', description: '请拖入图片文件', variant: 'destructive' });
       return;
     }
-    const fileList = dropped.map((d) => d.file);
-    handleFiles(fileList);
+    handleFiles(dropped);
   };
 
   const removeFile = (id: string) => {
@@ -317,10 +339,24 @@ export default function ImageCompressor() {
     }
 
     setIsExporting(false);
-    toast({
-      title: '压缩完成',
-      description: `成功处理 ${successCount}/${files.length} 张图片`,
-    });
+    if (successCount === 0) {
+      toast({
+        title: '压缩失败',
+        description: `处理失败，成功 0/${files.length} 张图片`,
+        variant: 'destructive',
+      });
+    } else if (successCount < files.length) {
+      toast({
+        title: '部分处理失败',
+        description: `成功处理 ${successCount}/${files.length} 张图片`,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: '压缩完成',
+        description: `成功处理 ${successCount}/${files.length} 张图片`,
+      });
+    }
   };
 
   const formatSize = (bytes: number) => {
@@ -341,6 +377,16 @@ export default function ImageCompressor() {
           <div className="flex flex-col items-center gap-2 text-primary font-medium">
             <Upload className="h-10 w-10 animate-bounce" />
             <span>松开鼠标添加/压缩图片</span>
+          </div>
+        </div>
+      )}
+
+      {isLoadingFiles && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm transition-all select-none">
+          <div className="flex flex-col items-center gap-3 bg-card border border-border shadow-xl px-8 py-6 rounded-xl animate-in fade-in zoom-in-95 duration-200">
+            <Loader2 className="h-9 w-9 text-primary animate-spin" />
+            <div className="text-sm font-bold text-foreground">{loadingStatus || '正在加载图片...'}</div>
+            <div className="text-xs text-muted-foreground">请稍候，正在读取图片数据与缩略图</div>
           </div>
         </div>
       )}

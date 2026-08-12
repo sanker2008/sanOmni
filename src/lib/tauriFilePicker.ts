@@ -37,6 +37,10 @@ export interface PickerOptions {
   extensions?: string[];
   /** Filter display name shown in native dialog (default: "Images") */
   filterName?: string;
+  /** Callback fired immediately when user confirms selection in native dialog */
+  onSelected?: (paths: string[]) => void;
+  /** Callback fired as files are being read */
+  onProgress?: (current: number, total: number) => void;
 }
 
 export interface PickedFile {
@@ -59,6 +63,8 @@ export async function pickFiles(opts: PickerOptions = {}): Promise<PickedFile[]>
     multiple = false,
     extensions = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
     filterName = 'Images',
+    onSelected,
+    onProgress,
   } = opts;
 
   const selected = await open({
@@ -71,10 +77,17 @@ export async function pickFiles(opts: PickerOptions = {}): Promise<PickedFile[]>
   const paths = (Array.isArray(selected) ? selected : [selected]) as string[];
   if (paths.length === 0) return [];
 
+  // Notify immediately so caller can display loading UI before reading files
+  onSelected?.(paths);
+
+  // Yield to UI thread to allow React to paint the loading modal
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
   // Authorize FS access for the selected paths
   await authorizeFsPaths(paths);
 
   const results: PickedFile[] = [];
+  let index = 0;
 
   for (const filePath of paths) {
     try {
@@ -85,18 +98,22 @@ export async function pickFiles(opts: PickerOptions = {}): Promise<PickedFile[]>
       // Build File object
       const file = new File([bytes.buffer as ArrayBuffer], fileName, { type: mime });
 
-      // Build data URL
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const dataUrl = `data:${mime};base64,${btoa(binary)}`;
+      // Build data URL using Blob & FileReader
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (e) => reject(new Error(`Failed to generate data URL: ${e}`));
+        reader.readAsDataURL(blob);
+      });
 
       results.push({ file, path: filePath, dataUrl });
     } catch (error) {
       console.error(`[tauriFilePicker] Failed to read ${filePath}:`, error);
       // Skip this file, continue with others
     }
+    index++;
+    onProgress?.(index, paths.length);
   }
 
   return results;

@@ -1607,6 +1607,7 @@ export interface KnowledgeIndexResult {
   project: KnowledgeProject;
   indexed_files: number;
   skipped_files: number;
+  truncated: boolean;
   curated_entries: number;
 }
 
@@ -1614,6 +1615,27 @@ export interface KnowledgeWebCollectionImportResult {
   collection_name: string;
   imported_pages: number;
   skipped_pages: number;
+}
+
+export interface KnowledgeGraphNode {
+  id: string;
+  label: string;
+  node_type: "project" | "collection" | "entry";
+  entry_type?: string | null;
+  source?: string | null;
+}
+
+export interface KnowledgeGraphEdge {
+  source: string;
+  target: string;
+  relation_type: "contains";
+}
+
+export interface KnowledgeGraphResult {
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  total_entries: number;
+  truncated: boolean;
 }
 
 export const knowledgeApi = {
@@ -1631,6 +1653,10 @@ export const knowledgeApi = {
     entryUrl: string,
   ): Promise<KnowledgeWebCollectionImportResult> {
     return invoke("import_knowledge_web_collection", { projectId, collectionName, entryUrl });
+  },
+
+  getGraph(projectId: string): Promise<KnowledgeGraphResult> {
+    return invoke("get_knowledge_graph", { projectId });
   },
 
   search(

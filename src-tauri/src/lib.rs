@@ -250,6 +250,7 @@ pub fn run() {
             commands::knowledge::search_knowledge,
             commands::knowledge::get_knowledge_entry,
             commands::knowledge::create_knowledge_entry,
+            commands::knowledge_graph::get_knowledge_graph,
             commands::fs::migrate_directory,
             commands::fs::update_database_paths,
             commands::fs::check_directory_status,

@@ -1,6 +1,6 @@
 import { join } from "@tauri-apps/api/path";
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
-import { mkdir, writeFile } from '@/services/secureFs';
+import { mkdir, writeFile, authorizeFsPaths } from '@/services/secureFs';
 
 /**
  * Get the default export path.
@@ -15,6 +15,7 @@ export async function getDefaultExportPath(): Promise<string> {
  */
 export async function ensureDirectory(path: string): Promise<void> {
   try {
+    await authorizeFsPaths([path]);
     await mkdir(path, { recursive: true });
   } catch (e: any) {
     if (!String(e).includes('exists') && !String(e).includes('存在')) {

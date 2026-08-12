@@ -15,6 +15,7 @@ const MAX_INDEXED_FILES: usize = 2_000;
 const MAX_WEB_COLLECTION_PAGES: usize = 50;
 const MAX_WEB_PAGE_SIZE: usize = 2 * 1024 * 1024;
 const MAX_WEB_CRAWL_DEPTH: usize = 3;
+const MAX_WEB_CRAWL_QUEUE: usize = 500;
 
 struct CuratedKnowledgeEntry {
     key: &'static str,
@@ -33,7 +34,7 @@ const SANOMNI_CURATED_KNOWLEDGE: &[CuratedKnowledgeEntry] = &[
     CuratedKnowledgeEntry {
         key: "database-migrations",
         title: "数据库迁移：以 settings.db_version 做增量升级",
-        content: "结论\n数据库结构升级由 settings 表的 db_version 驱动。每个版本迁移完成后必须写回版本号；新安装会创建完整表结构，旧安装依次补齐迁移。sanKnow 的表和索引是 schema v5。\n\n何时查阅\n新增字段、数据表、索引或升级已有用户数据库时，按现有 run_migrations 模式扩展，不要只修改初始建表 SQL。\n\n主要来源\nsrc-tauri/src/database/mod.rs（get_db_version、run_migrations、v5）",
+        content: "结论\n数据库结构升级由 settings 表的 db_version 驱动。每个版本迁移完成后必须写回版本号；新安装会创建完整表结构，旧安装依次补齐迁移。sanKnow 的项目索引和手动记录来自 schema v5；网页文档集在 schema v6 增加来源 URL、文档集关联和索引。应用数据库还会继续执行后续业务域迁移，因此修改知识库时要按当前 db_version 的增量顺序处理。\n\n何时查阅\n新增字段、数据表、索引或升级已有用户数据库时，按现有 run_migrations 模式扩展，不要只修改初始建表 SQL。\n\n主要来源\nsrc-tauri/src/database/mod.rs（get_db_version、run_migrations、v5、v6）",
         source_path: "src-tauri/src/database/mod.rs",
     },
     CuratedKnowledgeEntry {
@@ -130,6 +131,7 @@ pub struct KnowledgeIndexResult {
     pub project: KnowledgeProject,
     pub indexed_files: usize,
     pub skipped_files: usize,
+    pub truncated: bool,
     pub curated_entries: usize,
 }
 
@@ -146,7 +148,12 @@ struct CrawledWebPage {
     content: String,
 }
 
-fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
+struct CollectedIndexableFiles {
+    files: Vec<PathBuf>,
+    truncated: bool,
+}
+
+pub(crate) fn get_connection(app_handle: &AppHandle) -> Result<Connection, String> {
     let default_app_data_dir = app_handle
         .path()
         .app_data_dir()
@@ -197,6 +204,69 @@ fn get_project(conn: &Connection, project_id: &str) -> Result<KnowledgeProject, 
     .map_err(|e| e.to_string())
 }
 
+fn upsert_knowledge_project(
+    transaction: &Transaction<'_>,
+    candidate_id: &str,
+    project_name: &str,
+    root_path: &str,
+    now: &str,
+) -> Result<String, String> {
+    transaction
+        .query_row(
+            "INSERT INTO knowledge_projects (id, name, root_path, last_indexed_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4, ?4)
+             ON CONFLICT(root_path) DO UPDATE SET
+               name = excluded.name,
+               last_indexed_at = excluded.last_indexed_at,
+               updated_at = excluded.updated_at
+             RETURNING id",
+            params![candidate_id, project_name, root_path, now],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())
+}
+
+fn upsert_knowledge_web_collection(
+    transaction: &Transaction<'_>,
+    candidate_id: &str,
+    project_id: &str,
+    collection_name: &str,
+    entry_url: &str,
+    now: &str,
+) -> Result<String, String> {
+    transaction
+        .query_row(
+            "INSERT INTO knowledge_web_collections (id, project_id, name, entry_url, last_crawled_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?5)
+             ON CONFLICT(project_id, entry_url) DO UPDATE SET
+               name = excluded.name,
+               last_crawled_at = excluded.last_crawled_at,
+               updated_at = excluded.updated_at
+             RETURNING id",
+            params![candidate_id, project_id, collection_name, entry_url, now],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())
+}
+
+fn clear_stale_project_sources(
+    transaction: &Transaction<'_>,
+    project_id: &str,
+    truncated: bool,
+) -> Result<(), String> {
+    if truncated {
+        return Ok(());
+    }
+
+    transaction
+        .execute(
+            "DELETE FROM knowledge_entries WHERE project_id = ?1 AND source_path IS NOT NULL",
+            [project_id],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn indexable_extension(path: &Path) -> Option<(&'static str, &'static str)> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     match extension.as_str() {
@@ -212,19 +282,17 @@ fn indexable_extension(path: &Path) -> Option<(&'static str, &'static str)> {
     }
 }
 
-fn collect_indexable_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+fn collect_indexable_files(root: &Path) -> Result<CollectedIndexableFiles, String> {
     let mut files = Vec::new();
     let mut pending = vec![root.to_path_buf()];
 
     while let Some(directory) = pending.pop() {
-        let entries = fs::read_dir(&directory)
+        let mut entries = fs::read_dir(&directory)
             .map_err(|e| format!("无法读取目录 {}: {}", directory.display(), e))?;
+        let mut entries = entries.flatten().collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.file_name());
 
-        for entry in entries.flatten() {
-            if files.len() >= MAX_INDEXED_FILES {
-                return Ok(files);
-            }
-
+        for entry in entries {
             let file_type = match entry.file_type() {
                 Ok(file_type) => file_type,
                 Err(_) => continue,
@@ -254,12 +322,23 @@ fn collect_indexable_files(root: &Path) -> Result<Vec<PathBuf>, String> {
                 .unwrap_or(u64::MAX)
                 <= MAX_INDEXED_FILE_SIZE
             {
+                if files.len() >= MAX_INDEXED_FILES {
+                    files.sort();
+                    return Ok(CollectedIndexableFiles {
+                        files,
+                        truncated: true,
+                    });
+                }
                 files.push(path);
             }
         }
     }
 
-    Ok(files)
+    files.sort();
+    Ok(CollectedIndexableFiles {
+        files,
+        truncated: false,
+    })
 }
 
 fn source_title(path: &Path, content: &str) -> String {
@@ -374,10 +453,44 @@ fn collection_scope_path(entry_url: &Url) -> String {
 }
 
 fn is_in_web_collection_scope(entry_url: &Url, candidate_url: &Url) -> bool {
-    entry_url.origin() == candidate_url.origin()
+    let same_host = entry_url
+        .host_str()
+        .zip(candidate_url.host_str())
+        .is_some_and(|(entry_host, candidate_host)| {
+            entry_host.eq_ignore_ascii_case(candidate_host)
+        });
+    let same_origin = entry_url.scheme() == candidate_url.scheme()
+        && entry_url.port_or_known_default() == candidate_url.port_or_known_default();
+    let same_host_https_upgrade = entry_url.scheme() == "http"
+        && candidate_url.scheme() == "https"
+        && entry_url.port() == candidate_url.port();
+
+    same_host
+        && (same_origin || same_host_https_upgrade)
         && candidate_url
             .path()
             .starts_with(&collection_scope_path(entry_url))
+}
+
+fn enqueue_web_collection_links(
+    entry_url: &Url,
+    links: impl IntoIterator<Item = Url>,
+    depth: usize,
+    pending: &mut VecDeque<(Url, usize)>,
+    queued_urls: &mut HashSet<String>,
+) {
+    for candidate_url in links {
+        if pending.len() >= MAX_WEB_CRAWL_QUEUE {
+            break;
+        }
+        if !is_in_web_collection_scope(entry_url, &candidate_url) {
+            continue;
+        }
+        let candidate_key = candidate_url.as_str().to_string();
+        if queued_urls.insert(candidate_key) {
+            pending.push_back((candidate_url, depth));
+        }
+    }
 }
 
 fn is_text_document(content_type: Option<&str>) -> bool {
@@ -540,15 +653,7 @@ async fn crawl_web_collection(
         if depth >= MAX_WEB_CRAWL_DEPTH {
             continue;
         }
-        for candidate_url in links {
-            if !is_in_web_collection_scope(&entry_url, &candidate_url) {
-                continue;
-            }
-            let candidate_key = candidate_url.as_str().to_string();
-            if queued_urls.insert(candidate_key) {
-                pending.push_back((candidate_url, depth + 1));
-            }
-        }
+        enqueue_web_collection_links(&entry_url, links, depth + 1, &mut pending, &mut queued_urls);
     }
 
     if pages.is_empty() {
@@ -604,34 +709,19 @@ pub async fn index_knowledge_project(
         .filter(|name| !name.is_empty())
         .unwrap_or(fallback_name);
 
-    let files = collect_indexable_files(&canonical_root)?;
+    let CollectedIndexableFiles { files, truncated } = collect_indexable_files(&canonical_root)?;
     let mut conn = get_connection(&app_handle)?;
     let now = Utc::now().to_rfc3339();
 
-    let existing_project_id = conn
-        .query_row(
-            "SELECT id FROM knowledge_projects WHERE root_path = ?1",
-            [&root_path],
-            |row| row.get::<_, String>(0),
-        )
-        .ok();
-    let project_id = existing_project_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
-    transaction
-        .execute(
-            "INSERT INTO knowledge_projects (id, name, root_path, last_indexed_at, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?4, ?4)
-             ON CONFLICT(root_path) DO UPDATE SET name = excluded.name, last_indexed_at = excluded.last_indexed_at, updated_at = excluded.updated_at",
-            params![project_id, project_name, root_path, now],
-        )
-        .map_err(|e| e.to_string())?;
-    transaction
-        .execute(
-            "DELETE FROM knowledge_entries WHERE project_id = ?1 AND source_path IS NOT NULL",
-            [&project_id],
-        )
-        .map_err(|e| e.to_string())?;
+    let project_id = upsert_knowledge_project(
+        &transaction,
+        &Uuid::new_v4().to_string(),
+        &project_name,
+        &root_path,
+        &now,
+    )?;
+    clear_stale_project_sources(&transaction, &project_id, truncated)?;
 
     let mut indexed_files = 0;
     let mut skipped_files = 0;
@@ -652,6 +742,15 @@ pub async fn index_knowledge_project(
             .unwrap_or(&path)
             .to_string_lossy()
             .replace('\\', "/");
+
+        if truncated {
+            transaction
+                .execute(
+                    "DELETE FROM knowledge_entries WHERE project_id = ?1 AND source_path = ?2",
+                    params![project_id, source_path],
+                )
+                .map_err(|e| e.to_string())?;
+        }
 
         transaction
             .execute(
@@ -684,6 +783,7 @@ pub async fn index_knowledge_project(
         project,
         indexed_files,
         skipped_files,
+        truncated,
         curated_entries,
     })
 }
@@ -715,27 +815,15 @@ pub async fn import_knowledge_web_collection(
 
     let mut conn = get_connection(&app_handle)?;
     get_project(&conn, &project_id)?;
-    let existing_collection_id = conn
-        .query_row(
-            "SELECT id FROM knowledge_web_collections WHERE project_id = ?1 AND entry_url = ?2",
-            params![project_id, entry_url_text],
-            |row| row.get::<_, String>(0),
-        )
-        .ok();
-    let collection_id = existing_collection_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
-    transaction
-        .execute(
-            "INSERT INTO knowledge_web_collections (id, project_id, name, entry_url, last_crawled_at, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?5)
-             ON CONFLICT(project_id, entry_url) DO UPDATE SET
-               name = excluded.name,
-               last_crawled_at = excluded.last_crawled_at,
-               updated_at = excluded.updated_at",
-            params![collection_id, project_id, collection_name, entry_url_text, now],
-        )
-        .map_err(|e| e.to_string())?;
+    let collection_id = upsert_knowledge_web_collection(
+        &transaction,
+        &Uuid::new_v4().to_string(),
+        &project_id,
+        &collection_name,
+        &entry_url_text,
+        &now,
+    )?;
     transaction
         .execute(
             "DELETE FROM knowledge_entries WHERE project_id = ?1 AND source_collection_id = ?2",
@@ -863,4 +951,198 @@ pub async fn create_knowledge_entry(
     .map_err(|e| e.to_string())?;
 
     get_knowledge_entry(app_handle, id).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    struct TemporaryDirectory(PathBuf);
+
+    impl TemporaryDirectory {
+        fn new() -> Self {
+            let path =
+                std::env::temp_dir().join(format!("sanomni-knowledge-test-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TemporaryDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn knowledge_test_connection() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE knowledge_projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                root_path TEXT NOT NULL UNIQUE,
+                last_indexed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE knowledge_web_collections (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                entry_url TEXT NOT NULL,
+                last_crawled_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(project_id, entry_url)
+            );
+            CREATE TABLE knowledge_entries (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                entry_type TEXT NOT NULL,
+                source_path TEXT
+            );
+            ",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn web_collection_scope_allows_an_http_entry_to_upgrade_to_https() {
+        let entry = Url::parse("http://docs.example.com/guide/").unwrap();
+        let redirected = Url::parse("https://docs.example.com/guide/start").unwrap();
+
+        assert!(is_in_web_collection_scope(&entry, &redirected));
+    }
+
+    #[test]
+    fn web_collection_queue_stays_bounded_when_a_page_has_many_links() {
+        let entry = Url::parse("https://docs.example.com/guide/").unwrap();
+        let links = (0..MAX_WEB_CRAWL_QUEUE + 50)
+            .map(|index| {
+                Url::parse(&format!("https://docs.example.com/guide/page-{}", index)).unwrap()
+            })
+            .collect::<Vec<_>>();
+        let mut pending = VecDeque::new();
+        let mut queued_urls = HashSet::new();
+
+        enqueue_web_collection_links(&entry, links, 1, &mut pending, &mut queued_urls);
+
+        assert_eq!(pending.len(), MAX_WEB_CRAWL_QUEUE);
+        assert_eq!(queued_urls.len(), MAX_WEB_CRAWL_QUEUE);
+    }
+
+    #[test]
+    fn project_index_collection_reports_truncation_and_sorts_paths() {
+        let directory = TemporaryDirectory::new();
+        for index in (0..=MAX_INDEXED_FILES).rev() {
+            fs::write(
+                directory.path().join(format!("document-{:04}.md", index)),
+                "# document",
+            )
+            .unwrap();
+        }
+
+        let collected = collect_indexable_files(directory.path()).unwrap();
+        let indexed_paths = collected
+            .files
+            .iter()
+            .map(|path| path.file_name().unwrap().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        let mut sorted_paths = indexed_paths.clone();
+        sorted_paths.sort();
+
+        assert!(collected.truncated);
+        assert_eq!(collected.files.len(), MAX_INDEXED_FILES);
+        assert_eq!(indexed_paths, sorted_paths);
+    }
+
+    #[test]
+    fn project_upsert_returns_the_persisted_id_after_a_unique_key_conflict() {
+        let mut conn = knowledge_test_connection();
+        let transaction = conn.transaction().unwrap();
+        let first_id = upsert_knowledge_project(
+            &transaction,
+            "project-first",
+            "Project",
+            "/tmp/project",
+            "2026-08-06T00:00:00Z",
+        )
+        .unwrap();
+        let conflicting_id = upsert_knowledge_project(
+            &transaction,
+            "project-second",
+            "Project",
+            "/tmp/project",
+            "2026-08-06T00:00:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(first_id, "project-first");
+        assert_eq!(conflicting_id, first_id);
+    }
+
+    #[test]
+    fn truncated_project_refresh_preserves_existing_file_sources() {
+        let mut conn = knowledge_test_connection();
+        conn.execute(
+            "INSERT INTO knowledge_entries (id, project_id, title, content, entry_type, source_path)
+             VALUES ('file-entry', 'project-1', 'File', 'content', '代码', 'src/old.rs')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO knowledge_entries (id, project_id, title, content, entry_type, source_path)
+             VALUES ('manual-entry', 'project-1', 'Note', 'content', '手动笔记', NULL)",
+            [],
+        )
+        .unwrap();
+        let transaction = conn.transaction().unwrap();
+
+        clear_stale_project_sources(&transaction, "project-1", true).unwrap();
+
+        let remaining_sources = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM knowledge_entries WHERE project_id = 'project-1' AND source_path IS NOT NULL",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(remaining_sources, 1);
+    }
+
+    #[test]
+    fn web_collection_upsert_returns_the_persisted_id_after_a_unique_key_conflict() {
+        let mut conn = knowledge_test_connection();
+        let transaction = conn.transaction().unwrap();
+        let first_id = upsert_knowledge_web_collection(
+            &transaction,
+            "collection-first",
+            "project-1",
+            "Official docs",
+            "https://docs.example.com/guide/",
+            "2026-08-06T00:00:00Z",
+        )
+        .unwrap();
+        let conflicting_id = upsert_knowledge_web_collection(
+            &transaction,
+            "collection-second",
+            "project-1",
+            "Official docs",
+            "https://docs.example.com/guide/",
+            "2026-08-06T00:00:00Z",
+        )
+        .unwrap();
+
+        assert_eq!(first_id, "collection-first");
+        assert_eq!(conflicting_id, first_id);
+    }
 }

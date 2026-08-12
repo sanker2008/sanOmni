@@ -3,14 +3,14 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useUIStore, useImageStore, type ImageWithRelations, type PromptGroup } from "@/stores";
 import { promptApi, imageApi } from "@/services/tauri";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X, ChevronLeft, ChevronRight, LayoutGrid, List, AlertTriangle, Activity, Loader2, Upload, Download } from "lucide-react";
+import { Sparkles, Plus, Trash2, Eye, RefreshCw, Pencil, Copy, Check, Search, X, ChevronLeft, ChevronRight, LayoutGrid, List, AlertTriangle, Activity, Loader2, Upload, Download, Image as ImageIcon } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { TemplateVariableEditor } from "./TemplateVariableEditor";
 import { SmartPromptRenderer } from "./SmartPromptRenderer";
@@ -1200,88 +1200,174 @@ export function PromptGroupsView() {
               </CardContent>
             </Card>
           ) : (
-            paginatedGroups.map((group) => (
-              <Card 
-                key={group.id} 
-                className={`transition-shadow hover:shadow-md cursor-pointer select-none flex flex-col ${viewMode === "grid" ? "h-full" : ""}`}
-                onDoubleClick={() => void openEditDialog(group.id)}
-              >
-                <CardHeader className="pb-3">
-                  <div className={`flex ${viewMode === "grid" ? "flex-col gap-2" : "items-start justify-between gap-3"}`}>
-                    <div className="min-w-0 flex-1">
-                      <CardTitle className={`font-medium ${viewMode === "grid" ? "line-clamp-3 text-sm" : "line-clamp-2 text-sm"}`}>
-                        {group.name ? (
-                          <span className="font-bold text-primary mr-2">{group.name}</span>
-                        ) : null}
-                        {group.prompt}
-                      </CardTitle>
-                      {group.description && (
-                        <CardDescription className="mt-1 text-xs">{group.description}</CardDescription>
+            paginatedGroups.map((group) => {
+              const images = groupImages.get(group.id) || [];
+              const firstImg = images[0];
+
+              if (viewMode === "grid") {
+                return (
+                  <Card 
+                    key={group.id} 
+                    className="transition-all hover:shadow-md cursor-pointer select-none flex flex-col h-full overflow-hidden group border border-border/60"
+                    onDoubleClick={() => void openEditDialog(group.id)}
+                  >
+                    {/* Cover Image Block */}
+                    <div className="relative aspect-[4/3] w-full bg-muted/30 overflow-hidden flex items-center justify-center border-b">
+                      {firstImg ? (
+                        <img
+                          src={convertFileSrc(firstImg.absolute_path)}
+                          alt={group.name || group.prompt}
+                          className={`w-full h-full ${showFullImage ? "object-contain" : "object-cover"} group-hover:scale-105 transition-transform duration-300`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const fullImages = images.map(img => allImages.find(i => i.id === img.id) || img);
+                            openImageViewer(firstImg.id, fullImages as any);
+                          }}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-muted-foreground/40 gap-1 p-2">
+                          <ImageIcon className="w-8 h-8 opacity-40" />
+                          <span className="text-xs">暂无示例图</span>
+                        </div>
                       )}
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <Badge variant="secondary" className="font-normal">
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <Badge variant="outline" className="bg-background/80 backdrop-blur-sm text-xs font-normal">
+                          {group.image_count} 张
+                        </Badge>
+                        {publishStatuses.get(group.id)?.is_published && (
+                          <Badge variant="default" className="bg-green-600/90 backdrop-blur-sm text-xs whitespace-nowrap">
+                            售卖中: ${publishStatuses.get(group.id)?.price}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    <CardHeader className="p-3 pb-2 space-y-1">
+                      <CardTitle className="font-medium line-clamp-1 text-sm flex items-center gap-1.5">
+                        {group.name ? (
+                          <span className="font-bold text-primary">{group.name}</span>
+                        ) : (
+                          <span className="line-clamp-1">{group.prompt}</span>
+                        )}
+                      </CardTitle>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="secondary" className="font-normal text-[11px] px-1.5 py-0">
                           {getPromptCategoryLabel(group.category)}
                         </Badge>
-                        {splitPromptTags(group.tags).slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="outline" className="font-normal">
+                        {splitPromptTags(group.tags).slice(0, 2).map((tag) => (
+                          <Badge key={tag} variant="outline" className="font-normal text-[11px] px-1.5 py-0">
                             {tag}
                           </Badge>
                         ))}
-                        {splitPromptTags(group.tags).length > 3 && (
-                          <Badge variant="outline" className="font-normal">
-                            +{splitPromptTags(group.tags).length - 3}
-                          </Badge>
-                        )}
                         {group.price !== undefined && group.price !== null && (
-                          <Badge variant="outline" className="font-normal">
+                          <Badge variant="outline" className="font-normal text-[11px] px-1.5 py-0">
                             {formatPromptPrice(group.price)}
                           </Badge>
                         )}
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-2 items-end">
-                      <Badge variant="outline">{group.image_count} 张</Badge>
-                      {publishStatuses.get(group.id)?.is_published && (
-                        <Badge variant="default" className="bg-green-600 hover:bg-green-700 whitespace-nowrap">
-                          售卖中: ${publishStatuses.get(group.id)?.price}
-                        </Badge>
+                    </CardHeader>
+
+                    <CardContent className="p-3 pt-0 flex flex-col flex-1 justify-between gap-3 text-xs">
+                      <div className="space-y-1.5">
+                        <p className="line-clamp-2 text-muted-foreground leading-relaxed">
+                          {group.prompt}
+                        </p>
+                        {group.negative_prompt && (
+                          <p className="line-clamp-1 text-muted-foreground/70 text-[11px]">
+                            <span className="font-medium">负面: </span>{group.negative_prompt}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t flex flex-col gap-2">
+                        <span className="text-[11px] text-muted-foreground">
+                          更新于 {new Date(group.updated_at).toLocaleDateString("zh-CN")}
+                        </span>
+                        <div className="flex gap-1 justify-between" onDoubleClick={(e) => e.stopPropagation()}>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => void handleCopyFullPrompt(group)} title="完整复制">
+                            {copiedGroupId === group.id ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                          </Button>
+                          <Button 
+                            variant={publishStatuses.get(group.id)?.is_published ? "outline" : "default"} 
+                            size="sm" 
+                            className={`h-7 px-2 text-xs ${!publishStatuses.get(group.id)?.is_published ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-green-600 text-green-600 hover:bg-green-50"}`}
+                            onClick={() => openPublishModal(group)} 
+                            title="商城管理"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                          </Button>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => void viewGroupDetails(group.id)} title="查看">
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => void openEditDialog(group.id)} title="编辑">
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-1.5 text-xs text-muted-foreground hover:text-destructive" onClick={() => void deleteGroup(group.id)} title="删除">
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              }
+
+              // List Mode (Left-Right Split Layout)
+              return (
+                <Card 
+                  key={group.id} 
+                  className="transition-all hover:shadow-md cursor-pointer select-none flex flex-row overflow-hidden group min-h-[160px] border border-border/60"
+                  onDoubleClick={() => void openEditDialog(group.id)}
+                >
+                  {/* Left Column: Hero Image Preview (180px - 224px width) */}
+                  <div className="w-44 sm:w-52 md:w-60 flex-shrink-0 bg-muted/20 border-r border-border/50 p-2.5 flex flex-col justify-between">
+                    <div 
+                      className="relative w-full aspect-square rounded-lg overflow-hidden bg-muted flex items-center justify-center cursor-pointer group/img shadow-inner"
+                      onClick={(e) => {
+                        if (!firstImg) return;
+                        e.stopPropagation();
+                        const fullImages = images.map(img => allImages.find(i => i.id === img.id) || img);
+                        openImageViewer(firstImg.id, fullImages as any);
+                      }}
+                    >
+                      {firstImg ? (
+                        <>
+                          <img
+                            src={convertFileSrc(firstImg.absolute_path)}
+                            alt={group.name || group.prompt}
+                            className={`w-full h-full ${showFullImage ? "object-contain" : "object-cover"} group-hover/img:scale-105 transition-transform duration-300`}
+                          />
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-xs gap-1 font-medium backdrop-blur-[1px]">
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>放大预览</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-muted-foreground/40 gap-1.5 p-2 text-center">
+                          <ImageIcon className="w-7 h-7 opacity-40" />
+                          <span className="text-[11px]">暂无示例图</span>
+                        </div>
                       )}
                     </div>
-                  </div>
-                </CardHeader>
 
-                <CardContent className="pt-0 flex flex-col flex-1">
-                  <div className="space-y-3 flex-1">
-                    {group.negative_prompt && (
-                      <div className="text-xs text-muted-foreground">
-                        <span className="font-medium">负面提示词：</span>
-                        <span className={`line-clamp-1`}>{group.negative_prompt}</span>
-                      </div>
-                    )}
-
-                    {/* 图片缩略图 */}
-                    {groupImages.get(group.id) && groupImages.get(group.id)!.length > 0 && (
-                      <div className="flex gap-2">
-                        {groupImages.get(group.id)!.slice(0, 4).map((img) => (
+                    {/* Thumbnail strip if multiple images exist */}
+                    {images.length > 1 && (
+                      <div className="flex gap-1.5 mt-2 overflow-x-auto pb-0.5 scrollbar-none">
+                        {images.slice(1, 4).map((img) => (
                           <div 
-                            key={img.id} 
-                            className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                            key={img.id}
+                            className="w-9 h-9 rounded overflow-hidden bg-muted flex-shrink-0 border border-border/60 hover:border-primary cursor-pointer hover:opacity-90 transition-all"
                             onClick={(e) => {
                               e.stopPropagation();
-                              const groupImgs = groupImages.get(group.id) || [];
-                              const fullImages = groupImgs.map(img => allImages.find(i => i.id === img.id) || img);
+                              const fullImages = images.map(i => allImages.find(x => x.id === i.id) || i);
                               openImageViewer(img.id, fullImages as any);
                             }}
                           >
-                            <img
-                               src={convertFileSrc(img.absolute_path)}
-                              alt=""
-                              className={`h-full w-full ${showFullImage ? "object-contain" : "object-cover"}`}
-                            />
+                            <img src={convertFileSrc(img.absolute_path)} alt="" className="w-full h-full object-cover" />
                           </div>
                         ))}
                         {group.image_count > 4 && (
-                          <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                          <div className="w-9 h-9 rounded bg-muted/80 flex items-center justify-center text-[10px] text-muted-foreground font-semibold flex-shrink-0 border">
                             +{group.image_count - 4}
                           </div>
                         )}
@@ -1289,46 +1375,113 @@ export function PromptGroupsView() {
                     )}
                   </div>
 
-                  <div className={`flex items-center justify-between mt-4 ${viewMode === "grid" ? "flex-col items-start gap-3" : ""}`}>
-                    <span className="text-xs text-muted-foreground">
-                      更新于 {new Date(group.updated_at).toLocaleDateString("zh-CN")}
-                    </span>
+                  {/* Right Column: Info & Actions */}
+                  <div className="flex-1 p-3.5 sm:p-4 flex flex-col justify-between min-w-0 gap-2">
+                    {/* Header: Title & Badges */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-sm sm:text-base text-foreground line-clamp-1">
+                            {group.name ? (
+                              <span className="text-primary font-bold mr-2">{group.name}</span>
+                            ) : null}
+                            <span className={group.name ? "text-muted-foreground font-normal text-xs" : "font-semibold"}>
+                              {group.prompt}
+                            </span>
+                          </h3>
+                          {group.description && (
+                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{group.description}</p>
+                          )}
+                        </div>
 
-                    <div className={`flex gap-2 ${viewMode === "grid" ? "w-full justify-between" : ""}`} onDoubleClick={(e) => e.stopPropagation()}>
-                      <Button variant="outline" size="sm" onClick={() => void handleCopyFullPrompt(group)} title="完整复制">
-                        {copiedGroupId === group.id ? (
-                          <Check className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
-                        ) : (
-                          <Copy className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <Badge variant="outline" className="text-xs font-normal">
+                            {group.image_count} 张
+                          </Badge>
+                          {publishStatuses.get(group.id)?.is_published && (
+                            <Badge variant="default" className="bg-green-600 hover:bg-green-700 whitespace-nowrap text-xs">
+                              售卖中: ${publishStatuses.get(group.id)?.price}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Category & Tag Pills */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <Badge variant="secondary" className="font-normal text-xs">
+                          {getPromptCategoryLabel(group.category)}
+                        </Badge>
+                        {splitPromptTags(group.tags).slice(0, 4).map((tag) => (
+                          <Badge key={tag} variant="outline" className="font-normal text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                        {splitPromptTags(group.tags).length > 4 && (
+                          <Badge variant="outline" className="font-normal text-xs">
+                            +{splitPromptTags(group.tags).length - 4}
+                          </Badge>
                         )}
-                        {viewMode === "list" && (copiedGroupId === group.id ? "已复制" : "完整复制")}
-                      </Button>
-                      <Button 
-                        variant={publishStatuses.get(group.id)?.is_published ? "outline" : "default"} 
-                        size="sm" 
-                        onClick={() => openPublishModal(group)} 
-                        title="商城管理"
-                        className={!publishStatuses.get(group.id)?.is_published ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-green-600 text-green-600 hover:bg-green-50"}
-                      >
-                        <Sparkles className={`h-3 w-3 ${viewMode === "list" ? "mr-1" : ""}`} />
-                        {viewMode === "list" && (publishStatuses.get(group.id)?.is_published ? "管理商城" : "一键上架")}
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => void viewGroupDetails(group.id)} title="查看">
-                        <Eye className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
-                        {viewMode === "list" && "查看"}
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => void openEditDialog(group.id)} title="编辑">
-                        <Pencil className={viewMode === "grid" ? "h-3 w-3" : "mr-1 h-3 w-3"} />
-                        {viewMode === "list" && "编辑"}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => void deleteGroup(group.id)} title="删除">
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                        {group.price !== undefined && group.price !== null && (
+                          <Badge variant="outline" className="font-normal text-xs">
+                            {formatPromptPrice(group.price)}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Middle: Prompt Content & Negative Prompt */}
+                    <div className="space-y-1.5 my-1">
+                      <div className="text-xs sm:text-sm text-foreground/90 font-normal line-clamp-2 leading-relaxed bg-muted/30 p-2.5 rounded-md border border-border/40">
+                        <span className="font-semibold text-[11px] text-primary/80 mr-2 uppercase tracking-wider select-none">Prompt</span>
+                        {group.prompt}
+                      </div>
+
+                      {group.negative_prompt && (
+                        <div className="text-xs text-muted-foreground line-clamp-1 px-1">
+                          <span className="font-medium text-muted-foreground/80 mr-1">负面提示词：</span>
+                          <span>{group.negative_prompt}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bottom: Timestamp & Action Buttons */}
+                    <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
+                      <span className="text-xs text-muted-foreground">
+                        更新于 {new Date(group.updated_at).toLocaleDateString("zh-CN")}
+                      </span>
+
+                      <div className="flex items-center gap-2" onDoubleClick={(e) => e.stopPropagation()}>
+                        <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs gap-1" onClick={() => void handleCopyFullPrompt(group)} title="完整复制">
+                          {copiedGroupId === group.id ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                          <span>{copiedGroupId === group.id ? "已复制" : "完整复制"}</span>
+                        </Button>
+                        <Button 
+                          variant={publishStatuses.get(group.id)?.is_published ? "outline" : "default"} 
+                          size="sm" 
+                          className={`h-8 px-2.5 text-xs gap-1 ${!publishStatuses.get(group.id)?.is_published ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-green-600 text-green-600 hover:bg-green-50"}`}
+                          onClick={() => openPublishModal(group)} 
+                          title="商城管理"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          <span>{publishStatuses.get(group.id)?.is_published ? "管理商城" : "一键上架"}</span>
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs gap-1" onClick={() => void viewGroupDetails(group.id)} title="查看">
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>查看</span>
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs gap-1" onClick={() => void openEditDialog(group.id)} title="编辑">
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span>编辑</span>
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => void deleteGroup(group.id)} title="删除">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))
+                </Card>
+              );
+            })
           )}
         </div>
       </ScrollArea>
