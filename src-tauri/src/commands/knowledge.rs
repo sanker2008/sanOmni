@@ -287,7 +287,7 @@ fn collect_indexable_files(root: &Path) -> Result<CollectedIndexableFiles, Strin
     let mut pending = vec![root.to_path_buf()];
 
     while let Some(directory) = pending.pop() {
-        let mut entries = fs::read_dir(&directory)
+        let entries = fs::read_dir(&directory)
             .map_err(|e| format!("无法读取目录 {}: {}", directory.display(), e))?;
         let mut entries = entries.flatten().collect::<Vec<_>>();
         entries.sort_by_key(|entry| entry.file_name());

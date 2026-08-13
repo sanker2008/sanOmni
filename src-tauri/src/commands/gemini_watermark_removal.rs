@@ -175,8 +175,8 @@ fn collect_active_pixels(alpha_map: &[f32], size: u32) -> Vec<ActivePixel> {
 fn search_margin(width: u32, height: u32, wm_size: u32) -> (u32, u32) {
     let max_x = width.saturating_sub(wm_size);
     let max_y = height.saturating_sub(wm_size);
-    let margin_x = ((width as f32 * 0.16).round() as u32).clamp(128, 384);
-    let margin_y = ((height as f32 * 0.25).round() as u32).clamp(128, 384);
+    let margin_x = ((width as f32 * 0.25).round() as u32).clamp(288, 512);
+    let margin_y = ((height as f32 * 0.25).round() as u32).clamp(288, 512);
     (margin_x.min(max_x), margin_y.min(max_y))
 }
 
@@ -408,36 +408,51 @@ fn find_best_watermark_match(
 
 fn known_profile_candidates(width: u32, height: u32) -> Vec<KnownWatermarkProfile> {
     let mut candidates = Vec::new();
+    let max_dim = width.max(height);
 
-    let new_profile = if width > 1024 && height > 1024 {
-        KnownWatermarkProfile {
+    if max_dim > 1024 {
+        candidates.push(KnownWatermarkProfile {
             size: 96,
             margin: 192,
             alpha_variant: AlphaMapVariant::GeminiV2_20260520,
-        }
-    } else {
-        KnownWatermarkProfile {
+        });
+        candidates.push(KnownWatermarkProfile {
             size: 48,
             margin: 96,
             alpha_variant: AlphaMapVariant::LegacyScale60,
-        }
-    };
-    candidates.push(new_profile);
-
-    let legacy_profile = if width > 1024 && height > 1024 {
-        KnownWatermarkProfile {
+        });
+        candidates.push(KnownWatermarkProfile {
             size: 96,
             margin: 64,
             alpha_variant: AlphaMapVariant::Legacy,
-        }
-    } else {
-        KnownWatermarkProfile {
+        });
+        candidates.push(KnownWatermarkProfile {
             size: 48,
             margin: 32,
             alpha_variant: AlphaMapVariant::Legacy,
-        }
-    };
-    candidates.push(legacy_profile);
+        });
+    } else {
+        candidates.push(KnownWatermarkProfile {
+            size: 48,
+            margin: 96,
+            alpha_variant: AlphaMapVariant::LegacyScale60,
+        });
+        candidates.push(KnownWatermarkProfile {
+            size: 48,
+            margin: 32,
+            alpha_variant: AlphaMapVariant::Legacy,
+        });
+        candidates.push(KnownWatermarkProfile {
+            size: 96,
+            margin: 192,
+            alpha_variant: AlphaMapVariant::GeminiV2_20260520,
+        });
+        candidates.push(KnownWatermarkProfile {
+            size: 96,
+            margin: 64,
+            alpha_variant: AlphaMapVariant::Legacy,
+        });
+    }
 
     candidates
 }
@@ -492,14 +507,18 @@ fn find_known_profile_match(
 }
 
 fn fallback_watermark_match(width: u32, height: u32) -> Result<GeminiWatermarkMatch, String> {
-    let is_large = width > 1024 && height > 1024;
-    let (fallback_size, margin) = if is_large { (96, 64) } else { (48, 32) };
+    let is_large = width.max(height) > 1024;
+    let (fallback_size, margin, variant) = if is_large {
+        (96, 192, AlphaMapVariant::GeminiV2_20260520)
+    } else {
+        (48, 32, AlphaMapVariant::Legacy)
+    };
     Ok(GeminiWatermarkMatch {
         size: fallback_size,
         x: width.saturating_sub(fallback_size).saturating_sub(margin),
         y: height.saturating_sub(fallback_size).saturating_sub(margin),
-        alpha_map: load_alpha_map(fallback_size, AlphaMapVariant::Legacy)?,
-        alpha_variant: AlphaMapVariant::Legacy,
+        alpha_map: load_alpha_map(fallback_size, variant)?,
+        alpha_variant: variant,
         score: -1.0,
         known_profile: false,
     })
@@ -928,5 +947,49 @@ mod tests {
         if let Some(candidate) = detected {
             assert!(candidate.score < WATERMARK_DETECTION_THRESHOLD);
         }
+    }
+
+    #[test]
+    fn detects_known_gemini_tall_image_profile() {
+        let mut img = RgbaImage::from_pixel(704, 5856, Rgba([0, 5, 3, 255]));
+        let expected_size = 96;
+        let expected_x = 704 - expected_size - 192;
+        let expected_y = 5856 - expected_size - 192;
+        composite_watermark(
+            &mut img,
+            expected_size,
+            expected_x,
+            expected_y,
+            AlphaMapVariant::GeminiV2_20260520,
+        );
+
+        let detected = find_known_profile_match(&img).unwrap().unwrap();
+        assert!(detected.known_profile);
+        assert_eq!(detected.size, expected_size);
+        assert_eq!(detected.x, expected_x);
+        assert_eq!(detected.y, expected_y);
+        assert_eq!(detected.alpha_variant, AlphaMapVariant::GeminiV2_20260520);
+    }
+
+    #[test]
+    fn detects_known_gemini_wide_image_profile() {
+        let mut img = RgbaImage::from_pixel(2560, 800, Rgba([0, 5, 3, 255]));
+        let expected_size = 96;
+        let expected_x = 2560 - expected_size - 192;
+        let expected_y = 800 - expected_size - 192;
+        composite_watermark(
+            &mut img,
+            expected_size,
+            expected_x,
+            expected_y,
+            AlphaMapVariant::GeminiV2_20260520,
+        );
+
+        let detected = find_known_profile_match(&img).unwrap().unwrap();
+        assert!(detected.known_profile);
+        assert_eq!(detected.size, expected_size);
+        assert_eq!(detected.x, expected_x);
+        assert_eq!(detected.y, expected_y);
+        assert_eq!(detected.alpha_variant, AlphaMapVariant::GeminiV2_20260520);
     }
 }

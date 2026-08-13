@@ -1431,9 +1431,11 @@ export function PromptGroupsView() {
 
                     {/* Middle: Prompt Content & Negative Prompt */}
                     <div className="space-y-1.5 my-1">
-                      <div className="text-xs sm:text-sm text-foreground/90 font-normal line-clamp-2 leading-relaxed bg-muted/30 p-2.5 rounded-md border border-border/40">
-                        <span className="font-semibold text-[11px] text-primary/80 mr-2 uppercase tracking-wider select-none">Prompt</span>
-                        {group.prompt}
+                      <div className="bg-muted/30 p-2.5 rounded-md border border-border/40">
+                        <p className="text-xs sm:text-sm text-foreground/90 font-normal line-clamp-2 leading-relaxed">
+                          <span className="font-semibold text-[11px] text-primary/80 mr-2 uppercase tracking-wider select-none">Prompt</span>
+                          {group.prompt}
+                        </p>
                       </div>
 
                       {group.negative_prompt && (

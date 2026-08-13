@@ -41,14 +41,32 @@ export default function SlicerCanvas({
 
   // Recalculate rendered image dimensions to maintain exact mapping scale
   const updateDisplayedSize = useCallback(() => {
-    if (imageRef.current) {
+    if (canvasParentRef.current && originalWidth > 0 && originalHeight > 0) {
+      const parent = canvasParentRef.current;
+      const padding = 48; // p-6 padding (24px on each side)
+      const availW = Math.max(100, parent.clientWidth - padding);
+      const availH = Math.max(100, parent.clientHeight - padding);
+
+      const aspect = originalWidth / originalHeight;
+
+      let fitW = availW;
+      let fitH = availW / aspect;
+
+      if (fitH > availH) {
+        fitH = availH;
+        fitW = availH * aspect;
+      }
+
+      setBaseSize({ width: fitW, height: fitH });
+      setDisplayedSize({ width: fitW, height: fitH });
+    } else if (imageRef.current) {
       const rect = imageRef.current.getBoundingClientRect();
-      setDisplayedSize({ width: rect.width, height: rect.height });
-      if (zoom === 1.0) {
+      if (rect.width > 0 && rect.height > 0) {
         setBaseSize({ width: rect.width, height: rect.height });
+        setDisplayedSize({ width: rect.width, height: rect.height });
       }
     }
-  }, [zoom]);
+  }, [originalWidth, originalHeight]);
 
   // Reset zoom on source change
   useEffect(() => {
@@ -181,8 +199,11 @@ export default function SlicerCanvas({
     setTimeout(updateDisplayedSize, 50);
   };
 
-  const currentWidth = zoom !== 1.0 ? baseSize.width * zoom : displayedSize.width;
-  const currentHeight = zoom !== 1.0 ? baseSize.height * zoom : displayedSize.height;
+  const activeBaseWidth = baseSize.width > 0 ? baseSize.width : displayedSize.width;
+  const activeBaseHeight = baseSize.height > 0 ? baseSize.height : displayedSize.height;
+
+  const currentWidth = activeBaseWidth * zoom;
+  const currentHeight = activeBaseHeight * zoom;
 
   const scaleX = originalWidth > 0 ? currentWidth / originalWidth : 1;
   const scaleY = originalHeight > 0 ? currentHeight / originalHeight : 1;
@@ -289,38 +310,18 @@ export default function SlicerCanvas({
         {imageSrc ? (
           <div
             ref={containerRef}
-            className="relative shadow-2xl border border-border/50 transition-all duration-200"
-            style={
-              zoom !== 1
-                ? {
-                    width: baseSize.width * zoom,
-                    height: baseSize.height * zoom,
-                  }
-                : {
-                    maxHeight: '85vh',
-                    maxWidth: '90%',
-                  }
-            }
+            className="relative shadow-2xl border border-border/50 transition-all duration-200 shrink-0"
+            style={{
+              width: currentWidth > 0 ? currentWidth : undefined,
+              height: currentHeight > 0 ? currentHeight : undefined,
+            }}
           >
             {/* Main Slicer Image */}
             <img
               ref={imageRef}
               src={imageSrc}
               onLoad={handleImageLoad}
-              className="block object-contain pointer-events-none select-none"
-              style={
-                zoom !== 1
-                  ? {
-                      width: '100%',
-                      height: '100%',
-                      maxWidth: 'none',
-                      maxHeight: 'none',
-                    }
-                  : {
-                      maxHeight: '85vh',
-                      maxWidth: '100%',
-                    }
-              }
+              className="block w-full h-full object-fill pointer-events-none select-none"
               alt="Slicing Source"
             />
 
@@ -328,7 +329,6 @@ export default function SlicerCanvas({
             {currentWidth > 0 && currentHeight > 0 && (
               <div
                 className="absolute inset-0 overflow-hidden pointer-events-none"
-                style={{ width: currentWidth, height: currentHeight }}
               >
                 {/* 1. Gutter Overlay Indicators (Discarded Spaces) */}
                 {gutterOverlays.map((gutter) => {

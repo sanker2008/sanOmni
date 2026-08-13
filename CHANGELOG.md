@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-13
+
+### Added
+- sanLabs 无限画布自定义工作流 (Workflow Canvas Editor)：在 sanLabs 工具箱中新增“自定义工作流”功能。
+- 节点化处理适配器 (Workflow Adapters)：将 Gemini 水印修复、图片压缩、高级抠图 Pro、PNG 转 SVG、图片切割、动图拆帧、格式转换 7 个内置工具包装为独立节点算子。
+- 点阵无限画布 (Infinite Canvas)：支持滚轮以光标为中心缩放 (15%-300%)、按住拖拽平移、输出端口拖拽贝塞尔曲线连接目标输入端口。
+- 单节点独立运行 (Single Node Execution)：支持点击节点 Header 上的 ▶ 按钮单独运行该节点算子，自动追溯前置依赖输出。
+- DAG 图算执行引擎 (`engine.ts`)：基于拓扑排序顺序执行图算管道，实时在节点卡片上展示 Processing 动画、Completed 绿勾、耗时与结果预览图。
+- 工作流持久化：支持保存项目工程 (`workflows.json`)，项目新建、载入、重命名、一键自动网格排布与导出结果管理。
+
 ## [1.5.1] - 2026-08-12
 
 ### Added

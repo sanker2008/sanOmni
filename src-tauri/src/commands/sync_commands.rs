@@ -306,6 +306,7 @@ fn snapshot_table_reports(
     ))
 }
 
+#[allow(dead_code)]
 pub(crate) fn snapshot_missing_local_count(
     conn: &Connection,
     snapshot: &serde_json::Value,

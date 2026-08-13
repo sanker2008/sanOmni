@@ -22,6 +22,7 @@ import {
   Lightbulb,
   Film,
   FolderKanban,
+  GitBranch,
 } from 'lucide-react';
 import {
   Dialog,
@@ -33,6 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 
 const LabsMediaManager = lazy(() => import('./media-manager/LabsMediaManager'));
+const CustomWorkflow = lazy(() => import('./custom-workflow/CustomWorkflow'));
 const ProductImageMaker = lazy(() => import('./product-image-maker/ProductImageMaker'));
 const ImageSlicer = lazy(() => import('./image-slicer/ImageSlicer'));
 const AiImageEditor = lazy(() => import('./ai-image-editor/AiImageEditor'));
@@ -75,6 +77,23 @@ const LAB_TOOLS: LabTool[] = [
       '4. 支持网格缩略图、列表和工具分组三种视图模式自由切换。',
       '5. 点击缩略图可放大预览图片或直接播放视频；支持一键定位在系统文件夹中打开、复制路径及批量删除。'
     ]
+  },
+  {
+    id: 'custom-workflow',
+    name: '自定义工作流',
+    description: '将多个工具串联为自动化处理管道',
+    icon: <GitBranch className="w-4 h-4" />,
+    component: CustomWorkflow,
+    available: true,
+    instructions: [
+      '1. 点击【新建工作流】创建一个空白工作流。',
+      '2. 在编辑器中点击【添加节点】，从列表中选择要加入管道的工具（如 Gemini 水印修复、图片压缩等）。',
+      '3. 每个节点可以展开配置面板，调整该工具的处理参数。',
+      '4. 使用上下箭头调整节点执行顺序。第一个节点的输出会自动传给第二个节点作为输入。',
+      '5. 编辑完成后点击【保存】，工作流会出现在列表中以供复用。',
+      '6. 在列表中选择一个工作流，点击【运行】，拖入图片即可一键执行整个管道。',
+      '7. 执行过程中可以看到每个节点的处理进度和中间结果预览。',
+    ],
   },
   {
     id: 'gif-decomposer',
