@@ -222,6 +222,7 @@ pub fn run() {
             commands::works::upload_work_cover,
             commands::works::delete_work_cover,
             commands::works::upload_work_image,
+            commands::works::upload_work_image_from_path,
             commands::works::get_work_images,
             commands::works::set_work_image_as_cover,
             commands::works::delete_work_image,

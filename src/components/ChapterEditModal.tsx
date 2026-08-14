@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Image as ImageIcon, Users } from "lucide-react";
+import { Check, Image as ImageIcon, Users, Film } from "lucide-react";
+import { isVideoFile } from "@/lib/mediaUtils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -234,14 +235,16 @@ export default function ChapterEditModal({ workId, chapter, workImages, open, on
         <div className="rounded-lg border p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <ImageIcon className="w-4 h-4 text-primary" />
-            本章关联图片
+            本章关联素材 (图片/视频)
           </div>
           {workImages.length === 0 ? (
-            <p className="text-xs text-muted-foreground">作品图片库还没有图片。请先在作品详情左侧添加概念图、分镜或剧照。</p>
+            <p className="text-xs text-muted-foreground">作品素材库还没有素材。请先在作品详情左侧添加概念图、分镜、剧照或视频。</p>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
               {workImages.map((image) => {
                 const selected = selectedImageIds.includes(image.id);
+                const isVideo = isVideoFile(image.file_path);
+                const mediaSrc = `${convertFileSrc(image.file_path)}?t=${new Date(image.updated_at).getTime()}`;
                 return (
                   <label key={image.id} className={`group relative cursor-pointer overflow-hidden rounded-md border ${selected ? "border-primary ring-1 ring-primary/40" : "border-border"}`}>
                     <input
@@ -250,15 +253,29 @@ export default function ChapterEditModal({ workId, chapter, workImages, open, on
                       checked={selected}
                       onChange={() => toggleImage(image.id)}
                     />
-                    <img
-                      src={`${convertFileSrc(image.file_path)}?t=${new Date(image.updated_at).getTime()}`}
-                      alt={image.original_name || "作品图片"}
-                      className="aspect-square w-full object-cover"
-                    />
-                    <span className="absolute inset-x-0 bottom-0 truncate bg-background/90 px-2 py-1 text-[10px] text-foreground">
-                      {image.is_cover ? "封面 · " : ""}{image.original_name || "作品图片"}
+                    {isVideo ? (
+                      <div className="relative aspect-square w-full bg-black flex items-center justify-center">
+                        <video
+                          src={mediaSrc}
+                          className="h-full w-full object-cover opacity-85"
+                          muted
+                          preload="metadata"
+                        />
+                        <span className="absolute left-1 top-1 inline-flex items-center gap-0.5 rounded bg-black/75 px-1 py-0.5 text-[9px] font-medium text-white shadow-sm z-10">
+                          <Film className="h-2.5 w-2.5 text-sky-400" /> 视频
+                        </span>
+                      </div>
+                    ) : (
+                      <img
+                        src={mediaSrc}
+                        alt={image.original_name || "作品图片"}
+                        className="aspect-square w-full object-cover"
+                      />
+                    )}
+                    <span className="absolute inset-x-0 bottom-0 truncate bg-background/90 px-2 py-1 text-[10px] text-foreground z-10">
+                      {image.is_cover ? "封面 · " : ""}{image.original_name || (isVideo ? "作品视频" : "作品图片")}
                     </span>
-                    <span className={`absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-80"}`}>
+                    <span className={`absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-opacity z-20 ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-80"}`}>
                       <Check className="h-3 w-3" />
                     </span>
                   </label>

@@ -104,8 +104,9 @@ fn resolve_relative_paths_json(
 fn normalize_image_extension(extension: &str) -> Result<String, String> {
     let normalized = extension.trim().trim_start_matches('.').to_ascii_lowercase();
     match normalized.as_str() {
-        "png" | "jpg" | "jpeg" | "webp" | "gif" | "avif" => Ok(normalized),
-        _ => Err("不支持的图片格式".to_string()),
+        "png" | "jpg" | "jpeg" | "webp" | "gif" | "avif" | "bmp" | "tiff" | "svg"
+        | "mp4" | "webm" | "mov" | "m4v" | "avi" | "mkv" => Ok(normalized),
+        _ => Err("不支持的媒体格式".to_string()),
     }
 }
 
@@ -746,6 +747,80 @@ pub async fn upload_work_image(
         original_name.as_deref(),
         false,
     )
+}
+
+#[tauri::command]
+pub async fn upload_work_image_from_path(
+    app_handle: AppHandle,
+    work_id: String,
+    source_path: String,
+    original_name: Option<String>,
+) -> Result<String, String> {
+    let base_app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let app_data_dir = crate::commands::get_works_root_from_handle(&app_handle, &base_app_data_dir);
+    let conn = get_connection(&app_handle)?;
+    let src_path = std::path::Path::new(&source_path);
+    let ext = src_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    let extension = normalize_image_extension(ext)?;
+
+    let path_ident: String = conn
+        .query_row(
+            "SELECT path FROM works WHERE id = ?1 AND deleted_at IS NULL",
+            params![work_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| "作品不存在或已删除".to_string())?;
+    let image_id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let sort_order: i32 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1
+             FROM work_images WHERE work_id = ?1 AND deleted_at IS NULL",
+            params![work_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let image_dir = app_data_dir.join("works").join(&path_ident).join("images");
+    std::fs::create_dir_all(&image_dir).map_err(|e| e.to_string())?;
+    let filename = format!("{}.{}", image_id, extension);
+    let absolute_path = image_dir.join(&filename);
+
+    std::fs::copy(src_path, &absolute_path).map_err(|e| e.to_string())?;
+    let relative_path = format!("works/{}/images/{}", path_ident, filename);
+
+    let display_name = original_name
+        .or_else(|| src_path.file_name().and_then(|n| n.to_str()).map(String::from));
+
+    conn.execute(
+        "INSERT INTO work_images
+         (id, work_id, file_path, original_name, is_cover, sort_order, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7)",
+        params![
+            image_id,
+            work_id,
+            relative_path,
+            display_name.as_deref().map(str::trim).filter(|name| !name.is_empty()),
+            sort_order,
+            now,
+            now,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE works SET updated_at = ?1 WHERE id = ?2",
+        params![now, work_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(image_id)
 }
 
 #[tauri::command]

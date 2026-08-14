@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/useToast";
-import { ArrowLeft, Edit, Plus, Users, Film, Calendar, User, Building, Trash2, FolderOpen, Minimize, Loader2, RefreshCw, ImagePlus, Star } from "lucide-react";
+import { ArrowLeft, Edit, Plus, Users, Film, Calendar, User, Building, Trash2, FolderOpen, Minimize, Loader2, RefreshCw, ImagePlus, Star, Play, Maximize2 } from "lucide-react";
 import WorkEditModal from "./WorkEditModal";
 import CharacterEditModal from "./CharacterEditModal";
 import ConfirmDialog from "./ConfirmDialog";
 import NarrativeChaptersPanel from "./NarrativeChaptersPanel";
 import { pickFiles } from "@/lib/tauriFilePicker";
+import { isVideoFile, ALL_MEDIA_EXTENSIONS } from "@/lib/mediaUtils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 
 interface WorkDetailViewProps {
@@ -79,6 +81,7 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<WorkImage | null>(null);
   const [isDeletingImage, setIsDeletingImage] = useState(false);
+  const [activeVideo, setActiveVideo] = useState<{ url: string; title: string } | null>(null);
   
   // Drag and drop sorting states
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -161,8 +164,8 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
 
     const picked = await pickFiles({
       multiple: true,
-      extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
-      filterName: "作品图片",
+      extensions: ALL_MEDIA_EXTENSIONS,
+      filterName: "作品素材 (图片/视频)",
     });
     if (picked.length === 0) return;
 
@@ -170,19 +173,35 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
     setIsUploadingImages(true);
     try {
       const { convertFileToWebp } = await import("@/lib/webpConverter");
-      const { getWorkById, uploadWorkImage } = await import("@/services/tauri");
-      await Promise.all(picked.map(async ({ file }) => {
-        const webpFile = await convertFileToWebp(file);
-        const imageData = Array.from(new Uint8Array(await webpFile.arrayBuffer()));
-        await uploadWorkImage(workId, imageData, "webp", file.name);
+      const { getWorkById, uploadWorkImage, uploadWorkImageFromPath } = await import("@/services/tauri");
+      await Promise.all(picked.map(async ({ file, path }) => {
+        if (path) {
+          if (isVideoFile(file.name)) {
+            await uploadWorkImageFromPath(workId, path, file.name);
+          } else {
+            const webpFile = await convertFileToWebp(file);
+            const imageData = Array.from(new Uint8Array(await webpFile.arrayBuffer()));
+            await uploadWorkImage(workId, imageData, "webp", file.name);
+          }
+        } else {
+          if (isVideoFile(file.name)) {
+            const fileData = Array.from(new Uint8Array(await file.arrayBuffer()));
+            const ext = file.name.split('.').pop()?.toLowerCase() || 'mp4';
+            await uploadWorkImage(workId, fileData, ext, file.name);
+          } else {
+            const webpFile = await convertFileToWebp(file);
+            const imageData = Array.from(new Uint8Array(await webpFile.arrayBuffer()));
+            await uploadWorkImage(workId, imageData, "webp", file.name);
+          }
+        }
       }));
       const refreshedWork = await getWorkById(workId);
       await Promise.all([fetchWorks(), refreshWorkImages(workId)]);
       selectWork(refreshedWork);
-      toast({ title: "图片已添加", description: `已加入 ${picked.length} 张作品图片，可在章节中关联使用` });
+      toast({ title: "素材已添加", description: `已加入 ${picked.length} 个作品素材，可在章节中关联使用` });
     } catch (error) {
-      console.error("Failed to upload work images:", error);
-      toast({ title: "上传失败", description: "无法添加作品图片，请重试", variant: "destructive" });
+      console.error("Failed to upload work media:", error);
+      toast({ title: "上传失败", description: "无法添加作品素材，请重试", variant: "destructive" });
     } finally {
       setIsUploadingImages(false);
     }
@@ -382,19 +401,19 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
                   <div>
                     <h2 className="flex items-center gap-2 text-sm font-semibold">
                       <ImagePlus className="h-4 w-4 text-primary" />
-                      作品图片
+                      作品素材
                       <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-normal">{workImages.length}</Badge>
                     </h2>
-                    <p className="mt-1 text-[11px] text-muted-foreground">可复用于不同章节</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">图片与视频可复用于不同章节</p>
                   </div>
                   <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={handleUploadWorkImages} disabled={isUploadingImages}>
                     <ImagePlus className={`h-3.5 w-3.5 ${isUploadingImages ? "animate-pulse" : ""}`} />
-                    {isUploadingImages ? "添加中…" : "添加图片"}
+                    {isUploadingImages ? "添加中…" : "添加图片/视频"}
                   </Button>
                 </div>
 
                 {isLoadingWorkImages ? (
-                  <div className="grid grid-cols-3 gap-2" aria-busy="true" aria-label="正在加载作品图片">
+                  <div className="grid grid-cols-3 gap-2" aria-busy="true" aria-label="正在加载作品素材">
                     {Array.from({ length: 3 }).map((_, index) => <div key={index} className="aspect-square animate-pulse rounded-lg bg-muted" />)}
                   </div>
                 ) : workImages.length === 0 ? (
@@ -404,48 +423,92 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
                     className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed px-4 py-7 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
                   >
                     <ImagePlus className="mb-2 h-5 w-5" />
-                    添加概念图、分镜或剧照
+                    添加概念图、分镜、剧照或视频
                   </button>
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
-                    {workImages.map((image) => (
-                      <div key={image.id} className="group/image relative aspect-square overflow-hidden rounded-lg border bg-muted">
-                        <img
-                          src={`${convertFileSrc(image.file_path)}?t=${new Date(image.updated_at).getTime()}`}
-                          alt={image.original_name || "作品图片"}
-                          className="h-full w-full object-cover"
-                        />
-                        {image.is_cover && (
-                          <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium shadow-sm">
-                            <Star className="h-3 w-3 fill-amber-400 text-amber-500" /> 封面
-                          </span>
-                        )}
-                        <div className="absolute inset-x-1.5 bottom-1.5 flex justify-end gap-1 opacity-0 transition-opacity group-hover/image:opacity-100 focus-within:opacity-100">
-                          {!image.is_cover && (
+                    {workImages.map((image) => {
+                      const isVideo = isVideoFile(image.file_path);
+                      const mediaSrc = `${convertFileSrc(image.file_path)}?t=${new Date(image.updated_at).getTime()}`;
+                      return (
+                        <div key={image.id} className="group/image relative aspect-square overflow-hidden rounded-lg border bg-muted">
+                          {isVideo ? (
+                            <div className="relative w-full h-full bg-black flex items-center justify-center">
+                              <video
+                                src={mediaSrc}
+                                className="h-full w-full object-cover opacity-85"
+                                muted
+                                preload="metadata"
+                              />
+                              <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded bg-black/75 backdrop-blur-xs px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm z-10">
+                                <Film className="h-3 w-3 text-sky-400" /> 视频
+                              </span>
+                              <button
+                                type="button"
+                                className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/image:bg-black/40 transition-colors cursor-pointer"
+                                onClick={() => setActiveVideo({ url: mediaSrc, title: image.original_name || "作品视频" })}
+                                title="点击播放视频"
+                              >
+                                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-xs transition-transform group-hover/image:scale-110">
+                                  <Play className="h-4 w-4 fill-white ml-0.5" />
+                                </span>
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <img
+                                src={mediaSrc}
+                                alt={image.original_name || "作品图片"}
+                                className="h-full w-full object-cover"
+                              />
+                              {image.is_cover && (
+                                <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium shadow-sm">
+                                  <Star className="h-3 w-3 fill-amber-400 text-amber-500" /> 封面
+                                </span>
+                              )}
+                            </>
+                          )}
+
+                          <div className="absolute inset-x-1.5 bottom-1.5 flex justify-end gap-1 opacity-0 transition-opacity group-hover/image:opacity-100 focus-within:opacity-100 z-10">
+                            {isVideo ? (
+                              <Button
+                                variant="secondary"
+                                size="icon"
+                                className="h-7 w-7 shadow-sm"
+                                onClick={() => setActiveVideo({ url: mediaSrc, title: image.original_name || "作品视频" })}
+                                title="全屏播放"
+                                aria-label="全屏播放"
+                              >
+                                <Maximize2 className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              !image.is_cover && (
+                                <Button
+                                  variant="secondary"
+                                  size="icon"
+                                  className="h-7 w-7 shadow-sm"
+                                  onClick={() => handleSetCover(image)}
+                                  title="设为封面"
+                                  aria-label="设为封面"
+                                >
+                                  <Star className="h-3.5 w-3.5" />
+                                </Button>
+                              )
+                            )}
                             <Button
-                              variant="secondary"
+                              variant="destructive"
                               size="icon"
                               className="h-7 w-7 shadow-sm"
-                              onClick={() => handleSetCover(image)}
-                              title="设为封面"
-                              aria-label="设为封面"
+                              onClick={() => setImageToDelete(image)}
+                              title={isVideo ? "删除视频" : "删除图片"}
+                              aria-label={isVideo ? "删除视频" : "删除图片"}
                             >
-                              <Star className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          )}
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            className="h-7 w-7 shadow-sm"
-                            onClick={() => setImageToDelete(image)}
-                            title="删除图片"
-                            aria-label="删除图片"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </section>
@@ -657,14 +720,36 @@ export default function WorkDetailView({ onIpSelect }: WorkDetailViewProps) {
         open={Boolean(imageToDelete)}
         onCancel={() => !isDeletingImage && setImageToDelete(null)}
         variant="destructive"
-        title="删除作品图片？"
+        title={isVideoFile(imageToDelete?.file_path) ? "删除作品视频？" : "删除作品图片？"}
         description={imageToDelete?.is_cover
-          ? "这张图片同时是当前封面。删除后将移除封面及所有章节中的该图片关联，文件无法恢复。"
-          : "删除后将同步移除所有章节中的该图片关联，文件无法恢复。"}
-        confirmText={isDeletingImage ? "正在删除…" : "删除图片"}
+          ? "这张图片同时是当前封面。删除后将移除封面及所有章节中的该关联，文件无法恢复。"
+          : "删除后将同步移除所有章节中的该素材关联，文件无法恢复。"}
+        confirmText={isDeletingImage ? "正在删除…" : "确认删除"}
         cancelText="取消"
         onConfirm={handleDeleteWorkImage}
       />
+
+      {/* Video Preview Modal */}
+      <Dialog open={Boolean(activeVideo)} onOpenChange={(open) => !open && setActiveVideo(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black border-zinc-800 shadow-2xl">
+          <DialogHeader className="p-3.5 bg-zinc-950/90 border-b border-zinc-800 flex flex-row items-center justify-between">
+            <DialogTitle className="text-sm font-medium text-zinc-200 truncate flex items-center gap-2">
+              <Film className="h-4 w-4 text-sky-400" />
+              {activeVideo?.title || "视频预览"}
+            </DialogTitle>
+          </DialogHeader>
+          {activeVideo && (
+            <div className="aspect-video w-full bg-black flex items-center justify-center">
+              <video
+                src={activeVideo.url}
+                controls
+                autoPlay
+                className="max-h-[75vh] w-full object-contain"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

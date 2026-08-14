@@ -23,6 +23,12 @@ const MIME_MAP: Record<string, string> = {
   bmp: 'image/bmp',
   tiff: 'image/tiff',
   svg: 'image/svg+xml',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  m4v: 'video/x-m4v',
+  avi: 'video/x-msvideo',
+  mkv: 'video/x-matroska',
 };
 
 function getMimeType(fileName: string): string {

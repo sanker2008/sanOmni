@@ -1421,6 +1421,14 @@ export async function uploadWorkImage(
   return await invoke("upload_work_image", { workId, imageData, extension, originalName });
 }
 
+export async function uploadWorkImageFromPath(
+  workId: string,
+  sourcePath: string,
+  originalName?: string,
+): Promise<string> {
+  return await invoke("upload_work_image_from_path", { workId, sourcePath, originalName });
+}
+
 export async function getWorkImages(workId: string): Promise<WorkImage[]> {
   return await invoke("get_work_images", { workId });
 }
