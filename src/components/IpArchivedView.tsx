@@ -64,7 +64,8 @@ import {
   PanelRightOpen,
   Eye,
   FolderOpen,
-  FolderInput
+  FolderInput,
+  GripVertical
 } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -178,23 +179,36 @@ const autoArchiveAvatar = async (avatarPath: string, ip: IpAsset) => {
   }
 };
 
-function SortableEmojiCard({ id, children }: { id: string, children: React.ReactNode }) {
+function SortableEmojiCard({ 
+  id, 
+  children 
+}: { 
+  id: string; 
+  children: (props: { 
+    attributes: Record<string, any>; 
+    listeners: Record<string, any> | undefined;
+    isDragging: boolean;
+  }) => React.ReactNode; 
+}) {
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     transition,
+    isDragging,
   } = useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.6 : 1,
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
+    <div ref={setNodeRef} style={style}>
+      {children({ attributes, listeners, isDragging })}
     </div>
   );
 }
@@ -2048,71 +2062,89 @@ export default function IpArchivedView() {
                     )}
                   </div>
 
-                  {/* Emoji Batch Toolbar */}
-                  {selectedEmojis.length > 0 && (
-                    <div className="border-b px-4 py-2 bg-muted/30 min-h-[44px] flex items-center flex-shrink-0 gap-4">
-                      <button
-                        onClick={() => {
-                          const allIds = currentEmojis.map(e => e.id);
-                          const isAllSelected = allIds.length > 0 && allIds.every(id => selectedEmojis.includes(id));
-                          if (isAllSelected) {
-                            setSelectedEmojis(prev => prev.filter(id => !allIds.includes(id)));
-                          } else {
-                            const newSelected = new Set([...selectedEmojis, ...allIds]);
-                            setSelectedEmojis(Array.from(newSelected));
-                          }
-                        }}
-                        className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
-                      >
-                        {currentEmojis.length > 0 && currentEmojis.every(e => selectedEmojis.includes(e.id)) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                        {currentEmojis.length > 0 && currentEmojis.every(e => selectedEmojis.includes(e.id)) ? "取消全选" : "全选当前项"}
-                      </button>
-                      <span className="text-sm text-muted-foreground flex items-center gap-1 border-r pr-3 mr-1">
-                        已选择 {selectedEmojis.length} 个
-                        <button onClick={() => setSelectedEmojis([])} className="text-muted-foreground hover:text-foreground p-0.5 rounded-md hover:bg-muted transition-colors" title="清空选中">
+                  {/* Emoji Batch Toolbar (Always visible) */}
+                  <div className="border rounded-md px-4 py-2 bg-muted/30 min-h-[44px] flex items-center flex-shrink-0 gap-4">
+                    <button
+                      disabled={currentEmojis.length === 0}
+                      onClick={() => {
+                        const allIds = currentEmojis.map(e => e.id);
+                        const isAllSelected = allIds.length > 0 && allIds.every(id => selectedEmojis.includes(id));
+                        if (isAllSelected) {
+                          setSelectedEmojis(prev => prev.filter(id => !allIds.includes(id)));
+                        } else {
+                          const newSelected = new Set([...selectedEmojis, ...allIds]);
+                          setSelectedEmojis(Array.from(newSelected));
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-2 text-sm transition-colors",
+                        currentEmojis.length === 0 ? "opacity-50 cursor-not-allowed" : "hover:text-primary cursor-pointer"
+                      )}
+                    >
+                      {currentEmojis.length > 0 && currentEmojis.every(e => selectedEmojis.includes(e.id)) ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4 text-muted-foreground" />
+                      )}
+                      {currentEmojis.length > 0 && currentEmojis.every(e => selectedEmojis.includes(e.id)) ? "取消全选" : "全选当前项"}
+                    </button>
+                    <span className="text-sm text-muted-foreground flex items-center gap-1 border-r pr-3 mr-1">
+                      已选择 {selectedEmojis.length} 个
+                      {selectedEmojis.length > 0 && (
+                        <button 
+                          onClick={() => setSelectedEmojis([])} 
+                          className="text-muted-foreground hover:text-foreground p-0.5 rounded-md hover:bg-muted transition-colors cursor-pointer" 
+                          title="清空选中"
+                        >
                           <X className="w-3.5 h-3.5" />
                         </button>
-                      </span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="gap-1 h-7">
-                            <FolderInput className="w-3 h-3" />
-                            批量更换分组
-                            <ChevronDown className="w-3 h-3 opacity-50" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-40 z-50">
+                      )}
+                    </span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="gap-1 h-7 text-xs"
+                          disabled={selectedEmojis.length === 0}
+                        >
+                          <FolderInput className="w-3.5 h-3.5" />
+                          批量更换分组
+                          <ChevronDown className="w-3 h-3 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-40 z-50">
+                        <DropdownMenuItem
+                          onClick={() => executeMoveEmojisToPack(selectedEmojis, null)}
+                          className="cursor-pointer text-xs"
+                        >
+                          <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+                          移至「未分组」
+                        </DropdownMenuItem>
+                        {ipDetail.sticker_packs.map(pack => (
                           <DropdownMenuItem
-                            onClick={() => executeMoveEmojisToPack(selectedEmojis, null)}
+                            key={pack.id}
+                            onClick={() => executeMoveEmojisToPack(selectedEmojis, pack.id)}
                             className="cursor-pointer text-xs"
                           >
                             <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                            移至「未分组」
+                            {pack.name}
                           </DropdownMenuItem>
-                          {ipDetail.sticker_packs.map(pack => (
-                            <DropdownMenuItem
-                              key={pack.id}
-                              onClick={() => executeMoveEmojisToPack(selectedEmojis, pack.id)}
-                              className="cursor-pointer text-xs"
-                            >
-                              <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                              {pack.name}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
 
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1 h-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
-                        onClick={() => setBatchDeleteEmojiStep(1)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        批量彻底删除
-                      </Button>
-                    </div>
-                  )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 disabled:opacity-40"
+                      disabled={selectedEmojis.length === 0}
+                      onClick={() => setBatchDeleteEmojiStep(1)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      批量彻底删除
+                    </Button>
+                  </div>
 
                   <ScrollArea ref={emojiGridRef} className="flex-1 border rounded-md py-3 px-0 bg-background/40">
                     {currentEmojis.length === 0 ? (
@@ -2134,143 +2166,192 @@ export default function IpArchivedView() {
                             {displayEmojis.map((emoji, index) => {
                               return (
                                 <SortableEmojiCard key={emoji.id} id={emoji.id}>
-                                  <div
-                                    className="group relative rounded-md border bg-card p-1 flex flex-col gap-1.5 hover:shadow-md transition-all duration-300"
-                                  >
-                              <div className="aspect-square rounded overflow-hidden bg-muted relative cursor-pointer">
-                                {/* Emoji Selection Checkbox */}
-                                <div
-                                  className={`absolute top-1 left-1 z-10 p-1 rounded transition-opacity cursor-pointer ${
-                                    selectedEmojis.includes(emoji.id) ? "opacity-100" : "opacity-0 group-hover:opacity-100 bg-black/20 hover:bg-black/40"
-                                  }`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedEmojis(prev => 
-                                      prev.includes(emoji.id) ? prev.filter(id => id !== emoji.id) : [...prev, emoji.id]
-                                    );
-                                  }}
-                                >
-                                  {selectedEmojis.includes(emoji.id) ? (
-                                    <CheckSquare className="w-4 h-4 text-primary bg-white rounded-sm" />
-                                  ) : (
-                                    <Square className="w-4 h-4 text-white" />
-                                  )}
-                                </div>
-                                <img
-                                  src={`${convertFileSrc(emoji.image_path)}?t=${imageTimestamp}`}
-                                  alt="表情"
-                                  className={`w-full h-full ${showFullImage ? "object-contain bg-background" : "object-cover"}`}
-                                  onClick={() => {
-                                    const paths = displayEmojis.map(e => e.image_path);
-                                    setPreviewImages(paths);
-                                    setPreviewIndex(index);
-                                  }}
-                                />
-                                {/* Overlay with actions */}
-                                <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
-                                    onClick={() => {
-                                      const paths = displayEmojis.map(e => e.image_path);
-                                      setPreviewImages(paths);
-                                      setPreviewIndex(index);
-                                    }}
-                                    title="查看大图"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
-                                    onClick={() => {
-                                      invoke('show_in_folder', { path: emoji.image_path }).catch(err => {
-                                        console.error("Failed to open folder:", err);
-                                      });
-                                    }}
-                                    title="在文件夹中显示"
-                                  >
-                                    <FolderOpen className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
-                                    onClick={() => handleCopyEmoji(emoji.image_path)}
-                                    title="复制到剪贴板"
-                                  >
-                                    <Copy className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
-                                        title="更换分组"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <FolderInput className="w-3.5 h-3.5" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="center" className="w-40 z-50">
-                                      <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); executeMoveEmojisToPack([emoji.id], null); }}
-                                        className="cursor-pointer text-xs"
-                                        disabled={!emoji.pack_id}
-                                      >
-                                        <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                                        移至「未分组」
-                                      </DropdownMenuItem>
-                                      {ipDetail.sticker_packs.map(pack => (
-                                        <DropdownMenuItem
-                                          key={pack.id}
-                                          onClick={(e) => { e.stopPropagation(); executeMoveEmojisToPack([emoji.id], pack.id); }}
-                                          className="cursor-pointer text-xs"
-                                          disabled={emoji.pack_id === pack.id}
+                                  {({ attributes, listeners }) => (
+                                    <div
+                                      className="group relative rounded-md border bg-card p-1 flex flex-col gap-1.5 hover:shadow-md transition-all duration-300"
+                                    >
+                                      <div className="aspect-square rounded overflow-hidden bg-muted relative">
+                                        {/* Emoji Selection Checkbox */}
+                                        <div
+                                          className={`absolute top-1 left-1 z-20 p-1 rounded transition-opacity cursor-pointer ${
+                                            selectedEmojis.includes(emoji.id) ? "opacity-100" : "opacity-0 group-hover:opacity-100 bg-black/20 hover:bg-black/40"
+                                          }`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedEmojis(prev => 
+                                              prev.includes(emoji.id) ? prev.filter(id => id !== emoji.id) : [...prev, emoji.id]
+                                            );
+                                          }}
+                                          title="选择表情"
                                         >
-                                          <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                                          {pack.name}
-                                        </DropdownMenuItem>
-                                      ))}
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-white hover:bg-orange-500/80 rounded-full"
-                                    onClick={() => setRemoveEmojiKeepImageId(emoji.id)}
-                                    title="退回普通图片"
-                                  >
-                                    <Undo2 className="w-3.5 h-3.5" />
-                                  </Button>
+                                          {selectedEmojis.includes(emoji.id) ? (
+                                            <CheckSquare className="w-4 h-4 text-primary bg-white rounded-sm" />
+                                          ) : (
+                                            <Square className="w-4 h-4 text-white" />
+                                          )}
+                                        </div>
 
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-white hover:bg-destructive/80 rounded-full"
-                                    onClick={() => setDeleteEmojiId(emoji.id)}
-                                    title="彻底删除"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                </div>
-                              </div>
+                                        {/* Drag Handle (Only dragging this handle triggers sort) */}
+                                        <div
+                                          {...attributes}
+                                          {...listeners}
+                                          className="absolute top-1 right-1 z-20 p-1 rounded opacity-0 group-hover:opacity-100 bg-black/35 hover:bg-black/70 text-white cursor-grab active:cursor-grabbing transition-opacity"
+                                          title="按住拖拽排序"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <GripVertical className="w-3.5 h-3.5" />
+                                        </div>
 
-                              {/* Emoji trigger word / details */}
-                              <div className="px-1 py-0.5 flex flex-col gap-0.5">
-                                <input
-                                  type="text"
-                                  placeholder="添加快捷词..."
-                                  defaultValue={emoji.trigger_word || ""}
-                                  onBlur={(e) => handleUpdateEmojiWord(emoji.id, e.target.value)}
-                                  className="w-full text-[10px] bg-transparent border-none outline-none focus:ring-0 text-foreground/85 placeholder:text-muted-foreground/40 truncate text-center font-mono"
-                                />
+                                        <img
+                                          src={`${convertFileSrc(emoji.image_path)}?t=${imageTimestamp}`}
+                                          alt="表情"
+                                          className={`w-full h-full cursor-pointer ${showFullImage ? "object-contain bg-background" : "object-cover"}`}
+                                          onClick={() => {
+                                            const paths = displayEmojis.map(e => e.image_path);
+                                            setPreviewImages(paths);
+                                            setPreviewIndex(index);
+                                          }}
+                                        />
 
-                              </div>
-                                  </div>
+                                        {/* Overlay with actions (2 rows of icons) */}
+                                        <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-1 pointer-events-none group-hover:pointer-events-auto">
+                                          {/* Row 1: 查看大图、在文件夹中显示、复制图片 */}
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const paths = displayEmojis.map(e => e.image_path);
+                                                setPreviewImages(paths);
+                                                setPreviewIndex(index);
+                                              }}
+                                              title="查看大图"
+                                            >
+                                              <Eye className="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                invoke('show_in_folder', { path: emoji.image_path }).catch(err => {
+                                                  console.error("Failed to open folder:", err);
+                                                });
+                                              }}
+                                              title="在文件夹中显示"
+                                            >
+                                              <FolderOpen className="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCopyEmoji(emoji.image_path);
+                                              }}
+                                              title="复制图片到剪贴板"
+                                            >
+                                              <Copy className="w-3.5 h-3.5" />
+                                            </Button>
+                                          </div>
+
+                                          {/* Row 2: 更换分组、退回普通图片、彻底删除 */}
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild>
+                                                <Button
+                                                  size="icon"
+                                                  variant="ghost"
+                                                  className="h-7 w-7 text-white hover:bg-white/20 rounded-full"
+                                                  title="更换分组"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <FolderInput className="w-3.5 h-3.5" />
+                                                </Button>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent align="center" className="w-40 z-50">
+                                                <DropdownMenuItem
+                                                  onClick={(e) => { e.stopPropagation(); executeMoveEmojisToPack([emoji.id], null); }}
+                                                  className="cursor-pointer text-xs"
+                                                  disabled={!emoji.pack_id}
+                                                >
+                                                  <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+                                                  移至「未分组」
+                                                </DropdownMenuItem>
+                                                {ipDetail.sticker_packs.map(pack => (
+                                                  <DropdownMenuItem
+                                                    key={pack.id}
+                                                    onClick={(e) => { e.stopPropagation(); executeMoveEmojisToPack([emoji.id], pack.id); }}
+                                                    className="cursor-pointer text-xs"
+                                                    disabled={emoji.pack_id === pack.id}
+                                                  >
+                                                    <FolderInput className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+                                                    {pack.name}
+                                                  </DropdownMenuItem>
+                                                ))}
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
+
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-7 w-7 text-white hover:bg-orange-500/80 rounded-full"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setRemoveEmojiKeepImageId(emoji.id);
+                                              }}
+                                              title="退回普通图片"
+                                            >
+                                              <Undo2 className="w-3.5 h-3.5" />
+                                            </Button>
+
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-7 w-7 text-white hover:bg-destructive/80 rounded-full"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDeleteEmojiId(emoji.id);
+                                              }}
+                                              title="彻底删除"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Emoji trigger word / details with copy functionality */}
+                                      <div className="px-1 py-0.5 flex items-center relative group/word">
+                                        <input
+                                          type="text"
+                                          placeholder="添加快捷词..."
+                                          defaultValue={emoji.trigger_word || ""}
+                                          onBlur={(e) => handleUpdateEmojiWord(emoji.id, e.target.value)}
+                                          className="w-full text-[10px] bg-transparent border-none outline-none focus:ring-0 text-foreground/85 placeholder:text-muted-foreground/40 truncate text-center font-mono hover:bg-muted/30 focus:bg-background rounded px-3 py-0.5"
+                                          title={emoji.trigger_word ? `快捷词: ${emoji.trigger_word} (点击可编辑)` : "添加快捷词"}
+                                        />
+                                        {emoji.trigger_word && (
+                                          <button
+                                            type="button"
+                                            className="absolute right-0.5 p-0.5 text-muted-foreground/60 hover:text-foreground rounded hover:bg-muted opacity-0 group-hover/word:opacity-100 transition-opacity cursor-pointer"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigator.clipboard.writeText(emoji.trigger_word || "");
+                                              toast({ title: "已复制快捷词", description: `"${emoji.trigger_word}" 已复制到剪贴板` });
+                                            }}
+                                            title="复制快捷词"
+                                          >
+                                            <Copy className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                 </SortableEmojiCard>
                               );
                             })}

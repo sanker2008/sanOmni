@@ -25,6 +25,7 @@
 - [网页浏览器](./features/WEB_BROWSER.md) - 内置浏览器
 - [网页浏览器更新](./features/WEB_BROWSER_UPDATE.md) - 浏览器功能说明
 - [列表模式更新](./features/LIST_MODE_UPDATE.md) - 列表显示模式
+- [IP 表情包管理](./features/IP_EMOJI_MANAGEMENT.md) - 表情包套件、排序、快捷词与批量操作
 - [IP 作品合集](./features/IP_WORKS_COLLECTION.md) - IP 作品管理
 - [通用作品集与叙事章节](./features/WORKS_COLLECTION_STRUCTURE.md) - 图片、歌曲、专辑、剧本等作品的结构与章节管理
 - [sanKnow 开发知识库](./features/KNOWLEDGE_BASE.md) - 本地项目索引、手动记录与网页文档集
