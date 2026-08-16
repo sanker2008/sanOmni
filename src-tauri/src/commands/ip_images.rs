@@ -899,6 +899,26 @@ pub async fn delete_ip_image(db_path: String, ip_image_id: String) -> CommandRes
         "UPDATE works SET cover_path = NULL WHERE cover_path = ?",
         [&ip_image.absolute_path],
     );
+    let _ = conn.execute(
+        "UPDATE ip_sticker_packs SET cover_path = NULL WHERE cover_path = ?",
+        [&ip_image.absolute_path],
+    );
+    let _ = conn.execute(
+        "UPDATE ip_sticker_packs SET banner_path = NULL WHERE banner_path = ?",
+        [&ip_image.absolute_path],
+    );
+    let _ = conn.execute(
+        "UPDATE ip_sticker_packs SET icon_path = NULL WHERE icon_path = ?",
+        [&ip_image.absolute_path],
+    );
+    let _ = conn.execute(
+        "UPDATE ip_sticker_packs SET reward_guide_path = NULL WHERE reward_guide_path = ?",
+        [&ip_image.absolute_path],
+    );
+    let _ = conn.execute(
+        "UPDATE ip_sticker_packs SET reward_thanks_path = NULL WHERE reward_thanks_path = ?",
+        [&ip_image.absolute_path],
+    );
 
     CommandResult::ok(true)
 }
@@ -1125,6 +1145,26 @@ pub async fn update_ip_image_file(
         );
         let _ = conn.execute(
             "UPDATE works SET cover_path = ? WHERE cover_path = ?",
+            [new_path, &old_path],
+        );
+        let _ = conn.execute(
+            "UPDATE ip_sticker_packs SET cover_path = ? WHERE cover_path = ?",
+            [new_path, &old_path],
+        );
+        let _ = conn.execute(
+            "UPDATE ip_sticker_packs SET banner_path = ? WHERE banner_path = ?",
+            [new_path, &old_path],
+        );
+        let _ = conn.execute(
+            "UPDATE ip_sticker_packs SET icon_path = ? WHERE icon_path = ?",
+            [new_path, &old_path],
+        );
+        let _ = conn.execute(
+            "UPDATE ip_sticker_packs SET reward_guide_path = ? WHERE reward_guide_path = ?",
+            [new_path, &old_path],
+        );
+        let _ = conn.execute(
+            "UPDATE ip_sticker_packs SET reward_thanks_path = ? WHERE reward_thanks_path = ?",
             [new_path, &old_path],
         );
 

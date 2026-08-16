@@ -433,22 +433,26 @@ pub async fn run_sync(db_path: &str, direction: Option<&str>, ip_ids: Option<&[S
                     for (path_key, hash_key) in path_hash_keys {
                         if let Some(abs_path) = json.get(path_key).and_then(|v| v.as_str()).map(String::from) {
                             if !abs_path.is_empty() {
-                                let data = tokio::fs::read(&abs_path).await.map_err(|e| {
-                                    format!("读取待同步文件失败 {}: {}", abs_path, e)
-                                })?;
-                                let mut hasher = Sha256::new();
-                                hasher.update(&data);
-                                let hash = format!("{:x}", hasher.finalize());
+                                match tokio::fs::read(&abs_path).await {
+                                    Ok(data) => {
+                                        let mut hasher = Sha256::new();
+                                        hasher.update(&data);
+                                        let hash = format!("{:x}", hasher.finalize());
 
-                                file_hashes_to_check.push(hash.clone());
-                                files_to_upload.push((hash.clone(), abs_path, i));
+                                        file_hashes_to_check.push(hash.clone());
+                                        files_to_upload.push((hash.clone(), abs_path, i));
 
-                                if let Some(obj) = json.as_object_mut() {
-                                    obj.insert(
-                                        hash_key.to_string(),
-                                        serde_json::Value::String(hash.clone()),
-                                    );
-                                    updated = true;
+                                        if let Some(obj) = json.as_object_mut() {
+                                            obj.insert(
+                                                hash_key.to_string(),
+                                                serde_json::Value::String(hash.clone()),
+                                            );
+                                            updated = true;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("[Sync] Skipping missing or unreadable file {}: {}", abs_path, e);
+                                    }
                                 }
                             }
                         }

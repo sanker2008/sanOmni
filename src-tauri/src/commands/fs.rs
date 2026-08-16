@@ -346,6 +346,11 @@ pub fn update_database_paths(
         ("ip_assets", "path"),
         ("ip_assets", "avatar_path"),
         ("ip_sticker_packs", "path"),
+        ("ip_sticker_packs", "cover_path"),
+        ("ip_sticker_packs", "banner_path"),
+        ("ip_sticker_packs", "icon_path"),
+        ("ip_sticker_packs", "reward_guide_path"),
+        ("ip_sticker_packs", "reward_thanks_path"),
     ];
 
     for (table, col) in tables_cols {
@@ -453,6 +458,11 @@ pub fn repair_database_paths(
         ("ip_assets", "id", "path"),
         ("ip_assets", "id", "avatar_path"),
         ("ip_sticker_packs", "id", "path"),
+        ("ip_sticker_packs", "id", "cover_path"),
+        ("ip_sticker_packs", "id", "banner_path"),
+        ("ip_sticker_packs", "id", "icon_path"),
+        ("ip_sticker_packs", "id", "reward_guide_path"),
+        ("ip_sticker_packs", "id", "reward_thanks_path"),
     ];
 
     let tx = match conn.transaction() {
