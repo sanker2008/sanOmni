@@ -6,6 +6,8 @@ import {
   writeFile,
   remove,
   rename,
+  exists,
+  authorizeFsPaths,
 } from '@/services/secureFs';
 import { join } from '@tauri-apps/api/path';
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
@@ -24,6 +26,7 @@ export async function ensureToolDirectories() {
     await join(root, 'templates'),
     await join(root, 'exports'),
   ];
+  await authorizeFsPaths(dirs);
   for (const dir of dirs) {
     try {
       await mkdir(dir, { recursive: true });
@@ -111,11 +114,32 @@ export async function renameFile(type: 'project' | 'template', id: string, newNa
   await writeTextFile(filePath, JSON.stringify(parsed, null, 2));
 }
 
-export async function saveExport(filename: string, data: Uint8Array) {
+export async function saveExport(filename: string, data: Uint8Array): Promise<string> {
   await ensureToolDirectories();
   const { root } = await getBaseConfig();
-  const filePath = await join(root, 'exports', filename);
+  const exportDir = await join(root, 'exports');
+  await authorizeFsPaths([exportDir]);
+
+  const dotIndex = filename.lastIndexOf('.');
+  const baseName = dotIndex > 0 ? filename.slice(0, dotIndex) : filename;
+  const ext = dotIndex > 0 ? filename.slice(dotIndex) : '';
+
+  let candidateName = filename;
+  let filePath = await join(exportDir, candidateName);
+  let suffix = 1;
+
+  try {
+    while (await exists(filePath)) {
+      candidateName = `${baseName}_${suffix}${ext}`;
+      filePath = await join(exportDir, candidateName);
+      suffix += 1;
+    }
+  } catch (e) {
+    console.warn('Failed to check file existence:', e);
+  }
+
   await writeFile(filePath, data);
+  return filePath;
 }
 
 export async function listExports() {

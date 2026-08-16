@@ -1,5 +1,5 @@
 import type { WorkflowAdapter, WorkflowIO } from '../types';
-import { readFile, writeFile } from '@/services/secureFs';
+import { readFile, writeFile, exists } from '@/services/secureFs';
 import { join, basename } from '@tauri-apps/api/path';
 
 export const imageSliceAdapter: WorkflowAdapter = {
@@ -52,7 +52,18 @@ export const imageSliceAdapter: WorkflowAdapter = {
             0, 0, sliceWidth, sliceHeight
           );
           
-          const outputPath = await join(outputDir, `${nameWithoutExt}_r${r}_c${c}${ext}`);
+          let candidateName = `${nameWithoutExt}_r${r}_c${c}${ext}`;
+          let outputPath = await join(outputDir, candidateName);
+          let suffix = 1;
+          try {
+            while (await exists(outputPath)) {
+              outputPath = await join(outputDir, `${nameWithoutExt}_r${r}_c${c}_${suffix}${ext}`);
+              suffix++;
+            }
+          } catch (e) {
+            console.warn('Failed to check file existence:', e);
+          }
+          
           const outputBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
           
           if (outputBlob) {

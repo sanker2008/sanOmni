@@ -1,6 +1,6 @@
 import { join } from "@tauri-apps/api/path";
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
-import { exists, mkdir, readDir, readFile, remove, stat, writeFile } from '@/services/secureFs';
+import { exists, mkdir, readDir, readFile, remove, stat, writeFile, authorizeFsPaths } from '@/services/secureFs';
 
 export interface TempImageEntry {
   name: string;
@@ -28,9 +28,8 @@ export async function getTempImagePath(): Promise<string> {
  * Ensure a directory path exists. Works with both relative AppData and absolute paths.
  */
 export async function ensureDirectory(path: string): Promise<void> {
-  // If the path is absolute (e.g. custom user selection), we create it with standard options.
-  // We can just call mkdir with { recursive: true }.
   try {
+    await authorizeFsPaths([path]);
     await mkdir(path, { recursive: true });
   } catch (e: any) {
     if (!String(e).includes('exists') && !String(e).includes('存在')) {
@@ -50,7 +49,8 @@ export async function saveFile(dirPath: string, fileName: string, data: Uint8Arr
   return fullPath;
 }
 
-async function getAvailableFilePath(dirPath: string, fileName: string): Promise<string> {
+export async function getAvailableFilePath(dirPath: string, fileName: string): Promise<string> {
+  await authorizeFsPaths([dirPath]);
   const dotIndex = fileName.lastIndexOf('.');
   const baseName = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
   const ext = dotIndex > 0 ? fileName.slice(dotIndex) : '';
@@ -59,10 +59,14 @@ async function getAvailableFilePath(dirPath: string, fileName: string): Promise<
   let candidatePath = await join(dirPath, candidateName);
   let suffix = 1;
 
-  while (await exists(candidatePath)) {
-    candidateName = `${baseName}_${suffix}${ext}`;
-    candidatePath = await join(dirPath, candidateName);
-    suffix += 1;
+  try {
+    while (await exists(candidatePath)) {
+      candidateName = `${baseName}_${suffix}${ext}`;
+      candidatePath = await join(dirPath, candidateName);
+      suffix += 1;
+    }
+  } catch (e) {
+    console.warn('Failed to check file existence:', e);
   }
 
   return candidatePath;

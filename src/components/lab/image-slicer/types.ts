@@ -17,6 +17,8 @@ export interface SliceItem {
   col: number; // Grid col (1-based)
   selected: boolean; // Whether the user wants to keep and export this slice
   isGutter?: boolean; // Tag if this slice represents a gutter gap (default discarded)
+  customDataUrl?: string; // Custom edited slice canvas image data
+  isEdited?: boolean; // Whether the user has modified this slice
 }
 
 export type AdaptMode = 'center' | 'scale-down';

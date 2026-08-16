@@ -1,6 +1,6 @@
 import { join } from "@tauri-apps/api/path";
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
-import { mkdir, writeFile } from '@/services/secureFs';
+import { mkdir, writeFile, exists, authorizeFsPaths } from '@/services/secureFs';
 
 /** 获取 PngToSvg 根目录 */
 export async function getBasePath(): Promise<string> {
@@ -17,6 +17,7 @@ export async function getOutputPath(): Promise<string> {
 /** 确保目录存在 */
 export async function ensureDirectory(path: string): Promise<void> {
   try {
+    await authorizeFsPaths([path]);
     await mkdir(path, { recursive: true });
   } catch (e: any) {
     if (!String(e).includes('exists') && !String(e).includes('存在')) {
@@ -26,11 +27,30 @@ export async function ensureDirectory(path: string): Promise<void> {
   }
 }
 
-/** 保存 SVG 到 outputs 目录 */
+/** 保存 SVG 到 outputs 目录（自动避免重名覆盖） */
 export async function saveSvg(svgContent: string, filename: string): Promise<string> {
   const outputDir = await getOutputPath();
   await ensureDirectory(outputDir);
-  const fullPath = await join(outputDir, filename);
+  await authorizeFsPaths([outputDir]);
+
+  const dotIndex = filename.lastIndexOf('.');
+  const baseName = dotIndex > 0 ? filename.slice(0, dotIndex) : filename;
+  const ext = dotIndex > 0 ? filename.slice(dotIndex) : '.svg';
+
+  let candidateName = filename;
+  let fullPath = await join(outputDir, candidateName);
+  let suffix = 1;
+
+  try {
+    while (await exists(fullPath)) {
+      candidateName = `${baseName}_${suffix}${ext}`;
+      fullPath = await join(outputDir, candidateName);
+      suffix += 1;
+    }
+  } catch (e) {
+    console.warn('Failed to check file existence:', e);
+  }
+
   const encoder = new TextEncoder();
   await writeFile(fullPath, encoder.encode(svgContent));
   return fullPath;

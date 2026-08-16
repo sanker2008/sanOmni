@@ -12,6 +12,7 @@ import { clearTempImages, ensureDirectory, getDefaultExportPath, listTempImages,
 import SlicerCanvas from './SlicerCanvas';
 import SliceGridPreview from './SliceGridPreview';
 import ExportSettings from './ExportSettings';
+import SliceEditorModal from './SliceEditorModal';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/useToast';
 import {
@@ -70,6 +71,9 @@ export default function ImageSlicer() {
   const [slices, setSlices] = useState<SliceItem[]>([]);
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
 
+  const [editingSlice, setEditingSlice] = useState<SliceItem | null>(null);
+  const [editingSliceIndex, setEditingSliceIndex] = useState<number>(0);
+
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [isRemovingWatermark, setIsRemovingWatermark] = useState(false);
@@ -95,6 +99,24 @@ export default function ImageSlicer() {
   });
 
   const currentWatermarkOutputPathRef = useRef<string | null>(null);
+
+  const handleSaveSliceEdit = useCallback((sliceId: string, customDataUrl: string | null) => {
+    setSlices((prev) =>
+      prev.map((s) =>
+        s.id === sliceId
+          ? {
+              ...s,
+              customDataUrl: customDataUrl || undefined,
+              isEdited: Boolean(customDataUrl),
+            }
+          : s
+      )
+    );
+    toast({
+      title: customDataUrl ? '切片已更新' : '已恢复默认切片',
+      description: customDataUrl ? '已成功应用自定义微调与擦除修改。' : '切片已重置为自动裁切状态。',
+    });
+  }, []);
 
   const applyImageSrc = useCallback((src: string, filename: string, successTitle = '图片加载成功') => {
     const img = new Image();
@@ -159,7 +181,19 @@ export default function ImageSlicer() {
   useEffect(() => {
     if (originalWidth > 0 && originalHeight > 0) {
       const calculated = computeSlices(originalWidth, originalHeight, guidelines);
-      setSlices(calculated);
+      setSlices((prev) => {
+        return calculated.map((newSlice) => {
+          const existing = prev.find((p) => p.id === newSlice.id);
+          if (existing && existing.isEdited) {
+            return {
+              ...newSlice,
+              customDataUrl: existing.customDataUrl,
+              isEdited: existing.isEdited,
+            };
+          }
+          return newSlice;
+        });
+      });
     } else {
       setSlices([]);
     }
@@ -440,8 +474,39 @@ export default function ImageSlicer() {
       for (let i = 0; i < total; i++) {
         const slice = activeSlices[i];
         
-        // 2. Crop and fit on canvas
-        const canvas = processSliceToCanvas(img, slice, exportConfig);
+        // 2. Crop and fit on canvas (or use custom edited data)
+        let canvas: HTMLCanvasElement;
+        if (slice.customDataUrl) {
+          const customImg = new Image();
+          customImg.src = slice.customDataUrl;
+          await new Promise((resolve, reject) => {
+            customImg.onload = resolve;
+            customImg.onerror = reject;
+          });
+
+          const targetW = exportConfig.width > 0 ? exportConfig.width : slice.width;
+          const targetH = exportConfig.height > 0 ? exportConfig.height : slice.height;
+
+          canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            let bgColor = exportConfig.backgroundColor;
+            if (exportConfig.format === 'jpeg' && bgColor === 'transparent') {
+              bgColor = '#FFFFFF';
+            }
+            if (bgColor && bgColor !== 'transparent') {
+              ctx.fillStyle = bgColor;
+              ctx.fillRect(0, 0, targetW, targetH);
+            } else {
+              ctx.clearRect(0, 0, targetW, targetH);
+            }
+            ctx.drawImage(customImg, 0, 0, targetW, targetH);
+          }
+        } else {
+          canvas = processSliceToCanvas(img, slice, exportConfig);
+        }
 
         // 3. Generate file name
         const filename = generateSliceFileName(
@@ -678,6 +743,10 @@ export default function ImageSlicer() {
               exportConfig={exportConfig}
               onToggleSelect={handleToggleSliceSelect}
               onSelectAll={handleSelectAllSlices}
+              onEditSlice={(slice, index) => {
+                setEditingSlice(slice);
+                setEditingSliceIndex(index);
+              }}
             />
           )}
 
@@ -1036,6 +1105,18 @@ export default function ImageSlicer() {
             </div>
           </div>
         </div>
+      )}
+
+      {editingSlice && (
+        <SliceEditorModal
+          isOpen={Boolean(editingSlice)}
+          onClose={() => setEditingSlice(null)}
+          slice={editingSlice}
+          sliceIndex={editingSliceIndex}
+          imageSrc={imageSrc || ''}
+          exportConfig={exportConfig}
+          onSave={handleSaveSliceEdit}
+        />
       )}
 
     </div>

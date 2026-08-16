@@ -1,6 +1,6 @@
 import { join } from "@tauri-apps/api/path";
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
-import { mkdir, writeFile, exists } from '@/services/secureFs';
+import { mkdir, writeFile, exists, authorizeFsPaths } from '@/services/secureFs';
 
 /** 获取 GifDecomposer 根目录 */
 export async function getBasePath(): Promise<string> {
@@ -17,6 +17,7 @@ export async function getOutputPath(): Promise<string> {
 /** 确保目录存在 */
 export async function ensureDirectory(path: string): Promise<void> {
   try {
+    await authorizeFsPaths([path]);
     await mkdir(path, { recursive: true });
   } catch (e: any) {
     if (!String(e).includes('exists') && !String(e).includes('存在')) {
@@ -30,6 +31,7 @@ export async function ensureDirectory(path: string): Promise<void> {
 export async function saveFrameImage(dirPath: string, filename: string, data: Uint8Array): Promise<string> {
   const dir = dirPath || await getOutputPath();
   await ensureDirectory(dir);
+  await authorizeFsPaths([dir]);
   
   let finalFilename = filename;
   let fullPath = await join(dir, finalFilename);
@@ -39,10 +41,14 @@ export async function saveFrameImage(dirPath: string, filename: string, data: Ui
   const ext = extMatch ? extMatch[1] : '';
   const base = extMatch ? filename.slice(0, -ext.length) : filename;
 
-  while (await exists(fullPath)) {
-    finalFilename = `${base}_${counter}${ext}`;
-    fullPath = await join(dir, finalFilename);
-    counter++;
+  try {
+    while (await exists(fullPath)) {
+      finalFilename = `${base}_${counter}${ext}`;
+      fullPath = await join(dir, finalFilename);
+      counter++;
+    }
+  } catch (e) {
+    console.warn('Failed to check file existence:', e);
   }
   
   await writeFile(fullPath, data);

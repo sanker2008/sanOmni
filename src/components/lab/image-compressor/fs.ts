@@ -1,6 +1,6 @@
 import { join } from "@tauri-apps/api/path";
 import { getLabsRoot, openPath } from "@/lib/pathUtils";
-import { mkdir, writeFile, authorizeFsPaths } from '@/services/secureFs';
+import { mkdir, writeFile, authorizeFsPaths, exists } from '@/services/secureFs';
 
 /**
  * Get the default export path.
@@ -25,12 +25,35 @@ export async function ensureDirectory(path: string): Promise<void> {
   }
 }
 
+export async function getAvailableFilePath(dirPath: string, fileName: string): Promise<string> {
+  await authorizeFsPaths([dirPath]);
+  const dotIndex = fileName.lastIndexOf('.');
+  const baseName = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+  const ext = dotIndex > 0 ? fileName.slice(dotIndex) : '';
+
+  let candidateName = fileName;
+  let candidatePath = await join(dirPath, candidateName);
+  let suffix = 1;
+
+  try {
+    while (await exists(candidatePath)) {
+      candidateName = `${baseName}_${suffix}${ext}`;
+      candidatePath = await join(dirPath, candidateName);
+      suffix += 1;
+    }
+  } catch (e) {
+    console.warn('Failed to check file existence:', e);
+  }
+
+  return candidatePath;
+}
+
 /**
- * Save binary file to specified path.
+ * Save binary file to specified path without overwriting.
  */
 export async function saveFile(dirPath: string, fileName: string, data: Uint8Array): Promise<string> {
   await ensureDirectory(dirPath);
-  const fullPath = await join(dirPath, fileName);
+  const fullPath = await getAvailableFilePath(dirPath, fileName);
   await writeFile(fullPath, data);
   return fullPath;
 }

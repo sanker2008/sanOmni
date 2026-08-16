@@ -435,6 +435,23 @@ export default function IpArchivedView() {
   const [isWatermarkModalOpen, setIsWatermarkModalOpen] = useState(false);
   const [isProcessingWatermark, setIsProcessingWatermark] = useState(false);
   const [activeWatermarkPath, setActiveWatermarkPath] = useState<string | null>(null);
+  const [isRefreshingEmojis, setIsRefreshingEmojis] = useState(false);
+
+  const handleRefreshEmojis = async () => {
+    if (!selectedIpId) return;
+    setIsRefreshingEmojis(true);
+    try {
+      await loadArchivedImages();
+      await loadIpDetail(selectedIpId);
+      setImageTimestamp(Date.now());
+      toast({ title: "刷新成功", description: "表情包分组及表情列表已更新" });
+    } catch (e: any) {
+      console.error("刷新表情列表失败:", e);
+      toast({ title: "刷新失败", description: e?.message || "刷新数据时发生错误", variant: "destructive" });
+    } finally {
+      setIsRefreshingEmojis(false);
+    }
+  };
 
   const settings = useUIStore((state) => state.settings);
   const showFullImage = settings?.showFullImage ?? false;
@@ -1915,26 +1932,38 @@ export default function IpArchivedView() {
               <div className="w-64 border-r bg-muted/10 flex flex-col flex-shrink-0 rounded-lg overflow-hidden border">
                 <div className="flex items-center justify-between p-4 border-b bg-card">
                   <h3 className="font-semibold text-sm">表情包分组</h3>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      setEditingPack(null);
-                      setPackName("");
-                      setPackPath("");
-                      setPackDescription("");
-                      setPackCoverPath("");
-                      setPackBannerPath("");
-                      setPackIconPath("");
-                      setPackRewardGuidePath("");
-                      setPackRewardThanksPath("");
-                      setIsPackModalOpen(true);
-                    }}
-                    className="h-7 w-7"
-                    title="新建表情套件"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleRefreshEmojis}
+                      disabled={isRefreshingEmojis}
+                      className="h-7 w-7"
+                      title="刷新分组与表情列表"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingEmojis ? "animate-spin text-primary" : "text-muted-foreground"}`} />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingPack(null);
+                        setPackName("");
+                        setPackPath("");
+                        setPackDescription("");
+                        setPackCoverPath("");
+                        setPackBannerPath("");
+                        setPackIconPath("");
+                        setPackRewardGuidePath("");
+                        setPackRewardThanksPath("");
+                        setIsPackModalOpen(true);
+                      }}
+                      className="h-7 w-7"
+                      title="新建表情套件"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 <ScrollArea className="flex-1 p-2">
@@ -2026,40 +2055,54 @@ export default function IpArchivedView() {
                           : ipDetail.sticker_packs.find((p) => p.id === selectedPackId)?.description || "无套件描述"}
                       </p>
                     </div>
-                    {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && (
-                      <div className="flex gap-2 flex-shrink-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const pack = ipDetail.sticker_packs.find(p => p.id === selectedPackId);
-                            if (pack) {
-                              setEditingPack(pack);
-                              setPackName(pack.name);
-                              setPackPath(pack.path || "");
-                              setPackDescription(pack.description || "");
-                              setPackCoverPath(pack.cover_path || "");
-                              setPackBannerPath(pack.banner_path || "");
-                              setPackIconPath(pack.icon_path || "");
-                              setPackRewardGuidePath(pack.reward_guide_path || "");
-                              setPackRewardThanksPath(pack.reward_thanks_path || "");
-                              setIsPackModalOpen(true);
-                            }
-                          }}
-                        >
-                          编辑
-                        </Button>
-                        <Button
-                          variant={showPlatformInfo ? "secondary" : "outline"}
-                          size="sm"
-                          onClick={() => setShowPlatformInfo(!showPlatformInfo)}
-                          className="gap-1.5 transition-all"
-                        >
-                          {showPlatformInfo ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
-                          {showPlatformInfo ? "收起平台信息" : "平台信息"}
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefreshEmojis}
+                        disabled={isRefreshingEmojis}
+                        className="gap-1.5 text-xs h-8"
+                        title="刷新表情包数据与图片列表"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingEmojis ? "animate-spin text-primary" : ""}`} />
+                        刷新
+                      </Button>
+                      {selectedPackId !== "__ALL__" && selectedPackId !== "__UNGROUPED__" && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const pack = ipDetail.sticker_packs.find(p => p.id === selectedPackId);
+                              if (pack) {
+                                setEditingPack(pack);
+                                setPackName(pack.name);
+                                setPackPath(pack.path || "");
+                                setPackDescription(pack.description || "");
+                                setPackCoverPath(pack.cover_path || "");
+                                setPackBannerPath(pack.banner_path || "");
+                                setPackIconPath(pack.icon_path || "");
+                                setPackRewardGuidePath(pack.reward_guide_path || "");
+                                setPackRewardThanksPath(pack.reward_thanks_path || "");
+                                setIsPackModalOpen(true);
+                              }
+                            }}
+                            className="h-8 text-xs"
+                          >
+                            编辑
+                          </Button>
+                          <Button
+                            variant={showPlatformInfo ? "secondary" : "outline"}
+                            size="sm"
+                            onClick={() => setShowPlatformInfo(!showPlatformInfo)}
+                            className="gap-1.5 transition-all h-8 text-xs"
+                          >
+                            {showPlatformInfo ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+                            {showPlatformInfo ? "收起平台信息" : "平台信息"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {/* Emoji Batch Toolbar (Always visible) */}
