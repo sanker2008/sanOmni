@@ -52,9 +52,11 @@ export const DEFAULT_STRATEGY_B_PARAMS: StrategyBParams = {
 export const PRESETS = {
   A: {
     '白底商品图': { lowerThreshold: 220, upperThreshold: 250, bgColor: '255,255,255' },
-    '浅灰背景': { lowerThreshold: 200, upperThreshold: 240, bgColor: '230,230,230' },
-    '绿幕抠像': { lowerThreshold: 180, upperThreshold: 240, bgColor: '0,177,64' },
-    '蓝幕抠像': { lowerThreshold: 180, upperThreshold: 240, bgColor: '0,71,187' },
+    '浅灰背景': { lowerThreshold: 180, upperThreshold: 230, bgColor: '230,230,230' },
+    '绿幕抠像': { lowerThreshold: 130, upperThreshold: 200, bgColor: '0,177,64' },
+    '蓝幕抠像': { lowerThreshold: 130, upperThreshold: 200, bgColor: '0,71,187' },
+    '品红/洋红': { lowerThreshold: 130, upperThreshold: 200, bgColor: '242,7,246' },
+    '纯黑背景': { lowerThreshold: 180, upperThreshold: 230, bgColor: '0,0,0' },
   } as Record<string, StrategyAParams>,
   B: {
     '复杂发丝/毛发': { guidedRadius: 20, guidedEps: 0.00005, bgThreshold: 150, bgFeathering: 100, decontamErode: 12, fillHoles: false },

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from '@/hooks/useToast';
-import { Upload, Eraser, Download, PlayCircle, Loader2, ZoomIn, ZoomOut, Maximize, FolderOpen, ChevronDown, ChevronRight, RotateCcw, HelpCircle, Brush, Undo2, Redo2 } from 'lucide-react';
+import { Upload, Eraser, Download, PlayCircle, Loader2, ZoomIn, ZoomOut, Maximize, FolderOpen, ChevronDown, ChevronRight, RotateCcw, HelpCircle, Brush, Undo2, Redo2, Pipette, Wand2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { extractDroppedFiles } from '@/lib/dragDropUtils';
 import { pickSingleFile } from '@/lib/tauriFilePicker';
@@ -315,6 +315,49 @@ export default function ProBackgroundRemoval() {
   // ── Updaters (clear preset label on manual change) ─────────────
   const updateA = (patch: Partial<StrategyAParams>) => { setParamsA(p => ({ ...p, ...patch })); setActivePreset(null); };
   const updateB = (patch: Partial<StrategyBParams>) => { setParamsB(p => ({ ...p, ...patch })); setActivePreset(null); };
+
+  const handlePickColor = async () => {
+    if (typeof window !== 'undefined' && 'EyeDropper' in window) {
+      try {
+        const eyeDropper = new (window as any).EyeDropper();
+        const result = await eyeDropper.open();
+        if (result && result.sRGBHex) {
+          const hex = result.sRGBHex;
+          const r = parseInt(hex.slice(1, 3), 16);
+          const g = parseInt(hex.slice(3, 5), 16);
+          const b = parseInt(hex.slice(5, 7), 16);
+          updateA({ bgColor: `${r},${g},${b}` });
+          toast({ title: '已取色', description: `RGB(${r}, ${g}, ${b})` });
+        }
+      } catch (e) {
+        // cancelled
+      }
+    } else {
+      toast({ title: '提示', description: '当前浏览器或系统不支持原生屏幕吸管，可直接使用拾色器或点击自动识别' });
+    }
+  };
+
+  const autoDetectBgColor = () => {
+    if (!originalImageObjRef.current) {
+      toast({ title: '无法识别', description: '请先加载图片', variant: 'destructive' });
+      return;
+    }
+    try {
+      const img = originalImageObjRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+      const c = ctx.getImageData(0, 0, 1, 1).data;
+      updateA({ bgColor: `${c[0]},${c[1]},${c[2]}` });
+      toast({ title: '已自动识别背景色', description: `已采样左上角底色: RGB(${c[0]}, ${c[1]}, ${c[2]})` });
+    } catch (e) {
+      console.error(e);
+      toast({ title: '识别失败', variant: 'destructive' });
+    }
+  };
 
   // ── Core actions ───────────────────────────────────────────────
   const handlePickImage = useCallback(async () => {
@@ -726,11 +769,46 @@ export default function ProBackgroundRemoval() {
                     tooltip="高于此值的像素完全透明。调低可更激进地去除背景，调高则更保守。适用：背景去不干净时调低，主体被误删时调高" />
 
                   <div className="h-px bg-border" />
-                  <div className="text-xs font-semibold text-foreground">背景颜色</div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold text-foreground">背景颜色</div>
+                    <div className="flex items-center gap-1">
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={handlePickColor}
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                              title="吸管取色"
+                            >
+                              <Pipette className="w-3.5 h-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">屏幕吸管取色</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={autoDetectBgColor}
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                              title="自动识别左上角底色"
+                            >
+                              <Wand2 className="w-3.5 h-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">自动吸取原图边角底色</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
-                      value={`#${paramsA.bgColor.split(',').map(c => parseInt(c.trim()).toString(16).padStart(2, '0')).join('')}`}
+                      value={`#${paramsA.bgColor.split(',').map(c => {
+                        const n = parseInt(c.trim());
+                        return isNaN(n) ? 'ff' : Math.min(255, Math.max(0, n)).toString(16).padStart(2, '0');
+                      }).join('')}`}
                       onChange={e => {
                         const hex = e.target.value;
                         const r = parseInt(hex.slice(1, 3), 16);
@@ -738,9 +816,9 @@ export default function ProBackgroundRemoval() {
                         const b = parseInt(hex.slice(5, 7), 16);
                         updateA({ bgColor: `${r},${g},${b}` });
                       }}
-                      className="w-8 h-8 rounded border border-border cursor-pointer"
+                      className="w-8 h-8 rounded border border-border cursor-pointer shrink-0"
                     />
-                    <span className="text-xs text-muted-foreground font-mono">RGB({paramsA.bgColor})</span>
+                    <span className="text-xs text-muted-foreground font-mono truncate">RGB({paramsA.bgColor})</span>
                   </div>
                 </div>
               )}

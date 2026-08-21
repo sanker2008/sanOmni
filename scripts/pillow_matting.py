@@ -3,6 +3,19 @@ import os
 import cv2
 import numpy as np
 
+def parse_bg_color(bg_color_str):
+    if not bg_color_str:
+        return 255, 255, 255
+    bg_color_str = bg_color_str.strip()
+    if bg_color_str.startswith('#'):
+        hex_val = bg_color_str.lstrip('#')
+        if len(hex_val) == 6:
+            return int(hex_val[0:2], 16), int(hex_val[2:4], 16), int(hex_val[4:6], 16)
+    parts = [int(c.strip()) for c in bg_color_str.split(',')]
+    if len(parts) >= 3:
+        return parts[0], parts[1], parts[2]
+    return 255, 255, 255
+
 def perform_matting(image_path, output_path, args):
     try:
         if not os.path.exists(image_path):
@@ -21,24 +34,12 @@ def perform_matting(image_path, output_path, args):
         elif img.shape[2] == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
 
-        # Parse background color
-        if args.bg_color:
-            bg_color_parts = args.bg_color.split(',')
-            bg_r = int(bg_color_parts[0])
-            bg_g = int(bg_color_parts[1])
-            bg_b = int(bg_color_parts[2])
-        else:
-            bg_r, bg_g, bg_b = 255, 255, 255  # Default to white
-            
-        # Use generalized background color for OpenCV
-        bg_max = np.max([bg_b, bg_g, bg_r])
-        bg_min = np.min([bg_b, bg_g, bg_r])
-        is_colorful_bg = (bg_max - bg_min) > 40
-        dom_idx = np.argmax([bg_b, bg_g, bg_r]) if is_colorful_bg else -1
-        is_dark_bg = bg_max < 128
+        # Parse target background color (RGB)
+        bg_r, bg_g, bg_b = parse_bg_color(getattr(args, 'bg_color', '255,255,255'))
+        bg_b_f, bg_g_f, bg_r_f = float(bg_b), float(bg_g), float(bg_r)
 
-        lower_threshold = args.lower_threshold
-        upper_threshold = args.upper_threshold
+        lower_threshold = float(args.lower_threshold)
+        upper_threshold = float(args.upper_threshold)
         
         # Process in chunks to prevent huge memory spikes for very large images
         chunk_size = 2000
@@ -50,65 +51,62 @@ def perform_matting(image_path, output_path, args):
             
             b, g, r, a = cv2.split(chunk)
             
-            b_int = b.astype(np.int16)
-            g_int = g.astype(np.int16)
-            r_int = r.astype(np.int16)
+            b_f = b.astype(np.float32)
+            g_f = g.astype(np.float32)
+            r_f = r.astype(np.float32)
             
-            if is_colorful_bg:
-                if dom_idx == 0:
-                    diff = b_int - np.maximum(r_int, g_int)
-                elif dom_idx == 1:
-                    diff = g_int - np.maximum(r_int, b_int)
-                else:
-                    diff = r_int - np.maximum(g_int, b_int)
-                
-                # Map the diff values so that the user's default sliders (220 to 250)
-                # perfectly match the ideal hardcoded thresholds for colorful matting.
-                closeness = diff + 215
-            else:
-                if is_dark_bg:
-                    closeness = 255 - np.maximum(np.maximum(r_int, g_int), b_int)
-                else:
-                    closeness = np.minimum(np.minimum(r_int, g_int), b_int)
-            
-            closeness = np.clip(closeness, 0, 255)
+            # Universal normalized Euclidean distance in RGB color space [0, 255]
+            dist = np.sqrt((b_f - bg_b_f)**2 + (g_f - bg_g_f)**2 + (r_f - bg_r_f)**2) / np.sqrt(3.0)
+            similarity = 255.0 - dist
             
             # --- Vectorized Alpha Matting ---
-            if upper_threshold == lower_threshold:
-                alpha_mask = np.where(closeness >= upper_threshold, 0.0, 1.0).astype(np.float32)
+            if upper_threshold <= lower_threshold:
+                alpha_mask = np.where(similarity >= upper_threshold, 0.0, 1.0).astype(np.float32)
             else:
-                ratio = (closeness.astype(np.float32) - lower_threshold) / (upper_threshold - lower_threshold)
+                ratio = (similarity - lower_threshold) / (upper_threshold - lower_threshold)
                 alpha_mask = 1.0 - ratio
-                alpha_mask = np.where(closeness <= lower_threshold, 1.0, alpha_mask)
-                alpha_mask = np.where(closeness >= upper_threshold, 0.0, alpha_mask)
+                alpha_mask = np.where(similarity <= lower_threshold, 1.0, alpha_mask)
+                alpha_mask = np.where(similarity >= upper_threshold, 0.0, alpha_mask)
                 alpha_mask = np.clip(alpha_mask, 0.0, 1.0)
             
             # Merge Original Alpha with new Alpha Mask
-            final_a = (a.astype(np.float32) / 255.0) * alpha_mask
-            final_a = (final_a * 255.0).astype(np.uint8)
+            orig_a = a.astype(np.float32) / 255.0
+            final_a = orig_a * alpha_mask
             
-            # --- Generalized Spill Suppression ---
-            final_r = r.copy()
-            final_g = g.copy()
-            final_b = b.copy()
+            # --- Analytical Color Decontamination / Spill Suppression ---
+            # For anti-aliased edge pixels, un-blend the background color
+            mask_feather = (final_a > 0.001) & (final_a < 0.999)
+            alpha_safe = np.maximum(final_a, 0.001)
             
-            if is_colorful_bg:
-                # Calculate an intrinsic spill ratio based on diff, decoupled from user thresholds
-                spill_amount = np.clip((diff.astype(np.float32) - 5) / 30.0, 0.0, 1.0)
-                mask_spill = spill_amount > 0.0
+            rec_b = np.where(mask_feather, (b_f - (1.0 - final_a) * bg_b_f) / alpha_safe, b_f)
+            rec_g = np.where(mask_feather, (g_f - (1.0 - final_a) * bg_g_f) / alpha_safe, g_f)
+            rec_r = np.where(mask_feather, (r_f - (1.0 - final_a) * bg_r_f) / alpha_safe, r_f)
+            
+            final_b = np.clip(rec_b, 0, 255).astype(np.uint8)
+            final_g = np.clip(rec_g, 0, 255).astype(np.uint8)
+            final_r = np.clip(rec_r, 0, 255).astype(np.uint8)
+            final_a_u8 = (final_a * 255.0).astype(np.uint8)
+            
+            # --- Spatial Edge Defringing (Removes halo from compression/interpolation) ---
+            # If background is colorful or contrasty, clean boundary pixels
+            is_colorful = (max(bg_r, bg_g, bg_b) - min(bg_r, bg_g, bg_b)) > 30
+            if is_colorful:
+                solid_core = (final_a >= 0.95).astype(np.uint8)
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+                b_dilated = cv2.dilate(np.where(solid_core, final_b, 0), kernel, iterations=2)
+                g_dilated = cv2.dilate(np.where(solid_core, final_g, 0), kernel, iterations=2)
+                r_dilated = cv2.dilate(np.where(solid_core, final_r, 0), kernel, iterations=2)
                 
-                if dom_idx == 0: # Blue dominant
-                    suppressed = np.minimum(b, np.maximum(r, g))
-                    final_b[mask_spill] = (b[mask_spill] * (1.0 - spill_amount[mask_spill]) + suppressed[mask_spill] * spill_amount[mask_spill]).astype(np.uint8)
-                elif dom_idx == 1: # Green dominant
-                    suppressed = np.minimum(g, np.maximum(r, b))
-                    final_g[mask_spill] = (g[mask_spill] * (1.0 - spill_amount[mask_spill]) + suppressed[mask_spill] * spill_amount[mask_spill]).astype(np.uint8)
-                elif dom_idx == 2: # Red dominant
-                    suppressed = np.minimum(r, np.maximum(g, b))
-                    final_r[mask_spill] = (r[mask_spill] * (1.0 - spill_amount[mask_spill]) + suppressed[mask_spill] * spill_amount[mask_spill]).astype(np.uint8)
+                fringe_mask = (similarity > 100) & (final_a > 0)
+                has_dilated = (b_dilated > 0) | (g_dilated > 0) | (r_dilated > 0)
+                replace_zone = fringe_mask & has_dilated
+                
+                final_b[replace_zone] = b_dilated[replace_zone]
+                final_g[replace_zone] = g_dilated[replace_zone]
+                final_r[replace_zone] = r_dilated[replace_zone]
             
             # Update the chunk in the original image
-            img[y:end_y] = cv2.merge((final_b, final_g, final_r, final_a))
+            img[y:end_y] = cv2.merge((final_b, final_g, final_r, final_a_u8))
             
         # Use numpy to handle unicode output paths on Windows
         is_success, im_buf_arr = cv2.imencode(".png", img)
@@ -129,8 +127,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("input_path")
     parser.add_argument("output_path")
-    parser.add_argument("--lower_threshold", type=int, default=220)
-    parser.add_argument("--upper_threshold", type=int, default=250)
+    parser.add_argument("--lower_threshold", type=float, default=220.0)
+    parser.add_argument("--upper_threshold", type=float, default=250.0)
     parser.add_argument("--bg_color", type=str, default="255,255,255")
     
     args = parser.parse_args()
